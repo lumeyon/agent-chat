@@ -24,8 +24,8 @@ import {
   loadTopology, listSessions, readSessionRecord, writeSessionRecord,
   deleteSessionRecord, currentSessionKey, sessionFile, presenceFile,
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
-  pidIsAlive, processTag, utcStamp, edgesOf, SKILL_ROOT, SESSIONS_DIR,
-  PRESENCE_DIR,
+  pidIsAlive, stableSessionPid, processTag, utcStamp, edgesOf,
+  SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   type SessionRecord,
 } from "./lib.ts";
 
@@ -158,7 +158,10 @@ function cmdInit(args: string[]): void {
     session_key: sessionKey,
     claude_session_id: process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || undefined,
     host: os.hostname(),
-    pid: process.ppid || process.pid,
+    // stableSessionPid walks the process tree to find the long-lived agent
+    // runtime ancestor (Claude Code main process), so the recorded pid is
+    // alive throughout the user's session — not just for this bun invocation.
+    pid: stableSessionPid(),
     started_at: utcStamp(),
     cwd,
     tty,

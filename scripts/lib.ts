@@ -143,12 +143,21 @@ export function ensureControlDirs(): void {
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
 }
 
-// Returns the session key for the *current* process: prefer Claude's
-// session id, fall back to the parent shell's pid. The parent-pid fallback
-// makes resolution work for plain shell / Codex / scripts as well.
+// Returns the session key for the *current* process. Resolution order:
+//   1. $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID — explicit session id.
+//   2. $CLAUDE_CODE_SSE_PORT — Claude Code's per-instance SSE port. Stable
+//      across every bash invocation within one Claude Code session, and
+//      different between two Claude Code sessions on the same host (each
+//      starts its own SSE server). This is the practical default for
+//      Claude Code <= 2.1.x which doesn't expose a session id env var.
+//   3. ppid — last-ditch fallback for plain shell / scripts. Note that
+//      every fresh shell command has its own PPID, so this only works
+//      when the *same long-running shell* runs every script call.
 export function currentSessionKey(): string {
   const cs = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID;
   if (cs && cs.trim()) return cs.trim();
+  const ssePort = process.env.CLAUDE_CODE_SSE_PORT;
+  if (ssePort && ssePort.trim()) return `cc-sse:${ssePort.trim()}`;
   const ppid = process.ppid;
   return `ppid:${ppid}`;
 }
@@ -290,6 +299,60 @@ export function pidIsAlive(pid: number): boolean {
     // EPERM means the process exists but we can't signal it — still alive.
     return err?.code === "EPERM";
   }
+}
+
+// Find the pid of the long-lived agent runtime that ultimately spawned the
+// current bun process. Under Claude Code, every Bash() invocation gets a
+// freshly-spawned shell as its parent, so process.ppid is dead by the time
+// anyone checks. We need an ancestor pid that survives the whole user
+// session.
+//
+// Strategy: Claude Code sets CLAUDECODE=1 in the env of its child processes.
+// That means every descendant of the Claude Code main process has the
+// marker, but the Claude Code process itself does NOT (its own env was
+// inherited from the user's shell, which doesn't set it). So the Claude
+// Code main process is the first ancestor *without* the marker whose
+// child *had* it.
+//
+// Walk up /proc/<pid>/status (Linux only); track whether the previous
+// (deeper) ancestor had the marker; return the first ancestor where we
+// transition from has-marker → no-marker. Falls back to process.ppid for
+// plain shells, non-Linux platforms, when /proc isn't readable, or when
+// the current process isn't running under Claude Code.
+export function stableSessionPid(): number {
+  if (process.env.CLAUDECODE !== "1" || process.platform !== "linux") {
+    // Plain shell / Codex / non-Linux: ppid is the user's terminal, which
+    // is itself long-lived enough.
+    return process.ppid || process.pid;
+  }
+  let pid = process.ppid;
+  let prevHadMarker = true; // we (the bun process) have CLAUDECODE=1 set
+  const seen = new Set<number>();
+  for (let depth = 0; depth < 30 && pid > 1 && !seen.has(pid); depth++) {
+    seen.add(pid);
+    let hasMarker = false;
+    try {
+      const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
+      hasMarker = environ.split("\0").includes("CLAUDECODE=1");
+    } catch {
+      break;
+    }
+    if (prevHadMarker && !hasMarker) {
+      // Just crossed out of the Claude Code subtree. This pid is the
+      // Claude Code main process.
+      return pid;
+    }
+    prevHadMarker = hasMarker;
+    try {
+      const status = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+      const m = status.match(/^PPid:\s*(\d+)/m);
+      if (!m) break;
+      const ppid = parseInt(m[1], 10);
+      if (ppid <= 1) break;
+      pid = ppid;
+    } catch { break; }
+  }
+  return process.ppid || process.pid;
 }
 
 // Canonical edge id is "<lo>-<hi>" (alphabetical) so each edge maps to one path

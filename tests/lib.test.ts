@@ -262,6 +262,45 @@ describe("processTag", () => {
   });
 });
 
+describe("stableSessionPid", () => {
+  // Full-coverage unit testing of the /proc walk would require mocking
+  // /proc, which is more friction than the function's worth. We test the
+  // observable invariants instead: the returned pid is alive, and behavior
+  // diverges sensibly between "running under Claude Code" and "plain shell".
+  test("returns a positive, currently-alive pid", async () => {
+    const { stableSessionPid, pidIsAlive } = await import("../scripts/lib.ts");
+    const pid = stableSessionPid();
+    expect(Number.isInteger(pid)).toBe(true);
+    expect(pid).toBeGreaterThan(0);
+    expect(pidIsAlive(pid)).toBe(true);
+  });
+
+  test("when CLAUDECODE is forcibly unset, returns ppid (plain-shell fallback)", async () => {
+    // Spawn a fresh bun child WITHOUT the CLAUDECODE marker; it should
+    // hit the early-return ppid fallback path. We use a tiny one-liner
+    // child that prints stableSessionPid() and verify it equals the
+    // child's own ppid (i.e. this test process).
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync(
+      process.execPath,
+      ["-e", `
+        import("${import.meta.dirname}/../scripts/lib.ts").then((m) => {
+          console.log(m.stableSessionPid(), process.ppid);
+        });
+      `],
+      {
+        env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== "CLAUDECODE")) as Record<string, string>,
+        encoding: "utf8",
+      },
+    );
+    expect(r.status).toBe(0);
+    const [pidStr, ppidStr] = r.stdout.trim().split(/\s+/);
+    // When CLAUDECODE is unset on a non-Linux platform OR when no ancestor
+    // has the marker, the function returns process.ppid.
+    expect(parseInt(pidStr, 10)).toBe(parseInt(ppidStr, 10));
+  });
+});
+
 describe("archiveId", () => {
   test("starts with arch_L_ for leaf and arch_C_ for condensed", () => {
     const a = archiveId("leaf", "2026-05-01T00:00:00Z");
