@@ -645,9 +645,44 @@ export function indexFile(edgeDir: string): string {
   return path.join(edgeDir, "index.jsonl");
 }
 
-export function appendIndexEntry(edgeDir: string, entry: IndexEntry): void {
+// Atomic write: tmpfile + rename in the same directory. The destination is
+// either fully present (post-rename) or absent — never half-written. With
+// `fsync: true`, also flush the data to disk before the rename, so a power
+// loss between write and the page cache flush can't strand a 0-byte file.
+// Used by archive seal (which destroys the source) and by appendIndexEntry
+// when called from a commit path (durability matters once we've validated).
+export function writeFileAtomic(p: string, content: string, opts: { fsync?: boolean } = {}): void {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const tmp = `${p}.tmp.${process.pid}.${Date.now()}`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeFileSync(fd, content);
+    if (opts.fsync) fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, p);
+}
+
+export function appendIndexEntry(
+  edgeDir: string,
+  entry: IndexEntry,
+  opts: { fsync?: boolean } = {},
+): void {
   fs.mkdirSync(edgeDir, { recursive: true });
-  fs.appendFileSync(indexFile(edgeDir), JSON.stringify(entry) + "\n");
+  const f = indexFile(edgeDir);
+  // O_APPEND on local FS is whole-record atomic for any single write up to
+  // the underlying inode rwsem boundary — rhino's race testing confirmed
+  // 1KB-1MB at 4 concurrent writers produces zero interleaving. The fsync
+  // is opt-in for commit paths only (durability matters once we've passed
+  // the validator) so non-commit callers don't pay the cost.
+  if (opts.fsync) {
+    const fd = fs.openSync(f, "a");
+    try {
+      fs.writeSync(fd, JSON.stringify(entry) + "\n");
+      fs.fsyncSync(fd);
+    } finally { fs.closeSync(fd); }
+  } else {
+    fs.appendFileSync(f, JSON.stringify(entry) + "\n");
+  }
 }
 
 // Snapshot read of a growing append-only file. Open, fstat once, then

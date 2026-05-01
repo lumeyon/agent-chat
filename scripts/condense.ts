@@ -213,6 +213,18 @@ switch (op) {
       committed_at: utcStamp(),
     });
 
+    // Refuse if any declared parent has been removed from the index since
+    // seal (manual delete, racing abort). Without this, a commit would
+    // create structural drift that the doctor command would later flag
+    // (keystone P1 drift-prevention).
+    const idx = readIndex(edge.dir);
+    const knownIds = new Set(idx.map((e) => e.id));
+    const missing = parents.filter((p) => !knownIds.has(p));
+    if (missing.length) {
+      die(`refuse to commit — declared parent(s) missing from index: ${missing.join(", ")}. ` +
+          `Run \`bun scripts/archive.ts doctor ${peer}\` to inspect, then remove or re-seal.`);
+    }
+
     const cleanSummary = summary.replace(/<!--[\s\S]*?-->\s*\n?/g, "");
     fs.writeFileSync(summaryPath, cleanSummary);
 
@@ -231,7 +243,7 @@ switch (op) {
       tldr,
       path: adir,
     };
-    appendIndexEntry(edge.dir, entry);
+    appendIndexEntry(edge.dir, entry, { fsync: true });
 
     console.log(`committed condensed ${aid} (depth ${depth}, folds ${parents.length} parent(s), ${descendantSum} leaf descendants)`);
     break;

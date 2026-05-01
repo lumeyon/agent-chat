@@ -1,4 +1,4 @@
-// turn.ts — peek/init/take/flip/park/lock/unlock for one edge.
+// turn.ts — peek/init/take/flip/park/lock/unlock/recover for one edge.
 // Usage:
 //   bun scripts/turn.ts peek <peer>
 //   bun scripts/turn.ts init <peer> <first-writer>
@@ -6,6 +6,7 @@
 //   bun scripts/turn.ts park <peer>
 //   bun scripts/turn.ts lock <peer>
 //   bun scripts/turn.ts unlock <peer>
+//   bun scripts/turn.ts recover <peer> [--apply]
 //
 // Identity comes from env or ./.agent-name (see lib.ts).
 // "<peer>" is the neighbor agent name; the edge id is derived alphabetically.
@@ -23,7 +24,7 @@ import {
 function die(msg: string): never { console.error(msg); process.exit(2); }
 
 const [op, peer, arg3] = process.argv.slice(2);
-if (!op || !peer) die("usage: turn.ts <peek|init|flip|park|lock|unlock> <peer> [<value>]");
+if (!op || !peer) die("usage: turn.ts <peek|init|flip|park|lock|unlock|recover> <peer> [<value>]");
 
 const id = resolveIdentity();
 const topo = loadTopology(id.topology);
@@ -172,6 +173,61 @@ switch (op) {
     }
     fs.unlinkSync(edge.lock);
     console.log(`unlocked ${edge.id}`);
+    break;
+  }
+  case "recover": {
+    // Crash recovery: if a session crashed between `append` and `flip`,
+    // CONVO.md has the section ending `→ <next>` but `.turn` still points
+    // at the writer (us). Peer's monitor never fires. This command
+    // reconstructs the intended flip from the trailing `→ X` arrow that
+    // SKILL.md mandates as the section format. Read-only by default;
+    // --apply actually writes (carina Q5).
+    const apply = arg3 === "--apply" || process.argv.slice(2).includes("--apply");
+    const cur = readTurn(edge.turn);
+    if (cur !== id.name) {
+      console.log(`no recovery needed: .turn is "${cur}", not "${id.name}"`);
+      break;
+    }
+    if (!fs.existsSync(edge.convo)) die(`no CONVO.md at ${edge.convo}`);
+    const convo = fs.readFileSync(edge.convo, "utf8");
+    // Last section: split by `\n## ` and take the trailing chunk.
+    const sections = convo.split(/\n## /);
+    if (sections.length < 2) die(`CONVO.md has no sections — nothing to recover`);
+    const last = "## " + sections[sections.length - 1];
+    // Parse the section header to confirm I'm the author.
+    const headerMatch = last.match(/^##\s+([A-Za-z0-9_-]+)\s+/);
+    if (!headerMatch) die(`last section header doesn't match expected format`);
+    if (headerMatch[1].toLowerCase() !== id.name.toLowerCase()) {
+      die(`last section author is "${headerMatch[1]}", not "${id.name}". Refusing — I'm not the writer of the un-flipped section.`);
+    }
+    // Parse the trailing `→ X` arrow.
+    const arrowMatch = last.match(/→\s+(\S+)\s*$/);
+    if (!arrowMatch) die(`last section has no trailing "→ <next>" arrow — cannot infer recovery target`);
+    const next = arrowMatch[1];
+    if (next !== "parked" && !participants.includes(next)) {
+      die(`recovery target "${next}" is not a participant or "parked" — refusing`);
+    }
+    if (!apply) {
+      console.log(`recovery available for ${edge.id}:`);
+      console.log(`  current .turn:   ${cur}`);
+      console.log(`  last section by: ${headerMatch[1]}`);
+      console.log(`  trailing arrow:  → ${next}`);
+      console.log(`  proposed action: writeTurnAtomic("${next}") + unlock`);
+      console.log(``);
+      console.log(`Re-run with --apply to perform the recovery.`);
+      break;
+    }
+    // --apply: refuse if a lock exists that we don't own (could be a
+    // different live writer in the middle of THEIR own sequence).
+    if (fs.existsSync(edge.lock)) {
+      const lk = parseLockFile(edge.lock);
+      if (lk && lk.agent !== id.name) {
+        die(`refuse --apply: lock held by ${lk.agent}@${lk.host}:${lk.pid}, not me`);
+      }
+    }
+    writeTurnAtomic(edge.turn, next);
+    try { if (fs.existsSync(edge.lock)) fs.unlinkSync(edge.lock); } catch {}
+    console.log(`recovered ${edge.id}: .turn ${cur} → ${next} (lock cleared)`);
     break;
   }
   default:

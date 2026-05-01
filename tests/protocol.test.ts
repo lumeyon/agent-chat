@@ -303,6 +303,65 @@ describe("turn.ts lock format and unlock guards", () => {
   });
 });
 
+describe("turn.ts recover — append-then-crash recovery (carina Q5, P1)", () => {
+  beforeEach(() => {
+    runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV); // turn=orion
+    // Append a section ending with `→ lumeyon` but DO NOT flip — simulating
+    // a crash between append and flip. The recovery primitive should
+    // reconstruct the intended flip from the trailing arrow.
+    fs.appendFileSync(
+      path.join(EDGE_DIR, "CONVO.md"),
+      "\n## orion — work (UTC 2026-05-01T00:00:00Z)\n\nbody\n\n→ lumeyon\n",
+    );
+  });
+
+  test("recover (read-only) prints the proposed action without writing", () => {
+    const r = runScript("turn.ts", ["recover", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("recovery available");
+    expect(r.stdout).toContain("→ lumeyon");
+    expect(r.stdout).toContain("Re-run with --apply");
+    // .turn must remain at orion (no write happened).
+    expect(fs.readFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "utf8").trim()).toBe("orion");
+  });
+
+  test("recover --apply flips .turn to the trailing arrow target", () => {
+    const r = runScript("turn.ts", ["recover", "lumeyon", "--apply"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("recovered");
+    expect(fs.readFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "utf8").trim()).toBe("lumeyon");
+  });
+
+  test("recover refuses if last section was authored by someone else (we're not the writer)", () => {
+    // Replace the last section with a lumeyon-authored one so orion's
+    // recover refuses (mid-state, but we're not the author).
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md"),
+      "header\n\n## lumeyon — sneaky (UTC 2026-05-01T00:00:00Z)\n\nbody\n\n→ orion\n",
+    );
+    const r = runScript("turn.ts", ["recover", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("not \"orion\"");
+  });
+
+  test("recover is a no-op if .turn is not mine (no recovery needed)", () => {
+    runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV);
+    const r = runScript("turn.ts", ["recover", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("no recovery needed");
+  });
+
+  test("recover --apply refuses if a foreign-agent lock is held", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `lumeyon@${os.hostname()}:99999:0 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["recover", "lumeyon", "--apply"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("lock held by lumeyon");
+  });
+});
+
 describe("turn.ts lock — protocol invariants (lumeyon P1+P2)", () => {
   beforeEach(() => {
     runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV); // turn=orion

@@ -296,3 +296,138 @@ describe("condense.ts (DAG) + search.ts", () => {
     expect(archCount).toBe(2);
   });
 });
+
+describe("archive.ts new commands — abort, verify, doctor (P1, keystone drift-prevention)", () => {
+  function sealOne(): string {
+    for (let i = 1; i <= 8; i++) appendSection(i);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    const r = runScript("archive.ts", ["seal", "lumeyon"], ORION_ENV);
+    return r.stdout.match(/sealed (arch_L_[A-Za-z0-9_]+)/)![1];
+  }
+  function commitOne(aid: string): void {
+    fillSummary(path.join(EDGE_DIR, "archives", "leaf", aid, "SUMMARY.md"));
+    runScript("archive.ts", ["commit", "lumeyon", aid], ORION_ENV);
+  }
+
+  test("seal acquires the edge lock; concurrent seal is refused", () => {
+    for (let i = 1; i <= 8; i++) appendSection(i);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    // Plant a lock to simulate a peer mid-seal.
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"), `lumeyon@${os.hostname()}:99999:0 2026-05-01T00:00:00Z\n`);
+    const r = runScript("archive.ts", ["seal", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("locked");
+  });
+
+  test("verify catches sha256 mismatch when BODY.md was tampered with", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    // Tamper with BODY.md.
+    const bodyPath = path.join(EDGE_DIR, "archives", "leaf", aid, "BODY.md");
+    fs.writeFileSync(bodyPath, fs.readFileSync(bodyPath, "utf8") + "\n<TAMPERED>");
+    const r = runScript("archive.ts", ["verify", "lumeyon", aid], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("MISMATCH");
+  });
+
+  test("verify reports ok on a clean archive", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    const r = runScript("archive.ts", ["verify", "lumeyon", aid], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("ok");
+  });
+
+  test("abort restores BODY.md back into CONVO.md and removes the archive directory (pre-commit)", () => {
+    const aid = sealOne();
+    const adir = path.join(EDGE_DIR, "archives", "leaf", aid);
+    const body = fs.readFileSync(path.join(adir, "BODY.md"), "utf8");
+    expect(body).toContain("section 1");
+    // Abort BEFORE commit (status: pending-commit).
+    const r = runScript("archive.ts", ["abort", "lumeyon", aid], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(adir)).toBe(false);
+    const convo = fs.readFileSync(CONVO_FILE, "utf8");
+    expect(convo).toContain("section 1");
+    expect(convo).not.toContain("archive breadcrumb:");
+  });
+
+  test("abort refuses a sealed archive without --force", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    const r = runScript("archive.ts", ["abort", "lumeyon", aid], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("status=sealed");
+  });
+
+  test("doctor reports clean on a healthy archive set", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("no drift");
+  });
+
+  test("doctor reports drift when an archive's path goes missing", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    fs.rmSync(path.join(EDGE_DIR, "archives", "leaf", aid), { recursive: true, force: true });
+    const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout).toContain("archive directory missing");
+  });
+
+  test("doctor catches BODY.md sha256 drift", () => {
+    const aid = sealOne();
+    commitOne(aid);
+    const bodyPath = path.join(EDGE_DIR, "archives", "leaf", aid, "BODY.md");
+    fs.writeFileSync(bodyPath, fs.readFileSync(bodyPath, "utf8") + "\n<TAMPERED>");
+    const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout).toContain("BODY.md sha256 mismatch");
+  });
+});
+
+describe("condense.ts commit refuses missing parents (keystone drift-prevention)", () => {
+  function buildTwoLeaves(): [string, string] {
+    for (let i = 1; i <= 8; i++) appendSection(i);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    const r1 = runScript("archive.ts", ["seal", "lumeyon"], ORION_ENV);
+    const a1 = r1.stdout.match(/sealed (arch_L_[A-Za-z0-9_]+)/)![1];
+    fillSummary(path.join(EDGE_DIR, "archives", "leaf", a1, "SUMMARY.md"));
+    runScript("archive.ts", ["commit", "lumeyon", a1], ORION_ENV);
+    // Resume orion's floor by writing the .turn directly (test-only shortcut;
+    // production resume would go through `init` or a deliberate hand-off).
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "orion");
+    for (let i = 9; i <= 16; i++) appendSection(i);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    const r2 = runScript("archive.ts", ["seal", "lumeyon"], ORION_ENV);
+    const a2 = r2.stdout.match(/sealed (arch_L_[A-Za-z0-9_]+)/)![1];
+    fillSummary(path.join(EDGE_DIR, "archives", "leaf", a2, "SUMMARY.md"));
+    runScript("archive.ts", ["commit", "lumeyon", a2], ORION_ENV);
+    return [a1, a2];
+  }
+
+  test("condense commit refuses if a declared parent has been removed from the index since seal", () => {
+    const [a1, a2] = buildTwoLeaves();
+    // Seal a condensed archive.
+    const cs = runScript("condense.ts", ["seal", "lumeyon", "--limit", "2"], ORION_ENV);
+    const cid = cs.stdout.match(/sealed (arch_C_[A-Za-z0-9_]+)/)![1];
+    const cdir = path.join(EDGE_DIR, "archives", "condensed", "d1", cid);
+    fillSummary(path.join(cdir, "SUMMARY.md"), {
+      keywords: "verifier, rollback, condensed",
+      expand: "leaf-specific evidence",
+    });
+    // Remove one parent from the index manually (simulating drift).
+    const indexPath = path.join(EDGE_DIR, "index.jsonl");
+    const lines = fs.readFileSync(indexPath, "utf8").split("\n").filter(Boolean);
+    const filtered = lines.filter((l) => !l.includes(`"${a1}"`));
+    fs.writeFileSync(indexPath, filtered.join("\n") + "\n");
+    const r = runScript("condense.ts", ["commit", "lumeyon", cid], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("missing from index");
+    expect(r.stderr).toContain(a1);
+    // a2 not mentioned because it's still present.
+    expect(r.stderr).not.toContain(a2);
+  });
+});
