@@ -105,7 +105,14 @@ function tick() {
       }
     }
 
-    state.set(e.id, cur);
+    // Only advance the per-edge state when the lock is NOT held. If we
+    // updated `prev` while a peer's lock is still in flight, we'd silently
+    // consume the diff: this tick declines to fire because lockHeld=true,
+    // and the next tick (after unlock) would see prev==cur with no delta.
+    // Holding `prev` across the lock window means the first tick after
+    // the lock clears computes (prev=pre-lock) vs (cur=post-unlock) and
+    // fires correctly. See tests/monitor.test.ts for the regression.
+    if (!lockHeld) state.set(e.id, cur);
   }
 }
 
