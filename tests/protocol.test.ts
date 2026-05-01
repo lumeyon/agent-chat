@@ -302,3 +302,80 @@ describe("turn.ts lock format and unlock guards", () => {
     expect(r.stderr).toContain("already locked by orion");
   });
 });
+
+describe("agent-chat gc — concurrent + multi-host hardening (cadence Q4 + F8, P0)", () => {
+  // Hardening regression: gc used to (a) abort the entire presence sweep
+  // when a peer gc unlinked a file mid-loop (the inner unlinkSync's ENOENT
+  // escaped past an over-broad catch with no outer guard — cadence Major #1),
+  // and (b) treat foreign-host presence/session records as fair game,
+  // unlinking another machine's live state when the dir is shared
+  // (cadence Major #2). Both must be regression-tested.
+
+  function presencePath(agent: string): string {
+    return path.join(CONVO_DIR, ".presence", `${agent}.json`);
+  }
+  function sessionPath(key: string): string {
+    return path.join(CONVO_DIR, ".sessions", `${key}.json`);
+  }
+  function writeRecord(agent: string, host: string, pid: number): void {
+    const key = `pid:${pid}`;
+    const rec = {
+      agent, topology: "petersen", session_key: key,
+      claude_session_id: key, host, pid,
+      started_at: "2026-05-01T00:00:00Z", cwd: CONVO_DIR,
+    };
+    fs.writeFileSync(presencePath(agent), JSON.stringify(rec, null, 2) + "\n");
+    fs.writeFileSync(sessionPath(key), JSON.stringify(rec, null, 2) + "\n");
+  }
+
+  function deadPid(): number {
+    // Pick a pid that's almost certainly free. Any 7-digit number well above
+    // typical pid_max ranges. (Linux default pid_max is 32768 unless tuned.)
+    // We verify by walking up from a high base until kill(pid, 0) errors with
+    // ESRCH.
+    for (let p = 9_999_900; p > 1_000_000; p -= 17) {
+      try { process.kill(p, 0); } catch (e: any) {
+        if (e?.code === "ESRCH") return p;
+      }
+    }
+    return 9_999_999;
+  }
+
+  test("gc tolerates a presence file that vanishes mid-loop (concurrent gc race)", () => {
+    // Pre-stage 6 stale presence files. Race two gc invocations in parallel
+    // and verify both exit cleanly. Pre-fix: one of them would abort with an
+    // uncaught ENOENT thrown out of the broad try/catch's bare unlinkSync.
+    for (const a of ["sentinel", "vanguard", "carina", "pulsar", "cadence", "rhino"]) {
+      writeRecord(a, os.hostname(), deadPid());
+    }
+    const a = runScript("agent-chat.ts", ["gc"], ORION_ENV, { allowFail: true });
+    const b = runScript("agent-chat.ts", ["gc"], ORION_ENV, { allowFail: true });
+    expect(a.exitCode).toBe(0);
+    expect(b.exitCode).toBe(0);
+    // Net effect: every staged record is gone after the two passes complete.
+    for (const ag of ["sentinel", "vanguard", "carina", "pulsar", "cadence", "rhino"]) {
+      expect(fs.existsSync(presencePath(ag))).toBe(false);
+    }
+  });
+
+  test("gc does NOT touch a presence record whose host is foreign (multi-host safety)", () => {
+    writeRecord("ghost", "definitely-not-this-host.example", deadPid());
+    const r = runScript("agent-chat.ts", ["gc"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(presencePath("ghost"))).toBe(true);
+    // Output should announce nothing-removed (the seeded ORION/LUMEYON test
+    // sessions in beforeEach are alive, so they're not removed; the foreign
+    // ghost record is skipped, not removed).
+    expect(r.stdout).toContain("nothing to remove");
+  });
+
+  test("gc removes local stale records but leaves foreign-host records alongside", () => {
+    writeRecord("ghost", "definitely-not-this-host.example", deadPid());
+    writeRecord("dead-local", os.hostname(), deadPid());
+    const r = runScript("agent-chat.ts", ["gc"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(presencePath("ghost"))).toBe(true);     // foreign untouched
+    expect(fs.existsSync(presencePath("dead-local"))).toBe(false); // local removed
+    expect(r.stdout).toContain("dead-local");
+  });
+});

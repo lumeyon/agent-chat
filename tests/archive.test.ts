@@ -144,8 +144,16 @@ describe("archive.ts commit (validator)", () => {
     return r.stdout.match(/sealed (arch_L_[A-Za-z0-9_]+)/)![1];
   }
 
-  test("commit refuses an unfilled stub (TODO markers remain)", () => {
+  test("commit refuses a summary that still carries placeholder markers (TODO/FIXME/etc.)", () => {
+    // The post-tightening stub passes the validator on its own (so writers
+    // do not bounce off the gate after a copy-and-edit). To verify the
+    // placeholder-marker gate, write an explicit TODO into the SUMMARY.md
+    // after seal and confirm commit rejects it.
     const aid = sealOne();
+    const sp = path.join(EDGE_DIR, "archives", "leaf", aid, "SUMMARY.md");
+    let body = fs.readFileSync(sp, "utf8");
+    body = body.replace(/^## Decisions[\s\S]*?(?=^## Blockers)/m, "## Decisions\nTODO: write the real decision\n\n");
+    fs.writeFileSync(sp, body);
     const r = runScript("archive.ts", ["commit", "lumeyon", aid], ORION_ENV, { allowFail: true });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("not ready");
@@ -271,7 +279,7 @@ describe("condense.ts (DAG) + search.ts", () => {
     const cid = r.stdout.match(/sealed (arch_C_[A-Za-z0-9_]+)/)![1];
     const cdir = path.join(EDGE_DIR, "archives", "condensed", "d1", cid);
     fillSummary(path.join(cdir, "SUMMARY.md"), {
-      keywords: "verifier, rollback",
+      keywords: "verifier, rollback, condensed",
       expand: "leaf-specific evidence",
     });
     runScript("condense.ts", ["commit", "lumeyon", cid], ORION_ENV);

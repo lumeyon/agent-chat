@@ -278,9 +278,22 @@ function cmdWho(_args: string[]): void {
   }
 }
 
+// Unlink that tolerates a peer having already removed the file.
+// Concurrent gc passes used to crash here: the inner `unlinkSync` on a
+// file a peer just deleted threw ENOENT past the loop boundary, aborting
+// the rest of the sweep. See cadence Q4 (P0 Major #1).
+function safeUnlink(p: string): boolean {
+  try { fs.unlinkSync(p); return true; }
+  catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
+}
+
 function cmdGc(_args: string[]): void {
   let removed = 0;
+  const myHost = os.hostname();
   for (const rec of listSessions()) {
+    // Foreign-host records belong to a peer machine sharing the
+    // filesystem — we have no authority to GC them. See cadence F8 (P0 #2).
+    if (rec.host !== myHost) continue;
     if (!pidIsAlive(rec.pid)) {
       stopMonitor(rec.monitor_pid);
       deleteSessionRecord(rec);
@@ -293,14 +306,25 @@ function cmdGc(_args: string[]): void {
     for (const f of fs.readdirSync(PRESENCE_DIR)) {
       if (!f.endsWith(".json")) continue;
       const fp = path.join(PRESENCE_DIR, f);
-      try {
-        const rec = JSON.parse(fs.readFileSync(fp, "utf8")) as SessionRecord;
-        if (!pidIsAlive(rec.pid)) {
-          fs.unlinkSync(fp);
+      // Read+parse can ENOENT mid-loop if another gc just unlinked it; treat
+      // as a peer-handled entry and skip. This catch is intentionally narrow:
+      // it covers parse errors AND ENOENT, NOT the unlinkSync below.
+      let rec: SessionRecord;
+      try { rec = JSON.parse(fs.readFileSync(fp, "utf8")) as SessionRecord; }
+      catch (e: any) {
+        if (e?.code === "ENOENT") continue;
+        // Unparseable presence file — clean it up. safeUnlink tolerates a
+        // racing peer having already done so.
+        if (safeUnlink(fp)) { console.log(`gc: removed unparseable presence ${f}`); removed++; }
+        continue;
+      }
+      if (rec.host !== myHost) continue;          // foreign host: not ours to GC
+      if (!pidIsAlive(rec.pid)) {
+        if (safeUnlink(fp)) {
           console.log(`gc: removed orphan presence ${f}`);
           removed++;
         }
-      } catch { fs.unlinkSync(fp); removed++; }
+      }
     }
   }
   if (!removed) console.log("gc: nothing to remove.");

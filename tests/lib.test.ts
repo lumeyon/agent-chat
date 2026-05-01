@@ -226,6 +226,282 @@ exact phrasing, intermediate dead ends
   });
 });
 
+// Anti-theater audit (vanguard ↔ keystone, Petersen orion-led hardening pass).
+// Each negative fixture below is a SUMMARY.md that passed the pre-patch
+// validator but conveys no real information; each positive fixture is a
+// summary that should remain accepted after the tightening. Adding a
+// fixture here is the canonical way to lock in a new audit finding —
+// the file is the regression suite for `validateSummary`.
+describe("validateSummary — audit fixtures", () => {
+  // ------ Negative: original four (K1–K4) ------
+
+  test("K1 whitespace-body bypass is rejected (5 sections empty under heading)", () => {
+    const text = [
+      "## TL;DR", "",
+      "## Decisions", "",
+      "## Blockers", "",
+      "## Follow-ups", "",
+      "## Artifacts referenced", "",
+      "## Keywords", "x", "",
+      "## Expand for details about:", "y",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  test("K2 lowercase TODO/Todo/ToDo are caught (placeholder marker is case-insensitive)", () => {
+    for (const variant of ["todo: write later", "Todo: write later", "ToDo: write later"]) {
+      const text = [
+        "## TL;DR", variant,
+        "## Decisions", "real decision",
+        "## Blockers", "(none)",
+        "## Follow-ups", "(none)",
+        "## Artifacts referenced", "(none)",
+        "## Keywords", "alpha, beta, gamma",
+        "## Expand for details about:", "real expansion content",
+      ].join("\n");
+      const v = validateSummary(text);
+      expect(v.ok).toBe(false);
+      expect(v.issues.some((i) => i.toLowerCase().includes("placeholder marker"))).toBe(true);
+    }
+  });
+
+  test("K3 heading line-split is rejected (`## \\nTL;DR` no longer satisfies the heading regex)", () => {
+    const text = [
+      "## ", "TL;DR", "body",
+      "## Decisions", "d",
+      "## Blockers", "b",
+      "## Follow-ups", "f",
+      "## Artifacts referenced", "a",
+      "## Keywords", "x",
+      "## Expand for details about:", "y",
+    ].join("\n");
+    const v = validateSummary(text);
+    expect(v.ok).toBe(false);
+    expect(v.issues.some((i) => i.includes(`missing section: "## TL;DR"`))).toBe(true);
+  });
+
+  test("K4 single-character Keywords/Expand tokens are rejected", () => {
+    const text = [
+      "## TL;DR", "## Decisions", "## Blockers", "## Follow-ups",
+      "## Artifacts referenced", "## Keywords", "_",
+      "## Expand for details about:", ".",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  // ------ Negative: new escapes (N1, N2, N3, N14, N15, N17) ------
+
+  test("N1 fenced-code-block whole-file bypass is rejected (file renders as a code block to humans)", () => {
+    const text = [
+      "```",
+      "## TL;DR", "## Decisions", "## Blockers", "## Follow-ups",
+      "## Artifacts referenced", "## Keywords", "k",
+      "## Expand for details about:", "e",
+      "```",
+    ].join("\n");
+    const v = validateSummary(text);
+    expect(v.ok).toBe(false);
+    // every required heading should be reported missing once the fence is stripped
+    expect(v.issues.filter((i) => i.startsWith("missing section:")).length).toBe(7);
+  });
+
+  test("N2 broadened markers (TBD, FIXME, XXX, WIP, PLACEHOLDER) all evade only the original \\bTODO\\b — caught now", () => {
+    for (const marker of ["TBD", "FIXME", "XXX", "WIP", "PLACEHOLDER"]) {
+      const text = [
+        "## TL;DR", `${marker}: write later`,
+        "## Decisions", "real decision",
+        "## Blockers", "(none)",
+        "## Follow-ups", "(none)",
+        "## Artifacts referenced", "(none)",
+        "## Keywords", "alpha, beta, gamma",
+        "## Expand for details about:", "real expansion",
+      ].join("\n");
+      const v = validateSummary(text);
+      expect(v.ok).toBe(false);
+      expect(v.issues.some((i) => i.toLowerCase().includes("placeholder marker"))).toBe(true);
+    }
+  });
+
+  test("N3 (none) everywhere is rejected (path-of-least-resistance; stub seeded this gap)", () => {
+    const text = [
+      "## TL;DR", "(none)",
+      "## Decisions", "(none)",
+      "## Blockers", "(none)",
+      "## Follow-ups", "(none)",
+      "## Artifacts referenced", "(none)",
+      "## Keywords", "(none)",
+      "## Expand for details about:", "(none)",
+    ].join("\n");
+    const v = validateSummary(text);
+    expect(v.ok).toBe(false);
+    // the four real-body sections should each be flagged
+    for (const heading of ["TL;DR", "Decisions", "Keywords", "Expand for details about:"]) {
+      expect(v.issues.some((i) => i.includes(heading) && i.includes("placeholder"))).toBe(true);
+    }
+  });
+
+  test("N14 zero-width-space tokens are rejected by the alphanumeric quality gate", () => {
+    const text = [
+      "## TL;DR", "real summary",
+      "## Decisions", "real decision",
+      "## Blockers", "(none)",
+      "## Follow-ups", "(none)",
+      "## Artifacts referenced", "(none)",
+      "## Keywords", "​",
+      "## Expand for details about:", "​",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  test("N15 single-glyph em-dash bodies are rejected", () => {
+    const text = [
+      "## TL;DR", "—",
+      "## Decisions", "—",
+      "## Blockers", "—",
+      "## Follow-ups", "—",
+      "## Artifacts referenced", "—",
+      "## Keywords", "—",
+      "## Expand for details about:", "—",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  test("N17 duplicate ## TL;DR headings are rejected (validator now checks uniqueness)", () => {
+    const text = [
+      "## TL;DR", "first summary",
+      "## TL;DR",
+      "## Decisions", "real decision",
+      "## Blockers", "(none)",
+      "## Follow-ups", "(none)",
+      "## Artifacts referenced", "(none)",
+      "## Keywords", "alpha, beta, gamma",
+      "## Expand for details about:", "real expansion",
+    ].join("\n");
+    const v = validateSummary(text);
+    expect(v.ok).toBe(false);
+    expect(v.issues.some((i) => i.includes("duplicate section") && i.includes("TL;DR"))).toBe(true);
+  });
+
+  // ------ Negative: shape-extreme fixtures ------
+
+  test("path-of-least-resistance (stub-shaped (none)-everywhere, 176 bytes) is rejected", () => {
+    const text = [
+      "## TL;DR", "(none)", "",
+      "## Decisions", "- (none)", "",
+      "## Blockers", "- (none)", "",
+      "## Follow-ups", "- (none)", "",
+      "## Artifacts referenced", "- (none)", "",
+      "## Keywords", "(none)", "",
+      "## Expand for details about:", "(none)", "",
+    ].join("\n");
+    const v = validateSummary(text);
+    expect(v.ok).toBe(false);
+    expect(v.issues.some((i) => i.includes("TL;DR") && i.includes("placeholder"))).toBe(true);
+  });
+
+  test("absolute-floor (116 bytes, single-glyph kw/expand, no other content) is rejected", () => {
+    const text = "## TL;DR\n## Decisions\n## Blockers\n## Follow-ups\n## Artifacts referenced\n## Keywords\nk\n## Expand for details about:\ne";
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  // ------ Negative controls: structurally-wrong markdown should keep failing ------
+
+  test("setext (=====) headings are rejected (regex requires ATX ##)", () => {
+    const text = [
+      "TL;DR", "=====",
+      "## Decisions", "## Blockers", "## Follow-ups",
+      "## Artifacts referenced", "## Keywords", "k",
+      "## Expand for details about:", "e",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  test("4-space indented headings (markdown code block) are rejected", () => {
+    const text = [
+      "    ## TL;DR", "    ## Decisions", "    ## Blockers", "    ## Follow-ups",
+      "    ## Artifacts referenced", "    ## Keywords", "    k",
+      "    ## Expand for details about:", "    e",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  test("h3 (###) headings are rejected", () => {
+    const text = [
+      "### TL;DR", "### Decisions", "### Blockers", "### Follow-ups",
+      "### Artifacts referenced", "### Keywords", "k",
+      "### Expand for details about:", "e",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(false);
+  });
+
+  // ------ Positive controls: legitimate summaries that MUST keep passing ------
+
+  const validMinimal = [
+    "## TL;DR",
+    "Adopted strategy X for backfill; no blockers; ready to merge.",
+    "",
+    "## Decisions",
+    "- adopted X over Y because Z works under concurrent writes (commit abc1234)",
+    "",
+    "## Blockers",
+    "- (none)",
+    "",
+    "## Follow-ups",
+    "- (none)",
+    "",
+    "## Artifacts referenced",
+    "- (none)",
+    "",
+    "## Keywords",
+    "backfill, concurrent-writes, migration",
+    "",
+    "## Expand for details about:",
+    "exact phrasing of rejected alternative Y, intermediate dead ends",
+  ].join("\n");
+
+  test("positive: minimal-but-real summary is accepted", () => {
+    expect(validateSummary(validMinimal).ok).toBe(true);
+  });
+
+  test("positive: Decisions = `(none) — explanation` is accepted (design Q1)", () => {
+    const text = [
+      "## TL;DR", "Discussed migration approach; no decision yet — recap follows.",
+      "",
+      "## Decisions", "- (none) — ran out of time, see follow-ups",
+      "",
+      "## Blockers", "- (none)",
+      "## Follow-ups", "- finalize migration plan in next sync",
+      "## Artifacts referenced", "- (none)",
+      "## Keywords", "migration, planning, deferred",
+      "## Expand for details about:", "exact options considered, why we deferred",
+    ].join("\n");
+    expect(validateSummary(text).ok).toBe(true);
+  });
+
+  test("positive: CRLF line endings on a valid summary are accepted", () => {
+    expect(validateSummary(validMinimal.replace(/\n/g, "\r\n")).ok).toBe(true);
+  });
+
+  test("positive: legacy CR-only line endings on a valid summary are accepted", () => {
+    expect(validateSummary(validMinimal.replace(/\n/g, "\r")).ok).toBe(true);
+  });
+
+  test("positive: rendered stub itself is accepted (writer can copy-and-edit without bouncing)", () => {
+    const stub = renderSummaryStub({
+      edgeId: "lumeyon-orion",
+      archiveId: "arch_L_test",
+      kind: "leaf",
+      depth: 0,
+      participants: ["lumeyon", "orion"],
+      earliestAt: "2026-05-01T00:00:00Z",
+      latestAt: "2026-05-01T01:00:00Z",
+      sourceLabel: "raw sections",
+      sourceText: "BODY",
+    });
+    expect(validateSummary(stub).ok).toBe(true);
+  });
+});
+
 describe("parseLockFile", () => {
   const tmp = `${process.env.TMPDIR ?? "/tmp"}/agent-chat-locktest-${process.pid}`;
 
@@ -358,5 +634,170 @@ describe("renderSummaryStub", () => {
     expect(stub).toContain("## TL;DR");
     expect(stub).toContain("## Expand for details about:");
     expect(stub).toContain("Normal leaf policy");
+  });
+});
+
+describe("readIndex — torn-read + malformed-line resilience (rhino #2/#3, P0)", () => {
+  // Hardening regression: readIndex used to JSON.parse line-by-line with no
+  // try/catch, so one corrupt or torn-mid-write line took down the whole
+  // reader (search, list, condense). Both patches below test the survivable
+  // shape: malformed lines are logged + skipped, and the reader bounds its
+  // input by the open-time fstat size to avoid Bun's readFileSync over-read
+  // on a growing file.
+  const fs = require("node:fs") as typeof import("node:fs");
+  const path = require("node:path") as typeof import("node:path");
+  const os = require("node:os") as typeof import("node:os");
+
+  function makeEdgeDir(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-readindex-"));
+  }
+
+  function entry(id: string, ts: string) {
+    return {
+      id,
+      edge_id: "lumeyon-orion",
+      topology: "petersen",
+      kind: "leaf" as const,
+      depth: 0,
+      earliest_at: ts,
+      latest_at: ts,
+      participants: ["lumeyon", "orion"] as [string, string],
+      parents: [],
+      descendant_count: 1,
+      keywords: ["k1", "k2", "k3"],
+      tldr: "tldr text",
+      path: "/dev/null",
+    };
+  }
+
+  test("readIndex skips a malformed middle line and returns the surrounding entries", async () => {
+    const { readIndex, indexFile } = await import("../scripts/lib.ts");
+    const edgeDir = makeEdgeDir();
+    try {
+      const f = indexFile(edgeDir);
+      fs.writeFileSync(
+        f,
+        JSON.stringify(entry("arch_L_a", "2026-05-01T00:00:00Z")) + "\n" +
+          "this is not valid json\n" +
+          JSON.stringify(entry("arch_L_b", "2026-05-01T00:01:00Z")) + "\n",
+      );
+      const got = readIndex(edgeDir);
+      expect(got.map((e) => e.id)).toEqual(["arch_L_a", "arch_L_b"]);
+    } finally { fs.rmSync(edgeDir, { recursive: true, force: true }); }
+  });
+
+  test("readIndex tolerates a torn trailing line (writer mid-append, simulated)", async () => {
+    const { readIndex, indexFile } = await import("../scripts/lib.ts");
+    const edgeDir = makeEdgeDir();
+    try {
+      const f = indexFile(edgeDir);
+      // Final line is truncated mid-record — exactly what `readFileSync` over-read
+      // captures when sampling a growing file. The reader must recover.
+      fs.writeFileSync(
+        f,
+        JSON.stringify(entry("arch_L_a", "2026-05-01T00:00:00Z")) + "\n" +
+          '{"id":"arch_L_b","kind":"leaf","tld' /* truncated */,
+      );
+      const got = readIndex(edgeDir);
+      expect(got.map((e) => e.id)).toEqual(["arch_L_a"]);
+    } finally { fs.rmSync(edgeDir, { recursive: true, force: true }); }
+  });
+
+  test("readIndex on a missing file is empty (preserved)", async () => {
+    const { readIndex } = await import("../scripts/lib.ts");
+    const edgeDir = makeEdgeDir();
+    try { expect(readIndex(edgeDir)).toEqual([]); }
+    finally { fs.rmSync(edgeDir, { recursive: true, force: true }); }
+  });
+
+  test("readIndex bounds reads to fstat size: a writer extending the file mid-read does not pollute results", async () => {
+    // Snapshot semantics: the reader captures fstat-size at open and reads
+    // exactly that many bytes. A peer appending after the open is invisible
+    // to this reader; the next call observes them. This is the discipline
+    // that defeats the Bun over-read mechanism rhino reproduced.
+    const { readIndex, indexFile } = await import("../scripts/lib.ts");
+    const edgeDir = makeEdgeDir();
+    try {
+      const f = indexFile(edgeDir);
+      fs.writeFileSync(f, JSON.stringify(entry("arch_L_a", "2026-05-01T00:00:00Z")) + "\n");
+      const sizeBefore = fs.statSync(f).size;
+      // Append more after we've conceptually started reading. (We can't truly
+      // race a single-process call here, but we can at least verify the reader
+      // does NOT over-read past the file size we observe at this instant when
+      // the file is well-formed.)
+      const got1 = readIndex(edgeDir);
+      expect(got1.map((e) => e.id)).toEqual(["arch_L_a"]);
+      fs.appendFileSync(f, JSON.stringify(entry("arch_L_b", "2026-05-01T00:01:00Z")) + "\n");
+      const got2 = readIndex(edgeDir);
+      expect(got2.map((e) => e.id)).toEqual(["arch_L_a", "arch_L_b"]);
+      // sizeBefore was used to anchor the assertion; reference it to silence linters.
+      expect(sizeBefore).toBeGreaterThan(0);
+    } finally { fs.rmSync(edgeDir, { recursive: true, force: true }); }
+  });
+});
+
+describe("findLivePresence — multi-host safety (cadence F8, P0)", () => {
+  // Hardening regression: findLivePresence used to return any presence
+  // record whose pid happened to be alive on THIS host, even when the
+  // record's host field belonged to a different machine. On a shared
+  // filesystem (NFS/sshfs) that misclassification would defeat collision
+  // detection and let `gc` unlink another host's live state.
+  const fs = require("node:fs") as typeof import("node:fs");
+  const path = require("node:path") as typeof import("node:path");
+  const os = require("node:os") as typeof import("node:os");
+
+  test("returns null for a presence record whose host is not this host", async () => {
+    const { findLivePresence, presenceFile, ensureControlDirs } = await import("../scripts/lib.ts");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-foreignhost-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      // Need a fresh import because CONVERSATIONS_DIR is a module constant.
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}`);
+      fresh.ensureControlDirs();
+      const rec = {
+        agent: "ghost",
+        topology: "petersen",
+        session_key: "pid:99999",
+        host: "definitely-not-this-host.example",
+        pid: process.pid, // ALIVE on this host — the trap the bug fell into
+        started_at: "2026-05-01T00:00:00Z",
+        cwd: "/tmp",
+      };
+      fs.writeFileSync(fresh.presenceFile("ghost"), JSON.stringify(rec, null, 2) + "\n");
+      expect(fresh.findLivePresence("ghost")).toBeNull();
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("returns the record when host matches and pid is alive (preserved happy path)", async () => {
+    const { findLivePresence, presenceFile, ensureControlDirs } = await import("../scripts/lib.ts");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-myhost-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}b`);
+      fresh.ensureControlDirs();
+      const rec = {
+        agent: "live",
+        topology: "petersen",
+        session_key: "pid:" + process.pid,
+        host: os.hostname(),
+        pid: process.pid,
+        started_at: "2026-05-01T00:00:00Z",
+        cwd: "/tmp",
+      };
+      fs.writeFileSync(fresh.presenceFile("live"), JSON.stringify(rec, null, 2) + "\n");
+      const got = fresh.findLivePresence("live");
+      expect(got).not.toBeNull();
+      expect(got!.agent).toBe("live");
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

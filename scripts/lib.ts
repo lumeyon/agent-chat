@@ -238,6 +238,12 @@ export function findLivePresence(agent: string): SessionRecord | null {
   if (!fs.existsSync(f)) return null;
   try {
     const rec = JSON.parse(fs.readFileSync(f, "utf8")) as SessionRecord;
+    // Foreign-host records belong to a different machine sharing this
+    // filesystem (NFS/sshfs). Their pid is meaningless on us — checking
+    // pidIsAlive against our pid namespace would either falsely match
+    // (recycled local pid) or falsely reject (live remote pid we can't see).
+    // The only safe answer is "not mine, ignore." See cadence F8.
+    if (rec.host !== os.hostname()) return null;
     return pidIsAlive(rec.pid) ? rec : null;
   } catch { return null; }
 }
@@ -512,13 +518,45 @@ export function appendIndexEntry(edgeDir: string, entry: IndexEntry): void {
   fs.appendFileSync(indexFile(edgeDir), JSON.stringify(entry) + "\n");
 }
 
+// Snapshot read of a growing append-only file. Open, fstat once, then
+// readSync exactly that many bytes. Bun's readFileSync may return more
+// bytes than the open-time fstat-size on a file that's being appended,
+// which captures the leading bytes of an in-flight entry as a torn line.
+// Bounding the read to the fstat-size makes the trailing line either
+// complete (if the writer finished before our open) or absent (if the
+// writer is mid-append) — never half-present. See rhino #3.
+function readIndexSnapshot(f: string): string {
+  const fd = fs.openSync(f, "r");
+  try {
+    const size = fs.fstatSync(fd).size;
+    if (size === 0) return "";
+    const buf = Buffer.alloc(size);
+    let off = 0;
+    while (off < size) {
+      const n = fs.readSync(fd, buf, off, size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return buf.subarray(0, off).toString("utf8");
+  } finally { fs.closeSync(fd); }
+}
+
 export function readIndex(edgeDir: string): IndexEntry[] {
   const f = indexFile(edgeDir);
   if (!fs.existsSync(f)) return [];
-  return fs.readFileSync(f, "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.trim())
-    .map((l) => JSON.parse(l) as IndexEntry);
+  // Pair patch with readIndexSnapshot: bounded read defeats the over-read,
+  // per-line try/catch defeats both a corrupt line that snuck in and the
+  // residual torn-trailer case that snapshot can still observe under ext4's
+  // per-page i_size update window. Either patch alone leaves a hole.
+  const out: IndexEntry[] = [];
+  for (const line of readIndexSnapshot(f).split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line) as IndexEntry); }
+    catch (err) {
+      console.error(`[agent-chat] readIndex: skipping malformed line in ${f}: ${(err as Error).message}`);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -682,27 +720,33 @@ export function renderSummaryStub(inp: SummaryRenderInput): string {
     `<source: ${inp.sourceLabel}>`,
     "",
     "## TL;DR",
-    "<!-- 3 lines max. Lead with: what was decided, what is blocked, what is next. -->",
-    "TODO: write the 3-line TL;DR here.",
+    "<!-- 3 lines max. Lead with: what was decided, what is blocked, what is next.",
+    "     Replace the example below with your real summary — `(none)` is NOT accepted here. -->",
+    "Adopted strategy X over alternative Y after evaluating Z; one blocker remains in module M; next step is to land PR #123.",
     "",
     "## Decisions",
-    "- TODO: <decision> — <rationale> — <evidence ref>",
+    "<!-- One bullet per decision. `(none) — explanation` is acceptable when no",
+    "     decision was reached, e.g. `(none) — ran out of time, see follow-ups`. -->",
+    "- adopted X over Y because Z (see commit abc1234)",
     "",
     "## Blockers",
-    "- TODO: <blocker> — <owner> — <evidence ref>  (or write `(none)`)",
+    "- (none)  <!-- or: describe the blocker with owner and evidence ref -->",
     "",
     "## Follow-ups",
-    "- TODO: <follow-up> — <not blocking because: ...>  (or write `(none)`)",
+    "- (none)  <!-- or: describe each follow-up and why it is non-blocking -->",
     "",
     "## Artifacts referenced",
-    "- TODO: <path | commit | node>  (or write `(none)`)",
+    "- (none)  <!-- or: list paths, commits, archive ids -->",
     "",
     "## Keywords",
-    "TODO: comma-separated tokens that future grep queries should hit on. Required.",
+    "<!-- ≥3 distinct alphanumeric tokens of length ≥3, comma-separated. Replace these. -->",
+    "scan-orchestration, edge-flip, lock-presence",
     "",
     "## Expand for details about:",
-    "TODO: comma-separated list of what was DROPPED or COMPRESSED. Required — this is",
-    "the signal that lets a future agent decide whether to read BODY.md.",
+    "<!-- Comma-separated list of what was DROPPED or COMPRESSED. Required —",
+    "     `(none)` is NOT accepted here; this is the signal that lets a future",
+    "     agent decide whether to read BODY.md. -->",
+    "exact phrasing of the rejected alternative, intermediate dead ends, why we ruled out method M",
     "",
     "<!-- ====================================================================",
     `${policy}`,
@@ -734,27 +778,119 @@ const REQUIRED_SECTIONS = [
   "Expand for details about:",
 ];
 
+// Sections that must contain substantive content. The other three
+// (Blockers / Follow-ups / Artifacts referenced) may legitimately be `(none)`.
+const REQUIRES_REAL_BODY: ReadonlySet<string> = new Set([
+  "TL;DR",
+  "Decisions",
+  "Keywords",
+  "Expand for details about:",
+]);
+
+// A "placeholder line" is a whole-line value that conveys no information:
+// `(none)`, `n/a`, `tbd`, `todo`, `xxx`, `wip`, `placeholder`, single em/en
+// dash, single dot, single underscore. Surrounding list-bullet decoration
+// (`-`, `*`) and parenthesis are tolerated; anything else on the line means
+// the writer added real content alongside the placeholder.
+const PLACEHOLDER_LINE = /^[\s\-*]*\(?\s*(?:none|n\/a|tbd|todo|fixme|xxx|wip|placeholder|—|–|\.|_)\s*\)?[\s\-*]*$/i;
+
+// Generic regex escape — covers every metacharacter, not the partial set
+// the previous validator escaped. Future-proofs new entries in
+// REQUIRED_SECTIONS that may contain `(`, `)`, `*`, etc.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function validateSummary(text: string): SummaryValidation {
-  // Strip HTML comments before validation so unfilled comment blocks don't pass.
-  const stripped = text.replace(/<!--[\s\S]*?-->/g, "");
+  // Normalize CR / CRLF to LF so the line-anchored regex below has a
+  // consistent terminator to scan against. Then strip HTML comments
+  // (lifting their trailing newline so the comment-removal does not
+  // leave a blank line inside what should be a body) and fenced code
+  // blocks (without this, a SUMMARY.md entirely wrapped in triple
+  // backticks renders as a single empty code block but satisfies the
+  // heading regex on the raw markdown).
+  const stripped = text
+    .replace(/\r\n?/g, "\n")
+    .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*\n?/gm, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/^```[^\n]*\n[\s\S]*?^```\s*$/gm, "");
   const issues: string[] = [];
+
+  // 1. Heading presence + uniqueness. `[^\S\n]+` requires non-newline
+  // whitespace between `##` and the heading name (closing the
+  // line-split bypass), and the trailing `[^\S\n]*$` likewise refuses
+  // to span a newline.
   for (const heading of REQUIRED_SECTIONS) {
-    const re = new RegExp(`^##\\s+${heading.replace(/[+]/g, "\\$&").replace(/[?:.]/g, "\\$&")}\\s*$`, "m");
-    if (!re.test(stripped)) issues.push(`missing section: "## ${heading}"`);
+    const re = new RegExp(`^##[^\\S\\n]+${escapeRegex(heading)}[^\\S\\n]*$`, "gm");
+    const matches = stripped.match(re) ?? [];
+    if (matches.length === 0) issues.push(`missing section: "## ${heading}"`);
+    else if (matches.length > 1) issues.push(`duplicate section: "## ${heading}"`);
   }
-  if (/\bTODO\b/.test(stripped)) issues.push("unfilled TODO markers remain");
-  // Keywords section must contain at least one non-empty token after the heading.
-  const kwM = stripped.match(/^##\s+Keywords\s*\n([\s\S]*?)(?=^##\s|\s*$)/m);
+
+  // 2. Broadened placeholder-marker check. The original validator only
+  // caught uppercase `TODO`; this catches the common alternatives
+  // (TBD/FIXME/XXX/WIP/PLACEHOLDER) case-insensitively.
+  if (/\b(?:todo|fixme|xxx|tbd|wip|placeholder)\b/i.test(stripped)) {
+    issues.push("unfilled placeholder marker remains (TODO/FIXME/XXX/TBD/WIP/PLACEHOLDER)");
+  }
+
+  // Body capture: stop at the next `## ` heading or absolute end of
+  // string. Crucially do NOT stop at a blank line — paragraph breaks
+  // inside a body are normal markdown and a comment-strip can also
+  // leave a residual blank line ahead of the real content.
+  const bodyRegex = (heading: string) =>
+    new RegExp(
+      `^##[^\\S\\n]+${escapeRegex(heading)}[^\\S\\n]*\\n([\\s\\S]*?)(?=^##[^\\S\\n]|$(?![\\s\\S]))`,
+      "m",
+    );
+
+  // 3. Real-body check for the four sections that must have substantive
+  // content. A body is "real" when at least one line is not a
+  // placeholder and the body contains at least one ≥2-char alphanumeric
+  // token.
+  for (const heading of REQUIRES_REAL_BODY) {
+    const m = stripped.match(bodyRegex(heading));
+    const body = (m?.[1] ?? "").trim();
+    if (!body) {
+      issues.push(`section "${heading}" has empty body`);
+      continue;
+    }
+    const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
+    const allPlaceholder = lines.length > 0 && lines.every((l) => PLACEHOLDER_LINE.test(l));
+    if (allPlaceholder) issues.push(`section "${heading}" is all placeholder tokens`);
+    if (!/[\p{L}\p{N}]{2,}/u.test(body)) {
+      issues.push(`section "${heading}" has no real-word tokens`);
+    }
+  }
+
+  // 4. Keywords: at least 3 distinct alphanumeric tokens of length ≥3,
+  // case-insensitive. Defeats single-glyph and zero-width-space bypasses.
+  const kwM = stripped.match(bodyRegex("Keywords"));
   if (kwM) {
-    const tokens = kwM[1].split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-    if (tokens.length === 0) issues.push("Keywords section is empty");
+    const toks = new Set(
+      kwM[1]
+        .split(/[,\n]/)
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => /^[\p{L}\p{N}_-]{3,}$/u.test(s)),
+    );
+    if (toks.size < 3) {
+      issues.push("Keywords requires ≥3 distinct alphanumeric tokens of length ≥3");
+    }
   }
-  // Expand-footer must list at least one item.
-  const exM = stripped.match(/^##\s+Expand for details about:\s*\n([\s\S]*?)(?=^##\s|\s*$)/m);
+
+  // 5. Expand-for-details: at least one item that is not a placeholder.
+  const exM = stripped.match(bodyRegex("Expand for details about:"));
   if (exM) {
-    const items = exM[1].split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-    if (items.length === 0) issues.push("Expand-for-details section is empty");
+    const items = exM[1]
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => !PLACEHOLDER_LINE.test(s));
+    if (items.length === 0) {
+      issues.push("Expand-for-details has no real items (all placeholder)");
+    }
   }
+
   return { ok: issues.length === 0, issues };
 }
 
