@@ -103,3 +103,86 @@ describe("monitor.ts tick/lock state-advance race", () => {
     expect(eventLines[0]).toContain(".md-grew");
   }, 15000);
 });
+
+describe("monitor.ts new emissions (P1: startup-pending, lock-stale, protocol-violation)", () => {
+  test("startup-pending fires when monitor starts AFTER a peer has already flipped to me (sentinel S-HIGH-1)", async () => {
+    // Pre-flip the turn to lumeyon BEFORE starting lumeyon's monitor. Pre-fix,
+    // priming silently captured turn=lumeyon and the steady-state tick saw no
+    // transition — silence forever. Post-fix, the startup-pending pass emits
+    // once per actionable edge.
+    runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV);
+
+    const child = spawnScript("monitor.ts", ["--interval", "1"], LUMEYON_ENV) as
+      ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try { await sleep(1500); }
+    finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /startup-pending/.test(l));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("edge=lumeyon-orion");
+    expect(lines[0]).toContain(".turn=lumeyon");
+  }, 8000);
+
+  test("protocol-violation fires when peer appends to CONVO.md without flipping (carina Q4a)", async () => {
+    // Setup: lumeyon's monitor is watching, turn is currently orion. Then
+    // orion appends content but never flips — pre-fix, lumeyon hears nothing.
+    const child = spawnScript("monitor.ts", ["--interval", "1"], LUMEYON_ENV) as
+      ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try {
+      await sleep(1500); // prime
+      // Append without locking + without flipping (the protocol violation).
+      fs.appendFileSync(
+        path.join(EDGE_DIR, "CONVO.md"),
+        "\n## orion — sneaky (UTC 2026-05-01T00:00:00Z)\n\nbody\n\n→ lumeyon\n",
+      );
+      await sleep(2000);
+    } finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /protocol-violation:peer-appended-without-flip/.test(l));
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines[0]).toContain("edge=lumeyon-orion");
+    expect(lines[0]).toContain(".turn=orion");
+  }, 8000);
+
+  test("lock-stale fires once for a dead-pid lock held past --stale-lock-sec threshold (sentinel S-HIGH-2)", async () => {
+    // Find a guaranteed-dead pid.
+    let dead = 9_999_999;
+    for (let p = 9_999_900; p > 1_000_000; p -= 17) {
+      try { process.kill(p, 0); } catch (e: any) { if (e?.code === "ESRCH") { dead = p; break; } }
+    }
+    // Plant a lock with dead-pid identity. The monitor must NOT confuse this
+    // for "live peer is writing" — after staleSec elapses, it must emit one
+    // (and only one) lock-stale notification with the --force-stale hint.
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:${dead}:0 2026-05-01T00:00:00Z\n`,
+    );
+
+    const child = spawnScript(
+      "monitor.ts",
+      ["--interval", "1", "--stale-lock-sec", "2"],
+      LUMEYON_ENV,
+    ) as ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    child.stderr.on("data", (d) => { stderrBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try {
+      // Wait past the threshold + a couple ticks. Should emit exactly once.
+      await sleep(5000);
+    } finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /lock-stale/.test(l));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("edge=lumeyon-orion");
+    expect(lines[0]).toContain("--force-stale");
+    expect(lines[0]).toMatch(/by=orion@/);
+  }, 12000);
+});
