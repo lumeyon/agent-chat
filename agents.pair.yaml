@@ -1,0 +1,7 @@
+topology: pair
+description: Two-agent degenerate case (back-compat with codex-chat). Used when only orion and lumeyon are running.
+agents:
+  - orion
+  - lumeyon
+edges:
+  - [orion, lumeyon]

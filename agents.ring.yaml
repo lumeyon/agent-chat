@@ -1,0 +1,24 @@
+topology: ring
+description: 10-agent ring (degree 2, diameter 5). Each agent talks only to its two cycle neighbors. Useful as a smaller-blast-radius alternative to Petersen.
+agents:
+  - orion
+  - lumeyon
+  - lyra
+  - keystone
+  - sentinel
+  - vanguard
+  - carina
+  - pulsar
+  - cadence
+  - rhino
+edges:
+  - [orion, lumeyon]
+  - [lumeyon, lyra]
+  - [lyra, keystone]
+  - [keystone, sentinel]
+  - [sentinel, vanguard]
+  - [vanguard, carina]
+  - [carina, pulsar]
+  - [pulsar, cadence]
+  - [cadence, rhino]
+  - [rhino, orion]

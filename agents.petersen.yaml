@@ -1,0 +1,29 @@
+topology: petersen
+description: 10-agent Petersen graph. Each agent has exactly 3 neighbors; graph diameter is 2.
+agents:
+  - orion
+  - lumeyon
+  - lyra
+  - keystone
+  - sentinel
+  - vanguard
+  - carina
+  - pulsar
+  - cadence
+  - rhino
+edges:
+  - [orion, lumeyon]
+  - [lumeyon, sentinel]
+  - [sentinel, vanguard]
+  - [vanguard, keystone]
+  - [keystone, orion]
+  - [orion, carina]
+  - [lumeyon, lyra]
+  - [sentinel, pulsar]
+  - [vanguard, cadence]
+  - [keystone, rhino]
+  - [carina, pulsar]
+  - [pulsar, rhino]
+  - [rhino, lyra]
+  - [lyra, cadence]
+  - [cadence, carina]

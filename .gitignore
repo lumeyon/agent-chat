@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# agent-chat runtime state — per-machine, per-session, never committed.
+conversations/.sessions/
+conversations/.presence/
+conversations/.logs/
+
+# Conversation transcripts and archives are user content, not code. Uncomment
+# if you want them tracked in git; they're noisy by default.
+# conversations/

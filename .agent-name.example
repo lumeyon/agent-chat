@@ -1,0 +1,11 @@
+# Drop a copy of this file into the working directory of each Claude/Codex
+# session and rename it to `.agent-name`. The agent-chat skill reads this
+# file (or $AGENT_NAME + $AGENT_TOPOLOGY env vars) on every invocation to
+# resolve "who am I and which graph am I in".
+#
+# `name` must be one of the agents declared in agents.<topology>.yaml.
+# `topology` selects which agents.<topology>.yaml file in the skill root
+# the session uses (e.g. petersen, pair, ring, star).
+
+name: orion
+topology: petersen

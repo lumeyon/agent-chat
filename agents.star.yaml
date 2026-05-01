@@ -1,0 +1,23 @@
+topology: star
+description: 10-agent star with orion at the hub (degree 9 for orion, degree 1 for the others). Useful when one orchestrator coordinates with nine specialists and you do not want specialists chatting laterally.
+agents:
+  - orion
+  - lumeyon
+  - lyra
+  - keystone
+  - sentinel
+  - vanguard
+  - carina
+  - pulsar
+  - cadence
+  - rhino
+edges:
+  - [orion, lumeyon]
+  - [orion, lyra]
+  - [orion, keystone]
+  - [orion, sentinel]
+  - [orion, vanguard]
+  - [orion, carina]
+  - [orion, pulsar]
+  - [orion, cadence]
+  - [orion, rhino]
