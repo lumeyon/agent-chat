@@ -238,8 +238,13 @@ export function readSessionRecord(key: string): SessionRecord | null {
 
 export function writeSessionRecord(rec: SessionRecord): void {
   ensureControlDirs();
-  fs.writeFileSync(sessionFile(rec.session_key), JSON.stringify(rec, null, 2) + "\n");
-  fs.writeFileSync(presenceFile(rec.agent), JSON.stringify(rec, null, 2) + "\n");
+  // Atomic write so concurrent readers (cmdWho, cmdGc, findResumableSession,
+  // --whoami) never see an empty/partial JSON window during a truncate-then-
+  // write race (lyra round-2 Q3). writeFileAtomic uses tmp + rename within
+  // the same directory.
+  const json = JSON.stringify(rec, null, 2) + "\n";
+  writeFileAtomic(sessionFile(rec.session_key), json);
+  writeFileAtomic(presenceFile(rec.agent), json);
 }
 
 export function deleteSessionRecord(rec: SessionRecord): void {
@@ -275,14 +280,15 @@ export function resumeKey(cwd: string, tty: string | undefined): string {
 }
 
 export function findResumableSession(rk: string): SessionRecord | null {
-  for (const rec of listSessions()) {
-    if (resumeKey(rec.cwd, rec.tty) !== rk) continue;
-    // Only offer resume if the original pid is gone (recycled OR dead).
-    // processIsOriginal returns false on a recycled-pid mismatch, which is
-    // exactly the case where resume IS appropriate.
-    if (!processIsOriginal(rec.pid, rec.pid_starttime)) return rec;
-  }
-  return null;
+  // Sort by started_at descending so the MOST-RECENT stale record wins when
+  // multiple match the same cwd|tty resume key. Pre-fix, this returned the
+  // first readdir-order match — filesystem-dependent and non-deterministic
+  // across restarts (lyra round-2 Q2, P2).
+  const candidates = listSessions()
+    .filter((rec) => resumeKey(rec.cwd, rec.tty) === rk)
+    .filter((rec) => !processIsOriginal(rec.pid, rec.pid_starttime))
+    .sort((a, b) => b.started_at.localeCompare(a.started_at));
+  return candidates[0] ?? null;
 }
 
 export function findLivePresence(agent: string): SessionRecord | null {
@@ -367,6 +373,15 @@ export function resolveIdentity(cwd: string = process.cwd()): Identity {
   // 2. $AGENT_NAME + $AGENT_TOPOLOGY env vars
   const envName = process.env.AGENT_NAME;
   const envTopo = process.env.AGENT_TOPOLOGY;
+  // Half-set env is almost always a typo. Refuse instead of silently
+  // falling through to .agent-name and returning a different identity than
+  // the user typed (lyra round-2 Q1, P1).
+  if (envName && !envTopo) {
+    throw new Error(`AGENT_NAME=${envName} is set without AGENT_TOPOLOGY (partial env). Set both or neither.`);
+  }
+  if (envTopo && !envName) {
+    throw new Error(`AGENT_TOPOLOGY=${envTopo} is set without AGENT_NAME (partial env). Set both or neither.`);
+  }
   if (envName && envTopo) {
     try {
       const fileId = readAgentNameFile(cwd);

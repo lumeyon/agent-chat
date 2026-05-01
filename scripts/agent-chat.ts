@@ -26,7 +26,7 @@ import {
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
   utcStamp, edgesOf,
-  exclusiveWriteOrFail,
+  exclusiveWriteOrFail, writeFileAtomic,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   type SessionRecord,
 } from "./lib.ts";
@@ -229,14 +229,17 @@ function cmdInit(args: string[]): void {
   }
 
   // Write session + presence records. The session file is keyed by
-  // session_key (unique per agent runtime instance), so a regular write is
-  // fine — no concurrent contention. The presence file is keyed by agent
-  // name and IS contended across sessions; use exclusive-create with
-  // EEXIST handling to prevent the TOCTOU race where two concurrent inits
-  // both pass the collision check above and then both write.
+  // session_key (unique per agent runtime instance), but concurrent
+  // *readers* (cmdWho, cmdGc, --whoami, findResumableSession) can land
+  // mid-write and used to see an empty/partial JSON window with a plain
+  // truncating write — atomic write closes that gap (lyra round-2 Q3).
+  // The presence file is keyed by agent name and IS contended across
+  // sessions; use exclusive-create with EEXIST handling to prevent the
+  // TOCTOU race where two concurrent inits both pass the collision check
+  // above and then both write.
   ensureControlDirs();
   const fs2 = require("node:fs") as typeof import("node:fs");
-  fs2.writeFileSync(sessionFile(rec.session_key), JSON.stringify(rec, null, 2) + "\n");
+  writeFileAtomic(sessionFile(rec.session_key), JSON.stringify(rec, null, 2) + "\n");
   const presencePath = presenceFile(rec.agent);
   const presenceJson = JSON.stringify(rec, null, 2) + "\n";
   try {
