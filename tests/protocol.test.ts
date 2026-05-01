@@ -132,13 +132,17 @@ describe("turn.ts lock format and unlock guards", () => {
     expect(r.stderr).toContain("lock owned by orion, not lumeyon");
   });
 
-  test("unlock with same agent + LIVE other-pid is refused (misconfig safety net)", () => {
-    // Hand-write a lock claiming live pid = current shell's pid (which is alive).
+  test("unlock with same agent + LIVE other-session is refused (misconfig safety net)", () => {
+    // Hand-write a lock claiming a pid that's alive but isn't this test's
+    // stableSessionPid (we use process.pid, which is the test process — alive,
+    // but distinct from the stableSessionPid the runScript subprocess will
+    // resolve to). Demonstrates: a lock owned by a different live session
+    // can't be released by us, even with the same agent name.
     const lockPath = path.join(EDGE_DIR, "CONVO.md.turn.lock");
     fs.writeFileSync(lockPath, `orion@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`);
     const r = runScript("turn.ts", ["unlock", "lumeyon"], ORION_ENV, { allowFail: true });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain("another live process");
+    expect(r.stderr).toContain("another live session");
   });
 
   test("unlock with same agent + DEAD other-pid succeeds (stale-lock recovery)", () => {
@@ -205,5 +209,96 @@ describe("turn.ts lock format and unlock guards", () => {
     const turn = fs.readFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "utf8").trim();
     expect(turn).toBe("lumeyon");
     expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(false);
+  });
+
+  test("lock refuses when a different agent's lock already exists (wx race fix)", () => {
+    // Plant a foreign live lock first.
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `lumeyon@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("already locked by lumeyon");
+  });
+
+  test("lock refuses with --force-stale hint when the existing lock's pid is dead", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:99999 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("stale lock");
+    expect(r.stderr).toContain("--force-stale");
+  });
+
+  test("unlock --force-stale clears a dead-pid lock", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `lumeyon@${os.hostname()}:99999 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["unlock", "lumeyon", "--force-stale"], ORION_ENV);
+    expect(r.stdout).toContain("force-stale unlocked");
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(false);
+  });
+
+  test("unlock --force-stale refuses when the lock holder pid is still alive", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `lumeyon@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["unlock", "lumeyon", "--force-stale"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("--force-stale refused");
+  });
+
+  test("two concurrent lock attempts from the SAME session: one wins via wx, the other idempotent-re-locks", async () => {
+    // The two children share a stableSessionPid (same parent process tree),
+    // so they're the same "session" by the lock's accounting. The wx-EEXIST
+    // race differentiator: one child wins the create; the other reads its
+    // lock and sees its OWN stable pid → idempotent re-lock branch fires.
+    // No lock file ever ends up double-written or in a half-state.
+    const { spawn } = await import("node:child_process");
+    function lockChild(): Promise<{ code: number; stderr: string; stdout: string }> {
+      return new Promise((resolve) => {
+        const c = spawn(process.execPath, [
+          path.join(import.meta.dirname, "..", "scripts", "turn.ts"),
+          "lock", "lumeyon",
+        ], { env: { ...ORION_ENV }, stdio: ["ignore", "pipe", "pipe"] });
+        let stdout = "", stderr = "";
+        c.stdout?.on("data", (d) => stdout += d.toString());
+        c.stderr?.on("data", (d) => stderr += d.toString());
+        c.on("exit", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+      });
+    }
+    const [a, b] = await Promise.all([lockChild(), lockChild()]);
+    // Both must succeed (one by creating the lock, the other by detecting
+    // its own session already holds it).
+    expect(a.code).toBe(0);
+    expect(b.code).toBe(0);
+    // Output: exactly one says "locked", the other says "already locked by me".
+    const stdouts = [a.stdout, b.stdout];
+    expect(stdouts.some((s) => /^locked /m.test(s))).toBe(true);
+    expect(stdouts.some((s) => /already locked by me/.test(s))).toBe(true);
+    // The lock file exists and is well-formed.
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(true);
+  });
+
+  test("two lock attempts from DIFFERENT sessions: the second refuses cleanly", async () => {
+    // Pre-plant a lock as if from a different session (different host so
+    // the pid lookup goes through the "different host" path → not stale).
+    // Wait, that hits the "cross-host refusal" branch in unlock, but for
+    // *lock* we want to show wx-EEXIST + foreign-live-pid → refuse.
+    // Simpler: plant a lock with a live pid that ISN'T this test's stable
+    // pid. Use process.pid of the test (alive but not the stableSessionPid
+    // the subprocess resolves to).
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("already locked by orion");
   });
 });

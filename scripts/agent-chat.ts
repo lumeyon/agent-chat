@@ -25,6 +25,7 @@ import {
   deleteSessionRecord, currentSessionKey, sessionFile, presenceFile,
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, stableSessionPid, processTag, utcStamp, edgesOf,
+  exclusiveWriteOrFail,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   type SessionRecord,
 } from "./lib.ts";
@@ -172,7 +173,44 @@ function cmdInit(args: string[]): void {
     rec.monitor_pid = startMonitor(rec);
   }
 
-  writeSessionRecord(rec);
+  // Write session + presence records. The session file is keyed by
+  // session_key (unique per agent runtime instance), so a regular write is
+  // fine — no concurrent contention. The presence file is keyed by agent
+  // name and IS contended across sessions; use exclusive-create with
+  // EEXIST handling to prevent the TOCTOU race where two concurrent inits
+  // both pass the collision check above and then both write.
+  ensureControlDirs();
+  const fs2 = require("node:fs") as typeof import("node:fs");
+  fs2.writeFileSync(sessionFile(rec.session_key), JSON.stringify(rec, null, 2) + "\n");
+  const presencePath = presenceFile(rec.agent);
+  const presenceJson = JSON.stringify(rec, null, 2) + "\n";
+  try {
+    exclusiveWriteOrFail(presencePath, presenceJson);
+  } catch (err: any) {
+    if (err.code !== "EEXIST") throw err;
+    // Race: another writer landed between our collision check and our wx
+    // call. Re-read and decide what to do.
+    let existing: SessionRecord | null = null;
+    try { existing = JSON.parse(fs2.readFileSync(presencePath, "utf8")) as SessionRecord; } catch {}
+    const isMe = existing && existing.session_key === rec.session_key;
+    const isDead = existing && !pidIsAlive(existing.pid);
+    if (isMe || isDead || force) {
+      fs2.unlinkSync(presencePath);
+      exclusiveWriteOrFail(presencePath, presenceJson);
+    } else if (existing) {
+      // Genuinely concurrent live claim. Roll back our session file and refuse.
+      try { fs2.unlinkSync(sessionFile(rec.session_key)); } catch {}
+      die(
+        `agent "${name}" was just claimed concurrently as ${existing.agent}@${existing.host}:${existing.pid} ` +
+        `(session ${existing.session_key}, started ${existing.started_at}). ` +
+        `Pick a different name, or pass --force if you're sure that session is dead.`,
+      );
+    } else {
+      // EEXIST but unparsable — replace and continue.
+      fs2.unlinkSync(presencePath);
+      exclusiveWriteOrFail(presencePath, presenceJson);
+    }
+  }
 
   console.log(`✓ this session is ${name}@${topology}`);
   console.log(`  session_key: ${sessionKey}`);

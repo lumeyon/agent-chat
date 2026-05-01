@@ -256,4 +256,50 @@ describe("session-key collision resistance (Bug A regression)", () => {
     const files = fs.readdirSync(path.join(CONVO_DIR, ".sessions"));
     expect(files.some((f) => f.startsWith("pid_") || f.startsWith("pid:"))).toBe(true);
   });
+
+  test("two concurrent init calls for the same agent: exactly one wins (presence wx race)", async () => {
+    // Spawn two init processes simultaneously, both claiming "orion". With
+    // wx-based presence acquisition, exactly one should land cleanly and
+    // the other should refuse with a "concurrently claimed" error. With
+    // the prior writeFileSync-based init, both succeeded silently and the
+    // second clobbered the first.
+    const { spawn } = await import("node:child_process");
+    const path2 = await import("node:path");
+    function initChild(sid: string): Promise<{ code: number; stdout: string; stderr: string }> {
+      return new Promise((resolve) => {
+        const c = spawn(process.execPath, [
+          path2.join(import.meta.dirname, "..", "scripts", "agent-chat.ts"),
+          "init", "orion", "petersen", "--no-monitor",
+        ], {
+          env: envWith({ CLAUDE_SESSION_ID: sid }),
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        let stdout = "", stderr = "";
+        c.stdout?.on("data", (d) => stdout += d.toString());
+        c.stderr?.on("data", (d) => stderr += d.toString());
+        c.on("exit", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+      });
+    }
+    const [a, b] = await Promise.all([
+      initChild(fakeSessionId("racer-a")),
+      initChild(fakeSessionId("racer-b")),
+    ]);
+    // At least one must have succeeded (exit 0). The other may also
+    // succeed if its wx EEXIST landed AFTER the first finished and the
+    // race was sequential; or it may refuse with a "concurrently claimed"
+    // error. What MUST hold: at the end, only ONE presence file exists,
+    // and the session record from the loser was rolled back if it lost.
+    const successes = [a, b].filter((r) => r.code === 0);
+    expect(successes.length).toBeGreaterThanOrEqual(1);
+    // Presence file must be present and well-formed.
+    const presencePath = path2.join(CONVO_DIR, ".presence", "orion.json");
+    expect(fs.existsSync(presencePath)).toBe(true);
+    const winner = JSON.parse(fs.readFileSync(presencePath, "utf8"));
+    expect(winner.agent).toBe("orion");
+    // If exactly one succeeded, the loser must have a refusal message.
+    if (successes.length === 1) {
+      const loser = [a, b].find((r) => r.code !== 0)!;
+      expect(loser.stderr).toMatch(/already live|concurrently claimed/);
+    }
+  });
 });

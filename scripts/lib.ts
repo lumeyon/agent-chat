@@ -242,6 +242,27 @@ export function findLivePresence(agent: string): SessionRecord | null {
   } catch { return null; }
 }
 
+// Atomic exclusive-create write: open with O_CREAT|O_EXCL so the call fails
+// with EEXIST if the file already exists, never silently truncating.
+//
+// Used for filesystem-as-mutex primitives: the lock file (one writer at a
+// time) and the presence file (one session per agent name). The previous
+// `fs.writeFileSync(p, …)` was create-or-truncate, which lets two
+// concurrent callers both "succeed" with the second silently overwriting
+// the first.
+//
+// NFS caveat: O_EXCL semantics on NFSv2/v3 are historically lossy (the
+// server may report success when another client already holds the file).
+// All current users of this skill are on local filesystems, so the simple
+// implementation suffices. If multi-host filesystem use ever ships,
+// switch to a link()-based fallback for NFSv2/v3.
+export function exclusiveWriteOrFail(p: string, content: string): void {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const fd = fs.openSync(p, "wx");
+  try { fs.writeFileSync(fd, content); }
+  finally { fs.closeSync(fd); }
+}
+
 export function resolveIdentity(cwd: string = process.cwd()): Identity {
   // 1. Per-session file (Claude session id or parent shell pid). This is the
   //    high-N path: ten sessions in the same cwd each have their own session
@@ -280,11 +301,22 @@ export function resolveIdentity(cwd: string = process.cwd()): Identity {
   );
 }
 
-// Process fingerprint for lock files: agent@host:pid. Lets us tell two
-// `orion` sessions apart on the same host, and detect "the lock holder is
-// no longer running" without ambiguity.
+// Process fingerprint for *display* purposes (resolve.ts whoami, init banner).
+// Reflects the actual current bun process pid so the user can see "this exact
+// bun is here right now". Don't use this for lock files — see lockTag below.
 export function processTag(name: string): string {
   return `${name}@${os.hostname()}:${process.pid}`;
+}
+
+// Lock-file fingerprint: agent@host:<stable-session-pid>. The lock body
+// records the long-lived agent runtime ancestor pid (Claude Code main
+// process, or the user's terminal pid for plain shell), NOT the
+// short-lived bun pid. With process.pid, every bun spawn looks like a
+// "stale lock" the moment it returns; with stableSessionPid, the lock
+// looks fresh as long as the Claude Code session is alive, and goes
+// stale only when that session genuinely exits.
+export function lockTag(name: string): string {
+  return `${name}@${os.hostname()}:${stableSessionPid()}`;
 }
 
 // Parse a lock file body of the form "<agent>@<host>:<pid> <ts>".

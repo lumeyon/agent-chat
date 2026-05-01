@@ -15,7 +15,8 @@ import * as os from "node:os";
 import {
   loadTopology, resolveIdentity, edgesOf, ensureEdgeFiles,
   readTurn, writeTurnAtomic, utcStamp,
-  processTag, parseLockFile, pidIsAlive,
+  processTag, lockTag, parseLockFile, pidIsAlive, stableSessionPid,
+  exclusiveWriteOrFail,
 } from "./lib.ts";
 
 function die(msg: string): never { console.error(msg); process.exit(2); }
@@ -91,20 +92,64 @@ switch (op) {
     break;
   }
   case "lock": {
-    if (fs.existsSync(edge.lock)) die(`already locked: ${fs.readFileSync(edge.lock, "utf8").trim()}`);
-    // Lock body: "<agent>@<host>:<pid> <utc-ts>". The host:pid lets us tell
-    // two `orion` sessions apart on the same host and detect dead-pid locks.
-    fs.writeFileSync(edge.lock, `${processTag(id.name)} ${utcStamp()}\n`);
-    console.log(`locked ${edge.id} (${processTag(id.name)})`);
+    // Use exclusive-create open so two concurrent `lock` calls cannot both
+    // succeed. The lock body uses stableSessionPid (the long-lived Claude
+    // Code main pid or the user's terminal pid) so the lock looks fresh
+    // for the lifetime of the agent session, not just for the lifetime of
+    // this bun invocation.
+    const body = `${lockTag(id.name)} ${utcStamp()}\n`;
+    const myStablePid = stableSessionPid();
+    try {
+      exclusiveWriteOrFail(edge.lock, body);
+    } catch (err: any) {
+      if (err.code !== "EEXIST") throw err;
+      const lk = parseLockFile(edge.lock);
+      // Idempotent re-lock: the same agent SESSION already holds it.
+      // Match on agent + host + the recorded pid being THIS Claude Code
+      // session's stable pid. Lets a session double-lock without error.
+      if (lk && lk.agent === id.name && lk.host === os.hostname() && lk.pid === myStablePid) {
+        console.log(`already locked by me (${edge.id})`);
+        break;
+      }
+      // Stale lock from a dead session of the same agent: surface, don't
+      // auto-steal. Explicit cleanup via --force-stale keeps lock
+      // semantics honest under pid recycling.
+      if (lk && !pidIsAlive(lk.pid)) {
+        die(
+          `refuse to lock — edge ${edge.id} has stale lock from ${lk.agent}@${lk.host}:${lk.pid} (session is gone). ` +
+          `Run \`turn.ts unlock ${peer} --force-stale\` to clear it, then retry.`,
+        );
+      }
+      const who = lk ? `${lk.agent}@${lk.host}:${lk.pid}` : "(unparsable lock)";
+      die(`refuse to lock — edge ${edge.id} already locked by ${who}.`);
+    }
+    console.log(`locked ${edge.id} (${lockTag(id.name)})`);
     break;
   }
   case "unlock": {
     if (!fs.existsSync(edge.lock)) { console.log(`${edge.id} not locked`); break; }
+    const forceStale = arg3 === "--force-stale" || (process.argv.slice(2).includes("--force-stale"));
     const lk = parseLockFile(edge.lock);
     if (!lk) {
       // Malformed lock — surface for inspection rather than silently breaking.
-      // The user can clear it manually if they confirm it's stale.
+      // --force-stale lets the user clear it after confirming it's bad.
+      if (forceStale) {
+        fs.unlinkSync(edge.lock);
+        console.log(`force-stale unlocked ${edge.id} (lock file was unparsable)`);
+        break;
+      }
       die(`refuse to unlock — lock file does not match agent@host:pid format: ${fs.readFileSync(edge.lock, "utf8").trim()}`);
+    }
+    // --force-stale: only honored if the recorded pid is genuinely dead.
+    // Refuses to clear a live lock even with --force-stale (that's what
+    // makes "stale" meaningful).
+    if (forceStale) {
+      if (pidIsAlive(lk.pid) && lk.pid !== process.pid) {
+        die(`--force-stale refused — lock holder ${lk.agent}@${lk.host}:${lk.pid} is still alive.`);
+      }
+      fs.unlinkSync(edge.lock);
+      console.log(`force-stale unlocked ${edge.id} (was held by ${lk.agent}@${lk.host}:${lk.pid}, pid gone)`);
+      break;
     }
     if (lk.agent !== id.name) {
       die(`refuse to unlock — lock owned by ${lk.agent}, not ${id.name}`);
@@ -114,15 +159,17 @@ switch (op) {
     if (lk.host !== os.hostname()) {
       die(`refuse to unlock — lock held by ${lk.agent}@${lk.host}:${lk.pid} on a different host (I am on ${os.hostname()}).`);
     }
-    // Same agent name + same host + the lock-holder pid is still alive AND
-    // is not us → that's the two-sessions-with-same-name misconfiguration.
-    // Refuse so we don't release another live session's lock. If the pid is
-    // dead (e.g. we just lock-then-unlock in two separate bun invocations,
-    // or a previous session crashed), allow the unlock.
-    if (lk.pid !== process.pid && pidIsAlive(lk.pid)) {
+    // Same agent name + same host + the lock-holder belongs to a DIFFERENT
+    // live session → that's the two-sessions-with-same-name misconfig.
+    // Refuse so we don't release another live session's lock. The
+    // lock-holder is "us" iff its recorded pid equals our stableSessionPid
+    // (i.e. we're the same Claude Code / terminal session). If the pid is
+    // dead, allow the unlock (stale recovery).
+    const myStablePid = stableSessionPid();
+    if (lk.pid !== myStablePid && pidIsAlive(lk.pid)) {
       die(
-        `refuse to unlock — lock held by another live process ${lk.agent}@${lk.host}:${lk.pid}, I am pid ${process.pid}. ` +
-        `Two sessions sharing the same agent name? Check $AGENT_NAME in each shell with \`bun scripts/resolve.ts --whoami\`.`,
+        `refuse to unlock — lock held by another live session ${lk.agent}@${lk.host}:${lk.pid}, I am session ${myStablePid}. ` +
+        `Two sessions sharing the same agent name? Check identity in each shell with \`bun scripts/resolve.ts --whoami\`.`,
       );
     }
     fs.unlinkSync(edge.lock);
