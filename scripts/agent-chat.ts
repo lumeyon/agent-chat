@@ -24,7 +24,8 @@ import {
   loadTopology, listSessions, readSessionRecord, writeSessionRecord,
   deleteSessionRecord, currentSessionKey, sessionFile, presenceFile,
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
-  pidIsAlive, stableSessionPid, processTag, utcStamp, edgesOf,
+  pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
+  utcStamp, edgesOf,
   exclusiveWriteOrFail,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   type SessionRecord,
@@ -48,13 +49,13 @@ function detectTty(): string | undefined {
 function pickTopologyDefault(): string | null {
   // If exactly one topology is currently in use by other live sessions on
   // this host, use that. Saves the user typing it for sessions 2..N.
-  const live = listSessions().filter((r) => pidIsAlive(r.pid));
+  const live = listSessions().filter((r) => processIsOriginal(r.pid, r.pid_starttime));
   const topos = new Set(live.map((r) => r.topology));
   if (topos.size === 1) return [...topos][0];
   return null;
 }
 
-function startMonitor(rec: SessionRecord): number | undefined {
+function startMonitor(rec: SessionRecord): { pid: number; starttime: number | null } | undefined {
   // Background-launch the per-session monitor. It inherits the session-file
   // identity via $CLAUDE_SESSION_ID/PPID, so no env override needed. Stdout
   // redirected to a per-agent log so notifications don't disappear.
@@ -80,15 +81,25 @@ function startMonitor(rec: SessionRecord): number | undefined {
     });
     child.unref();
     fs.closeSync(out);
-    return child.pid;
+    if (!child.pid) return undefined;
+    // Capture the kernel start_time of the spawned monitor so a later `exit`
+    // / `gc` can confirm the recorded pid still belongs to OUR monitor and
+    // hasn't been recycled to an unrelated process. Done synchronously here
+    // so the call is in the parent's window before any pid-recycle could
+    // happen.
+    const starttime = pidStarttime(child.pid);
+    return { pid: child.pid, starttime };
   } catch (err) {
     console.error(`[agent-chat] could not auto-launch monitor: ${(err as Error).message}`);
     return undefined;
   }
 }
 
-function stopMonitor(pid: number | undefined): void {
-  if (!pid || !pidIsAlive(pid)) return;
+function stopMonitor(pid: number | undefined, starttime: number | null | undefined): void {
+  // processIsOriginal returns false when the pid was recycled to a different
+  // process. Without this check, `exit` could SIGTERM an unrelated process
+  // that happens to have the recycled pid (cadence Q2).
+  if (!pid || !processIsOriginal(pid, starttime)) return;
   try { process.kill(pid, "SIGTERM"); } catch {}
 }
 
@@ -153,6 +164,7 @@ function cmdInit(args: string[]): void {
   }
 
   // Build the record.
+  const sessionPid = stableSessionPid();
   const rec: SessionRecord = {
     agent: name,
     topology,
@@ -162,7 +174,8 @@ function cmdInit(args: string[]): void {
     // stableSessionPid walks the process tree to find the long-lived agent
     // runtime ancestor (Claude Code main process), so the recorded pid is
     // alive throughout the user's session — not just for this bun invocation.
-    pid: stableSessionPid(),
+    pid: sessionPid,
+    pid_starttime: pidStarttime(sessionPid) ?? undefined,
     started_at: utcStamp(),
     cwd,
     tty,
@@ -170,7 +183,11 @@ function cmdInit(args: string[]): void {
 
   // Auto-launch monitor unless --no-monitor.
   if (!noMonitor) {
-    rec.monitor_pid = startMonitor(rec);
+    const m = startMonitor(rec);
+    if (m) {
+      rec.monitor_pid = m.pid;
+      rec.monitor_pid_starttime = m.starttime ?? undefined;
+    }
   }
 
   // Write session + presence records. The session file is keyed by
@@ -193,7 +210,18 @@ function cmdInit(args: string[]): void {
     let existing: SessionRecord | null = null;
     try { existing = JSON.parse(fs2.readFileSync(presencePath, "utf8")) as SessionRecord; } catch {}
     const isMe = existing && existing.session_key === rec.session_key;
-    const isDead = existing && !pidIsAlive(existing.pid);
+    const isDead = existing && !processIsOriginal(existing.pid, existing.pid_starttime);
+    // Loud warning when --force overrides a still-live presence record.
+    // Silent clobber was carina Q1b — last writer wins with no signal.
+    if (force && existing && !isMe && !isDead) {
+      console.error(
+        `[agent-chat] WARNING: --force is overriding LIVE presence ` +
+        `${existing.agent}@${existing.host}:${existing.pid} (session ${existing.session_key}, ` +
+        `started ${existing.started_at}). The displaced session will lose its identity.`,
+      );
+      // Clean up the displaced session record too so `who` doesn't show split state.
+      try { fs2.unlinkSync(sessionFile(existing.session_key)); } catch {}
+    }
     if (isMe || isDead || force) {
       fs2.unlinkSync(presencePath);
       exclusiveWriteOrFail(presencePath, presenceJson);
@@ -248,7 +276,7 @@ function cmdExit(_args: string[]): void {
     console.log(`no active session for key ${key} — nothing to do.`);
     return;
   }
-  stopMonitor(rec.monitor_pid);
+  stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
 }
@@ -257,7 +285,7 @@ function cmdWho(_args: string[]): void {
   const live: SessionRecord[] = [];
   const stale: SessionRecord[] = [];
   for (const rec of listSessions()) {
-    if (pidIsAlive(rec.pid)) live.push(rec);
+    if (processIsOriginal(rec.pid, rec.pid_starttime)) live.push(rec);
     else stale.push(rec);
   }
   if (!live.length && !stale.length) { console.log("no sessions on file."); return; }
@@ -265,7 +293,7 @@ function cmdWho(_args: string[]): void {
     console.log(`live (${live.length}):`);
     for (const r of live.sort((a, b) => a.agent.localeCompare(b.agent))) {
       const monStatus = r.monitor_pid
-        ? (pidIsAlive(r.monitor_pid) ? `mon=${r.monitor_pid}` : `mon=GONE`)
+        ? (processIsOriginal(r.monitor_pid, r.monitor_pid_starttime) ? `mon=${r.monitor_pid}` : `mon=GONE`)
         : "mon=-";
       console.log(`  ${r.agent.padEnd(10)} @ ${r.host}:${r.pid}  topo=${r.topology}  ${monStatus}  started=${r.started_at}`);
     }
@@ -294,8 +322,8 @@ function cmdGc(_args: string[]): void {
     // Foreign-host records belong to a peer machine sharing the
     // filesystem — we have no authority to GC them. See cadence F8 (P0 #2).
     if (rec.host !== myHost) continue;
-    if (!pidIsAlive(rec.pid)) {
-      stopMonitor(rec.monitor_pid);
+    if (!processIsOriginal(rec.pid, rec.pid_starttime)) {
+      stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
       deleteSessionRecord(rec);
       console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} is gone)`);
       removed++;
@@ -319,7 +347,7 @@ function cmdGc(_args: string[]): void {
         continue;
       }
       if (rec.host !== myHost) continue;          // foreign host: not ours to GC
-      if (!pidIsAlive(rec.pid)) {
+      if (!processIsOriginal(rec.pid, rec.pid_starttime)) {
         if (safeUnlink(fp)) {
           console.log(`gc: removed orphan presence ${f}`);
           removed++;

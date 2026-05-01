@@ -505,7 +505,7 @@ describe("validateSummary — audit fixtures", () => {
 describe("parseLockFile", () => {
   const tmp = `${process.env.TMPDIR ?? "/tmp"}/agent-chat-locktest-${process.pid}`;
 
-  test("parses well-formed lock file", () => {
+  test("parses legacy 3-tuple lock file (backward-compat with pre-starttime format)", () => {
     const fs = require("node:fs");
     fs.writeFileSync(tmp, "orion@hostname.example:12345 2026-05-01T00:00:00Z\n");
     const lk = parseLockFile(tmp);
@@ -513,8 +513,31 @@ describe("parseLockFile", () => {
       agent: "orion",
       host: "hostname.example",
       pid: 12345,
+      starttime: null,
       ts: "2026-05-01T00:00:00Z",
     });
+    fs.unlinkSync(tmp);
+  });
+
+  test("parses 4-tuple lock file with starttime fingerprint", () => {
+    const fs = require("node:fs");
+    fs.writeFileSync(tmp, "orion@hostname.example:12345:987654321 2026-05-01T00:00:00Z\n");
+    const lk = parseLockFile(tmp);
+    expect(lk).toEqual({
+      agent: "orion",
+      host: "hostname.example",
+      pid: 12345,
+      starttime: 987654321,
+      ts: "2026-05-01T00:00:00Z",
+    });
+    fs.unlinkSync(tmp);
+  });
+
+  test("parses 4-tuple with starttime=0 as null (recording failed at write time)", () => {
+    const fs = require("node:fs");
+    fs.writeFileSync(tmp, "orion@hostname.example:12345:0 2026-05-01T00:00:00Z\n");
+    const lk = parseLockFile(tmp);
+    expect(lk?.starttime).toBeNull();
     fs.unlinkSync(tmp);
   });
 
@@ -733,6 +756,68 @@ describe("readIndex — torn-read + malformed-line resilience (rhino #2/#3, P0)"
       // sizeBefore was used to anchor the assertion; reference it to silence linters.
       expect(sizeBefore).toBeGreaterThan(0);
     } finally { fs.rmSync(edgeDir, { recursive: true, force: true }); }
+  });
+});
+
+describe("pidStarttime / processIsOriginal — pid-recycling guard (cadence Q2/Q3, P1)", () => {
+  // Hardening: pidIsAlive alone could not tell "the original process" from
+  // "an unrelated process that got the recycled pid." The starttime
+  // fingerprint pairs with the pid to make that distinction.
+  test("pidStarttime returns a positive integer for the current process on Linux/macOS", async () => {
+    const { pidStarttime } = await import("../scripts/lib.ts");
+    const t = pidStarttime(process.pid);
+    if (process.platform === "linux" || process.platform === "darwin") {
+      expect(t).not.toBeNull();
+      expect(t).toBeGreaterThan(0);
+    } else {
+      // Other platforms intentionally return null (identity-blind fallback).
+      expect(t).toBeNull();
+    }
+  });
+
+  test("pidStarttime returns null for an obviously-bogus pid", async () => {
+    const { pidStarttime } = await import("../scripts/lib.ts");
+    expect(pidStarttime(0)).toBeNull();
+    expect(pidStarttime(-1)).toBeNull();
+    expect(pidStarttime(NaN)).toBeNull();
+  });
+
+  test("pidStarttime is consistent across calls for a long-running pid (no jitter)", async () => {
+    const { pidStarttime } = await import("../scripts/lib.ts");
+    const a = pidStarttime(process.pid);
+    const b = pidStarttime(process.pid);
+    expect(a).toBe(b);
+  });
+
+  test("processIsOriginal returns true when pid+starttime match a live process", async () => {
+    const { pidStarttime, processIsOriginal } = await import("../scripts/lib.ts");
+    const t = pidStarttime(process.pid);
+    expect(processIsOriginal(process.pid, t)).toBe(true);
+  });
+
+  test("processIsOriginal returns false when starttime mismatches (recycled-pid signal)", async () => {
+    const { pidStarttime, processIsOriginal } = await import("../scripts/lib.ts");
+    const t = pidStarttime(process.pid);
+    if (t == null) return; // platform without starttime — nothing to assert
+    expect(processIsOriginal(process.pid, t + 1)).toBe(false);
+  });
+
+  test("processIsOriginal falls back to pidIsAlive when expected is null (legacy records)", async () => {
+    const { processIsOriginal } = await import("../scripts/lib.ts");
+    // Legacy SessionRecord without pid_starttime: should still treat us as alive.
+    expect(processIsOriginal(process.pid, null)).toBe(true);
+    expect(processIsOriginal(process.pid, undefined)).toBe(true);
+  });
+
+  test("processIsOriginal returns false for a dead pid even with null expected", async () => {
+    const { processIsOriginal } = await import("../scripts/lib.ts");
+    // Find a dead pid the same way our gc tests do.
+    let dead = 9_999_999;
+    for (let p = 9_999_900; p > 1_000_000; p -= 17) {
+      try { process.kill(p, 0); } catch (e: any) { if (e?.code === "ESRCH") { dead = p; break; } }
+    }
+    expect(processIsOriginal(dead, null)).toBe(false);
+    expect(processIsOriginal(dead, 12345)).toBe(false);
   });
 });
 

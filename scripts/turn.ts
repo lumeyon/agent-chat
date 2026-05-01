@@ -15,7 +15,8 @@ import * as os from "node:os";
 import {
   loadTopology, resolveIdentity, edgesOf, ensureEdgeFiles,
   readTurn, writeTurnAtomic, utcStamp,
-  processTag, lockTag, parseLockFile, pidIsAlive, stableSessionPid,
+  processTag, lockTag, parseLockFile, pidIsAlive, processIsOriginal,
+  stableSessionPid, pidStarttime,
   exclusiveWriteOrFail,
 } from "./lib.ts";
 
@@ -59,19 +60,7 @@ switch (op) {
     if (next !== "parked" && !participants.includes(next)) {
       die(`next must be parked or one of ${participants.join(", ")}`);
     }
-    // The lock is advisory: it marks "I'm doing the append+flip atomically".
-    // Refuse only if the lock is held by a DIFFERENT agent (i.e. someone is
-    // writing right now). The current writer holding their OWN lock is the
-    // expected case in the documented lock → append → flip → unlock sequence.
-    if (fs.existsSync(edge.lock)) {
-      const lk = parseLockFile(edge.lock);
-      if (lk && lk.agent !== id.name) {
-        die(`refuse to flip — edge ${edge.id} is locked by ${lk.agent}@${lk.host}:${lk.pid}, not me (${id.name}).`);
-      }
-      // Same-agent lock: proceed. (turn-holder check above already restricts
-      // who can call flip; same-agent + same-turn-holder means the writer
-      // is mid-sequence, which is fine.)
-    }
+    refuseIfLockBelongsToAnotherSession(edge, id.name, "flip");
     writeTurnAtomic(edge.turn, next);
     console.log(`flipped ${edge.id}: ${cur} → ${next}`);
     break;
@@ -79,44 +68,49 @@ switch (op) {
   case "park": {
     const cur = readTurn(edge.turn);
     if (cur !== id.name) die(`refuse to park — turn is "${cur}", not "${id.name}"`);
-    // Same advisory-lock logic as flip: allow if my own lock, refuse if held
-    // by a different agent.
-    if (fs.existsSync(edge.lock)) {
-      const lk = parseLockFile(edge.lock);
-      if (lk && lk.agent !== id.name) {
-        die(`refuse to park — edge ${edge.id} is locked by ${lk.agent}@${lk.host}:${lk.pid}, not me (${id.name}).`);
-      }
-    }
+    refuseIfLockBelongsToAnotherSession(edge, id.name, "park");
     writeTurnAtomic(edge.turn, "parked");
     console.log(`parked ${edge.id}`);
     break;
   }
   case "lock": {
+    // Protocol invariant: only the current floor-holder may take the lock.
+    // Without this, a non-holding peer could squat the lock and freeze the
+    // floor — flip would then refuse "lock held by other agent" and the
+    // edge would deadlock until --force-stale (lumeyon P2). Uninitialized
+    // turn (`null`) is exempt so `init` can lock + write the first section.
+    const cur = readTurn(edge.turn);
+    if (cur !== null && cur !== id.name) {
+      die(`refuse to lock — turn is "${cur}", not "${id.name}". Only the floor-holder can lock.`);
+    }
     // Use exclusive-create open so two concurrent `lock` calls cannot both
-    // succeed. The lock body uses stableSessionPid (the long-lived Claude
-    // Code main pid or the user's terminal pid) so the lock looks fresh
-    // for the lifetime of the agent session, not just for the lifetime of
-    // this bun invocation.
+    // succeed. The lock body now embeds starttime so an unlock/flip/park can
+    // distinguish "my own lock" from "another session of the same agent
+    // name" even if pids happen to match (pid-recycling).
     const body = `${lockTag(id.name)} ${utcStamp()}\n`;
     const myStablePid = stableSessionPid();
+    const myStarttime = pidStarttime(myStablePid);
     try {
       exclusiveWriteOrFail(edge.lock, body);
     } catch (err: any) {
       if (err.code !== "EEXIST") throw err;
       const lk = parseLockFile(edge.lock);
       // Idempotent re-lock: the same agent SESSION already holds it.
-      // Match on agent + host + the recorded pid being THIS Claude Code
-      // session's stable pid. Lets a session double-lock without error.
-      if (lk && lk.agent === id.name && lk.host === os.hostname() && lk.pid === myStablePid) {
+      // Match on agent + host + same stable pid + matching starttime
+      // fingerprint (when available). starttime mismatch with same pid
+      // is the pid-recycling signal — fall through to the stale path.
+      if (
+        lk && lk.agent === id.name && lk.host === os.hostname() &&
+        lk.pid === myStablePid &&
+        (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime)
+      ) {
         console.log(`already locked by me (${edge.id})`);
         break;
       }
-      // Stale lock from a dead session of the same agent: surface, don't
-      // auto-steal. Explicit cleanup via --force-stale keeps lock
-      // semantics honest under pid recycling.
-      if (lk && !pidIsAlive(lk.pid)) {
+      // Stale lock from a dead-or-recycled session of the same agent.
+      if (lk && !processIsOriginal(lk.pid, lk.starttime)) {
         die(
-          `refuse to lock — edge ${edge.id} has stale lock from ${lk.agent}@${lk.host}:${lk.pid} (session is gone). ` +
+          `refuse to lock — edge ${edge.id} has stale lock from ${lk.agent}@${lk.host}:${lk.pid} (session is gone or pid was recycled). ` +
           `Run \`turn.ts unlock ${peer} --force-stale\` to clear it, then retry.`,
         );
       }
@@ -140,15 +134,15 @@ switch (op) {
       }
       die(`refuse to unlock — lock file does not match agent@host:pid format: ${fs.readFileSync(edge.lock, "utf8").trim()}`);
     }
-    // --force-stale: only honored if the recorded pid is genuinely dead.
-    // Refuses to clear a live lock even with --force-stale (that's what
-    // makes "stale" meaningful).
+    // --force-stale: only honored if the recorded pid is genuinely dead OR
+    // recycled to a different process. processIsOriginal returns false in
+    // both cases — that's what makes "stale" meaningful.
     if (forceStale) {
-      if (pidIsAlive(lk.pid) && lk.pid !== process.pid) {
+      if (processIsOriginal(lk.pid, lk.starttime) && lk.pid !== process.pid) {
         die(`--force-stale refused — lock holder ${lk.agent}@${lk.host}:${lk.pid} is still alive.`);
       }
       fs.unlinkSync(edge.lock);
-      console.log(`force-stale unlocked ${edge.id} (was held by ${lk.agent}@${lk.host}:${lk.pid}, pid gone)`);
+      console.log(`force-stale unlocked ${edge.id} (was held by ${lk.agent}@${lk.host}:${lk.pid}, pid gone or recycled)`);
       break;
     }
     if (lk.agent !== id.name) {
@@ -163,10 +157,14 @@ switch (op) {
     // live session → that's the two-sessions-with-same-name misconfig.
     // Refuse so we don't release another live session's lock. The
     // lock-holder is "us" iff its recorded pid equals our stableSessionPid
-    // (i.e. we're the same Claude Code / terminal session). If the pid is
-    // dead, allow the unlock (stale recovery).
+    // AND its starttime fingerprint matches (when both are available). If
+    // the recorded pid is dead-or-recycled, allow the unlock.
     const myStablePid = stableSessionPid();
-    if (lk.pid !== myStablePid && pidIsAlive(lk.pid)) {
+    const myStarttime = pidStarttime(myStablePid);
+    const isSameSession =
+      lk.pid === myStablePid &&
+      (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime);
+    if (!isSameSession && processIsOriginal(lk.pid, lk.starttime)) {
       die(
         `refuse to unlock — lock held by another live session ${lk.agent}@${lk.host}:${lk.pid}, I am session ${myStablePid}. ` +
         `Two sessions sharing the same agent name? Check identity in each shell with \`bun scripts/resolve.ts --whoami\`.`,
@@ -178,4 +176,34 @@ switch (op) {
   }
   default:
     die(`unknown op: ${op}`);
+}
+
+// Helper: refuse flip/park if the lock is held by another agent OR by
+// another live session of the same agent name. Mirrors `unlock`'s
+// turn.ts:169 defense to make the lock-aliveness signal symmetric across
+// all four ops (lock, unlock, flip, park) — lumeyon P1.
+function refuseIfLockBelongsToAnotherSession(
+  edge: { id: string; lock: string },
+  myName: string,
+  op: "flip" | "park",
+): void {
+  if (!fs.existsSync(edge.lock)) return;
+  const lk = parseLockFile(edge.lock);
+  if (!lk) return; // unparseable — let the writer proceed; stale-lock notification handles it
+  if (lk.agent !== myName) {
+    die(`refuse to ${op} — edge ${edge.id} is locked by ${lk.agent}@${lk.host}:${lk.pid}, not me (${myName}).`);
+  }
+  // Same agent name. Check it's actually MY session (pid + starttime).
+  const myStablePid = stableSessionPid();
+  const myStarttime = pidStarttime(myStablePid);
+  const isSameSession =
+    lk.pid === myStablePid &&
+    (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime);
+  if (!isSameSession && processIsOriginal(lk.pid, lk.starttime)) {
+    die(
+      `refuse to ${op} — edge ${edge.id} is locked by another live session of "${myName}" ` +
+      `(${lk.agent}@${lk.host}:${lk.pid}); I am session ${myStablePid}. Two sessions sharing this agent name?`,
+    );
+  }
+  // Either same session OR the lock is stale (dead/recycled pid). Proceed.
 }

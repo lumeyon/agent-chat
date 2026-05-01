@@ -299,7 +299,7 @@ describe("session-key collision resistance (Bug A regression)", () => {
     // If exactly one succeeded, the loser must have a refusal message.
     if (successes.length === 1) {
       const loser = [a, b].find((r) => r.code !== 0)!;
-      expect(loser.stderr).toMatch(/already live|concurrently claimed/);
+      expect(loser.stderr).toMatch(/already live|claimed concurrently|concurrently claimed/);
     }
   });
 });

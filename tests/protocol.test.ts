@@ -303,6 +303,90 @@ describe("turn.ts lock format and unlock guards", () => {
   });
 });
 
+describe("turn.ts lock — protocol invariants (lumeyon P1+P2)", () => {
+  beforeEach(() => {
+    runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV); // turn=orion
+  });
+
+  test("lock refuses when caller is not the floor-holder (closes squat-DoS)", () => {
+    // Turn is orion's. Lumeyon should not be allowed to grab the lock.
+    const r = runScript("turn.ts", ["lock", "orion"], LUMEYON_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("Only the floor-holder can lock");
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(false);
+  });
+
+  test("lock allowed when turn is mine", () => {
+    const r = runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(true);
+  });
+
+  test("lock allowed on uninitialized edge (init's first lock+write)", () => {
+    // Wipe the edge to simulate a fresh init flow.
+    fs.rmSync(EDGE_DIR, { recursive: true, force: true });
+    fs.mkdirSync(EDGE_DIR, { recursive: true });
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), "header\n");
+    // No .turn file → readTurn returns null → lock should succeed.
+    const r = runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+describe("turn.ts flip/park — pid-match guard (lumeyon P1, mirrors unlock)", () => {
+  beforeEach(() => {
+    runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV); // turn=orion
+  });
+
+  test("flip refuses when same-agent lock is held by ANOTHER live session (not a stale-lock race)", () => {
+    // Plant a lock that claims to be orion@host but with a DIFFERENT live
+    // pid (this test process's pid != stableSessionPid). Pre-fix, flip
+    // would proceed because lk.agent === id.name passed; post-fix, the
+    // pid-match guard refuses.
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:${process.pid}:0 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/another live session|locked by/);
+  });
+
+  test("park refuses when same-agent lock is held by another live session", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:${process.pid}:0 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["park", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/another live session|locked by/);
+  });
+
+  test("flip refuses when lock is held by a different agent (carina Q4 invariant preserved)", () => {
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `lumeyon@${os.hostname()}:99999:0 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("locked by lumeyon");
+  });
+
+  test("flip allowed when stale same-agent lock has dead pid (recovery path)", () => {
+    // Find a dead pid the same way other tests do.
+    let dead = 9_999_999;
+    for (let p = 9_999_900; p > 1_000_000; p -= 17) {
+      try { process.kill(p, 0); } catch (e: any) { if (e?.code === "ESRCH") { dead = p; break; } }
+    }
+    fs.writeFileSync(
+      path.join(EDGE_DIR, "CONVO.md.turn.lock"),
+      `orion@${os.hostname()}:${dead}:0 2026-05-01T00:00:00Z\n`,
+    );
+    const r = runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+  });
+});
+
 describe("agent-chat gc — concurrent + multi-host hardening (cadence Q4 + F8, P0)", () => {
   // Hardening regression: gc used to (a) abort the entire presence sweep
   // when a peer gc unlinked a file mid-loop (the inner unlinkSync's ENOENT

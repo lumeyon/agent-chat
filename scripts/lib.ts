@@ -129,10 +129,20 @@ export type SessionRecord = {
   claude_session_id?: string;
   host: string;
   pid: number;                // pid of the launcher / Claude session
+  // Kernel start_time of `pid`, captured at init. Pairing pid+start_time
+  // defeats pid-recycling: a pid that was reaped and reassigned to an
+  // unrelated process will have a different start_time, so
+  // `processIsOriginal` returns false even though `kill(pid, 0)` succeeds.
+  // Linux: `/proc/<pid>/stat` field 22 (clock ticks since boot). macOS:
+  // `ps -p <pid> -o lstart=` parsed to ms-since-epoch. Other platforms:
+  // omitted; legacy records also omit; both fall back to identity-blind
+  // pidIsAlive (current behavior). See cadence Q2/Q3.
+  pid_starttime?: number;
   started_at: string;
   cwd: string;
   tty?: string;
   monitor_pid?: number;
+  monitor_pid_starttime?: number;
 };
 
 export const SESSIONS_DIR = path.join(CONVERSATIONS_DIR, ".sessions");
@@ -227,8 +237,10 @@ export function resumeKey(cwd: string, tty: string | undefined): string {
 export function findResumableSession(rk: string): SessionRecord | null {
   for (const rec of listSessions()) {
     if (resumeKey(rec.cwd, rec.tty) !== rk) continue;
-    // Only offer resume if the original pid is dead (otherwise it's still live)
-    if (!pidIsAlive(rec.pid)) return rec;
+    // Only offer resume if the original pid is gone (recycled OR dead).
+    // processIsOriginal returns false on a recycled-pid mismatch, which is
+    // exactly the case where resume IS appropriate.
+    if (!processIsOriginal(rec.pid, rec.pid_starttime)) return rec;
   }
   return null;
 }
@@ -244,7 +256,7 @@ export function findLivePresence(agent: string): SessionRecord | null {
     // (recycled local pid) or falsely reject (live remote pid we can't see).
     // The only safe answer is "not mine, ignore." See cadence F8.
     if (rec.host !== os.hostname()) return null;
-    return pidIsAlive(rec.pid) ? rec : null;
+    return processIsOriginal(rec.pid, rec.pid_starttime) ? rec : null;
   } catch { return null; }
 }
 
@@ -321,17 +333,35 @@ export function processTag(name: string): string {
 // "stale lock" the moment it returns; with stableSessionPid, the lock
 // looks fresh as long as the Claude Code session is alive, and goes
 // stale only when that session genuinely exits.
+// Lock body wire format: `<agent>@<host>:<pid>:<starttime> <ts>` (4-tuple).
+// The previous format was `<agent>@<host>:<pid> <ts>` (3-tuple); parseLockFile
+// accepts both for one release so an in-flight upgrade doesn't strand
+// already-held locks. Embedding starttime lets unlock/flip/park reject foreign
+// recycled-pid claimants the same way SessionRecord+processIsOriginal does.
 export function lockTag(name: string): string {
-  return `${name}@${os.hostname()}:${stableSessionPid()}`;
+  const sp = stableSessionPid();
+  const st = pidStarttime(sp);
+  return `${name}@${os.hostname()}:${sp}:${st ?? 0}`;
 }
 
-// Parse a lock file body of the form "<agent>@<host>:<pid> <ts>".
-export function parseLockFile(p: string): { agent: string; host: string; pid: number; ts: string } | null {
+// Parse a lock file body of the form "<agent>@<host>:<pid>:<starttime> <ts>"
+// (new) or "<agent>@<host>:<pid> <ts>" (legacy). When the legacy form is
+// observed, `starttime` is null and callers fall back to pidIsAlive.
+export function parseLockFile(
+  p: string,
+): { agent: string; host: string; pid: number; starttime: number | null; ts: string } | null {
   if (!fs.existsSync(p)) return null;
   const text = fs.readFileSync(p, "utf8").trim();
-  const m = text.match(/^(\S+)@([^:\s]+):(\d+)\s+(\S+)$/);
+  // Try 4-tuple first.
+  let m = text.match(/^(\S+)@([^:\s]+):(\d+):(\d+)\s+(\S+)$/);
+  if (m) {
+    const st = parseInt(m[4], 10);
+    return { agent: m[1], host: m[2], pid: parseInt(m[3], 10), starttime: st > 0 ? st : null, ts: m[5] };
+  }
+  // Legacy 3-tuple.
+  m = text.match(/^(\S+)@([^:\s]+):(\d+)\s+(\S+)$/);
   if (!m) return null;
-  return { agent: m[1], host: m[2], pid: parseInt(m[3], 10), ts: m[4] };
+  return { agent: m[1], host: m[2], pid: parseInt(m[3], 10), starttime: null, ts: m[4] };
 }
 
 export function pidIsAlive(pid: number): boolean {
@@ -343,6 +373,62 @@ export function pidIsAlive(pid: number): boolean {
     // EPERM means the process exists but we can't signal it — still alive.
     return err?.code === "EPERM";
   }
+}
+
+// Return the kernel start_time of `pid` as an opaque comparable number, or
+// null if we can't read it. Linux: `/proc/<pid>/stat` field 22 (clock ticks
+// since boot, monotonic for the lifetime of the kernel). macOS: parse
+// `ps -p <pid> -o lstart=` to ms-since-epoch. Other platforms: null.
+//
+// The returned number is a fingerprint, not a timestamp — only equality
+// matters. Treat it as opaque.
+//
+// macOS `ps` shells out (~10ms); call sparingly (init, gc, exit).
+export function pidStarttime(pid: number): number | null {
+  if (!Number.isFinite(pid) || pid <= 0) return null;
+  if (process.platform === "linux") {
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+      // Field 22 (1-indexed) is starttime in clock ticks. The comm field
+      // (field 2) is parenthesized and may contain spaces, so split by the
+      // last `)` rather than naïve whitespace.
+      const rparen = stat.lastIndexOf(")");
+      if (rparen < 0) return null;
+      const fields = stat.slice(rparen + 2).split(/\s+/);
+      // After ")", field 3 (state) is fields[0], so starttime is fields[19].
+      const t = parseInt(fields[19] ?? "", 10);
+      return Number.isFinite(t) ? t : null;
+    } catch { return null; }
+  }
+  if (process.platform === "darwin") {
+    try {
+      const r = require("node:child_process").spawnSync(
+        "ps", ["-p", String(pid), "-o", "lstart="],
+        { encoding: "utf8", timeout: 2000 },
+      );
+      if (r.status !== 0) return null;
+      const t = Date.parse(r.stdout.trim());
+      return Number.isFinite(t) ? t : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+// "Is this pid still the same process whose start_time we recorded?"
+// `expected == null/undefined` means we don't have a fingerprint for it
+// (legacy SessionRecord, non-Linux/non-macOS, or initial recording failed).
+// In that case fall back to identity-blind pidIsAlive — same behavior as
+// before, no regression.
+//
+// When we DO have a fingerprint, this rejects (a) dead pids and (b) pids
+// recycled to a different process. That closes the gc-deletes-foreign-state
+// loophole and the exit-kills-wrong-pid race.
+export function processIsOriginal(pid: number, expected: number | null | undefined): boolean {
+  if (!pidIsAlive(pid)) return false;
+  if (expected == null) return true;
+  const actual = pidStarttime(pid);
+  if (actual == null) return true; // can't verify on this platform; trust pidIsAlive
+  return actual === expected;
 }
 
 // Find the pid of the long-lived agent runtime that ultimately spawned the
@@ -364,11 +450,17 @@ export function pidIsAlive(pid: number): boolean {
 // plain shells, non-Linux platforms, when /proc isn't readable, or when
 // the current process isn't running under Claude Code.
 export function stableSessionPid(): number {
-  if (process.env.CLAUDECODE !== "1" || process.platform !== "linux") {
-    // Plain shell / Codex / non-Linux: ppid is the user's terminal, which
-    // is itself long-lived enough.
+  if (process.env.CLAUDECODE !== "1") {
+    // Plain shell / Codex: ppid is the user's terminal, which is itself
+    // long-lived enough.
     return process.ppid || process.pid;
   }
+  if (process.platform === "linux") return stableSessionPidLinux();
+  if (process.platform === "darwin") return stableSessionPidDarwin();
+  return process.ppid || process.pid;
+}
+
+function stableSessionPidLinux(): number {
   let pid = process.ppid;
   let prevHadMarker = true; // we (the bun process) have CLAUDECODE=1 set
   const seen = new Set<number>();
@@ -378,14 +470,8 @@ export function stableSessionPid(): number {
     try {
       const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
       hasMarker = environ.split("\0").includes("CLAUDECODE=1");
-    } catch {
-      break;
-    }
-    if (prevHadMarker && !hasMarker) {
-      // Just crossed out of the Claude Code subtree. This pid is the
-      // Claude Code main process.
-      return pid;
-    }
+    } catch { break; }
+    if (prevHadMarker && !hasMarker) return pid;
     prevHadMarker = hasMarker;
     try {
       const status = fs.readFileSync(`/proc/${pid}/status`, "utf8");
@@ -395,6 +481,52 @@ export function stableSessionPid(): number {
       if (ppid <= 1) break;
       pid = ppid;
     } catch { break; }
+  }
+  // Walked the depth ceiling without finding the marker transition — likely
+  // an unusual process tree (daemonized parent, container init, etc.). Warn
+  // so the user can investigate; lock identity is unstable in this state.
+  if (seen.size >= 30) {
+    console.error(`[agent-chat] stableSessionPid: walked 30 ancestors without finding the Claude Code main process; falling back to ppid=${process.ppid}.`);
+  }
+  return process.ppid || process.pid;
+}
+
+// macOS marker-walk. /proc isn't available; we shell out to `ps -E -o command=`
+// (env disclosure for our own user's processes only) to read each ancestor's
+// environment block, looking for the same CLAUDECODE=1 → no-CLAUDECODE
+// transition that the Linux walk uses. ~10ms per step, walk usually 1-3 deep
+// — acceptable for `init`/`lock`/`unlock` cadence.
+function stableSessionPidDarwin(): number {
+  const cp = require("node:child_process") as typeof import("node:child_process");
+  function envHasMarker(pid: number): boolean | null {
+    try {
+      const r = cp.spawnSync("ps", ["-E", "-p", String(pid), "-o", "command="], { encoding: "utf8", timeout: 2000 });
+      if (r.status !== 0) return null;
+      // `ps -E` prepends the process's environment to the command. We just
+      // want to know whether `CLAUDECODE=1` appears anywhere in the line.
+      return / CLAUDECODE=1(\s|$)/.test(" " + r.stdout.trim());
+    } catch { return null; }
+  }
+  function ppidOf(pid: number): number | null {
+    try {
+      const r = cp.spawnSync("ps", ["-p", String(pid), "-o", "ppid="], { encoding: "utf8", timeout: 2000 });
+      if (r.status !== 0) return null;
+      const p = parseInt(r.stdout.trim(), 10);
+      return Number.isFinite(p) && p > 0 ? p : null;
+    } catch { return null; }
+  }
+  let pid = process.ppid;
+  let prevHadMarker = true;
+  const seen = new Set<number>();
+  for (let depth = 0; depth < 30 && pid > 1 && !seen.has(pid); depth++) {
+    seen.add(pid);
+    const marker = envHasMarker(pid);
+    if (marker == null) break;
+    if (prevHadMarker && !marker) return pid;
+    prevHadMarker = marker;
+    const next = ppidOf(pid);
+    if (next == null || next <= 1) break;
+    pid = next;
   }
   return process.ppid || process.pid;
 }
