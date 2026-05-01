@@ -39,10 +39,23 @@ export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
 //   description: <text>
 //   agents: [list of strings, one per dash line]
 //   edges:  [list of two-element arrays, e.g. - [a, b]]
-// Anything richer is rejected — keeps the skill auditable.
+// Anything richer is rejected — keeps the skill auditable. The top-level
+// key allowlist (lumeyon P2) refuses unrecognized keys including the
+// prototype-pollution vectors `__proto__`/`constructor`/`prototype`. Agent
+// names are restricted to a safe character class so they can be used in
+// filesystem paths (lock body, presence file, log file) without escaping.
+const ALLOWED_TOP_KEYS = new Set(["topology", "description", "agents", "edges"]);
+const AGENT_NAME_RE = /^[a-z0-9_-]{1,40}$/i;
+
+export function isValidAgentName(name: string): boolean {
+  return AGENT_NAME_RE.test(name);
+}
+
 export function parseTopologyYaml(text: string): Topology {
   const lines = text.split(/\r?\n/);
-  const out: any = { agents: [], edges: [] };
+  const out: any = Object.create(null);
+  out.agents = [];
+  out.edges = [];
   let section: "agents" | "edges" | null = null;
   for (let raw of lines) {
     const line = raw.replace(/#.*$/, ""); // strip comments
@@ -50,6 +63,9 @@ export function parseTopologyYaml(text: string): Topology {
     const top = line.match(/^([a-z_]+):\s*(.*)$/i);
     if (top && !line.startsWith(" ") && !line.startsWith("\t")) {
       const [, key, val] = top;
+      if (!ALLOWED_TOP_KEYS.has(key)) {
+        throw new Error(`unknown top-level yaml key "${key}" — allowed: ${[...ALLOWED_TOP_KEYS].join(", ")}`);
+      }
       if (key === "agents") { section = "agents"; continue; }
       if (key === "edges") { section = "edges"; continue; }
       section = null;
@@ -60,10 +76,16 @@ export function parseTopologyYaml(text: string): Topology {
     if (!dash) continue;
     const item = dash[1].trim();
     if (section === "agents") {
+      if (!isValidAgentName(item)) {
+        throw new Error(`invalid agent name "${item}" — must match ${AGENT_NAME_RE} (used in filesystem paths)`);
+      }
       out.agents.push(item);
     } else if (section === "edges") {
       const m = item.match(/^\[\s*([^,\s]+)\s*,\s*([^,\s\]]+)\s*\]$/);
       if (!m) throw new Error(`bad edge syntax: ${item}`);
+      if (!isValidAgentName(m[1]) || !isValidAgentName(m[2])) {
+        throw new Error(`edge [${m[1]}, ${m[2]}] contains invalid agent name`);
+      }
       out.edges.push([m[1], m[2]]);
     }
   }
@@ -107,7 +129,13 @@ export function loadTopology(topologyName: string): Topology {
 function readAgentNameFile(cwd: string): { name: string; topology: string } | null {
   const file = path.join(cwd, ".agent-name");
   if (!fs.existsSync(file)) return null;
-  const text = fs.readFileSync(file, "utf8");
+  // Strip `# comment` per line to mirror parseTopologyYaml's tolerance —
+  // pre-fix, `name: orion # main project` failed with a misleading "must
+  // declare 'name:'" error (lyra L3).
+  const text = fs.readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .map((l) => l.replace(/#.*$/, ""))
+    .join("\n");
   const nameM = text.match(/^\s*name:\s*(\S+)\s*$/m);
   const topoM = text.match(/^\s*topology:\s*(\S+)\s*$/m);
   if (!nameM || !topoM) {
@@ -186,14 +214,26 @@ export function sessionFile(key: string): string {
 }
 
 export function presenceFile(agent: string): string {
-  return path.join(PRESENCE_DIR, `${agent}.json`);
+  // Mirror sessionFile's defensive sanitization. Today every caller validates
+  // agent name via topology membership first, so input is safe — but the
+  // asymmetry (sessionFile sanitized, presenceFile didn't) is exactly the
+  // shape a future caller could trip over. Lyra L1.
+  const safe = agent.replace(/[^A-Za-z0-9_-]/g, "_");
+  return path.join(PRESENCE_DIR, `${safe}.json`);
 }
 
 export function readSessionRecord(key: string): SessionRecord | null {
   const f = sessionFile(key);
   if (!fs.existsSync(f)) return null;
   try { return JSON.parse(fs.readFileSync(f, "utf8")) as SessionRecord; }
-  catch { return null; }
+  catch (err) {
+    // Surface to stderr so the user notices a corrupt session file (carina
+    // bonus 1). Still return null so callers get the same "not found" shape
+    // they expect — corrupt and missing are observationally identical from
+    // the resolver's POV.
+    console.error(`[agent-chat] session file ${f} is unreadable: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 export function writeSessionRecord(rec: SessionRecord): void {
@@ -277,8 +317,19 @@ export function findLivePresence(agent: string): SessionRecord | null {
 export function exclusiveWriteOrFail(p: string, content: string): void {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const fd = fs.openSync(p, "wx");
-  try { fs.writeFileSync(fd, content); }
-  finally { fs.closeSync(fd); }
+  let wrote = false;
+  try {
+    fs.writeFileSync(fd, content);
+    wrote = true;
+  } finally {
+    fs.closeSync(fd);
+    // If the writeFileSync threw (e.g. ENOSPC mid-write), the file exists
+    // but is empty. Future wx calls would EEXIST forever. Unlink so the
+    // caller's retry handler sees the slot as available again. Carina bonus 2.
+    if (!wrote) {
+      try { fs.unlinkSync(p); } catch {}
+    }
+  }
 }
 
 export function resolveIdentity(cwd: string = process.cwd()): Identity {
@@ -288,6 +339,29 @@ export function resolveIdentity(cwd: string = process.cwd()): Identity {
   const key = currentSessionKey();
   const rec = readSessionRecord(key);
   if (rec) {
+    // Opportunistic conflict detection: env or .agent-name disagrees with
+    // the live session record. Pre-fix, init recorded the user's intent
+    // and resolveIdentity short-circuited — so a later edit to .agent-name
+    // (or a divergent env override in a freshly-spawned shell) was
+    // silently ignored (lyra L4).
+    const envName = process.env.AGENT_NAME;
+    const envTopo = process.env.AGENT_TOPOLOGY;
+    if (envName && envTopo && (envName !== rec.agent || envTopo !== rec.topology)) {
+      console.error(
+        `[agent-chat] WARNING: env says "${envName}@${envTopo}" but live session record ` +
+        `says "${rec.agent}@${rec.topology}" — using session record. ` +
+        `Run \`bun scripts/agent-chat.ts exit\` then re-init to switch.`,
+      );
+    }
+    try {
+      const fileId = readAgentNameFile(cwd);
+      if (fileId && (fileId.name !== rec.agent || fileId.topology !== rec.topology)) {
+        console.error(
+          `[agent-chat] WARNING: .agent-name in ${cwd} says "${fileId.name}@${fileId.topology}" ` +
+          `but live session record says "${rec.agent}@${rec.topology}" — using session record.`,
+        );
+      }
+    } catch { /* malformed .agent-name — readAgentNameFile already warns */ }
     return { name: rec.agent, topology: rec.topology, source: `session:${key}` };
   }
   // 2. $AGENT_NAME + $AGENT_TOPOLOGY env vars
@@ -319,12 +393,17 @@ export function resolveIdentity(cwd: string = process.cwd()): Identity {
   );
 }
 
-// Process fingerprint for *display* purposes (resolve.ts whoami, init banner).
-// Reflects the actual current bun process pid so the user can see "this exact
-// bun is here right now". Don't use this for lock files — see lockTag below.
-export function processTag(name: string): string {
-  return `${name}@${os.hostname()}:${process.pid}`;
+// Display fingerprint: agent@host:<stable-session-pid>. Used by --whoami
+// and the init banner so two terminals advertised as the SAME session show
+// the SAME pid (and two genuinely-distinct sessions show DIFFERENT pids).
+// Pre-fix, this returned process.pid (the throwaway bun pid), defeating
+// the dup-name detection workflow bootstrap.md advertises (lyra L2).
+export function displayTag(name: string): string {
+  return `${name}@${os.hostname()}:${stableSessionPid()}`;
 }
+
+// Backward-compat alias. New code should call displayTag.
+export const processTag = displayTag;
 
 // Lock-file fingerprint: agent@host:<stable-session-pid>. The lock body
 // records the long-lived agent runtime ancestor pid (Claude Code main
@@ -747,10 +826,18 @@ export function parseSections(convoText: string): { header: string; sections: st
   // Section starts at a line beginning with `## ` (markdown h2) preceded by
   // a `---` separator or BOF. We treat the preamble as everything up to the
   // first `## ` line (LCM-style), and slice on `## ` headers from there.
+  //
+  // Fenced-code awareness: a literal `## not a real heading` line inside a
+  // ```/~~~ fence used to be treated as a section break, splitting bodies
+  // and polluting timeRangeOf. Track the fence-open state and skip header
+  // matches inside (keystone #2).
   const lines = convoText.split(/\r?\n/);
+  const isFenceLine = (s: string) => /^(```|~~~)/.test(s);
+  let inFence = false;
   let firstSection = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^## \S/.test(lines[i])) { firstSection = i; break; }
+    if (isFenceLine(lines[i])) { inFence = !inFence; continue; }
+    if (!inFence && /^## \S/.test(lines[i])) { firstSection = i; break; }
   }
   if (firstSection === -1) {
     return { header: convoText, sections: [] };
@@ -760,10 +847,14 @@ export function parseSections(convoText: string): { header: string; sections: st
   while (headerEnd > 0 && /^(\s*|---\s*)$/.test(lines[headerEnd - 1])) headerEnd--;
   const header = lines.slice(0, headerEnd).join("\n").replace(/\n+$/, "") + "\n";
 
+  // Re-scan from the first section, again tracking fences so a `## fake`
+  // line inside a fenced code block does NOT start a new section.
+  inFence = false;
   const sections: string[] = [];
   let cur: string[] = [];
   for (let i = firstSection; i < lines.length; i++) {
-    if (/^## \S/.test(lines[i]) && cur.length) {
+    if (isFenceLine(lines[i])) { inFence = !inFence; cur.push(lines[i]); continue; }
+    if (!inFence && /^## \S/.test(lines[i]) && cur.length) {
       sections.push(cur.join("\n").replace(/\n+$/, ""));
       cur = [];
     }

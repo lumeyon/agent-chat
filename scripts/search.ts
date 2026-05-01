@@ -106,12 +106,15 @@ switch (op) {
     const hits: { entry: IndexEntry; where: string; snippet: string }[] = [];
     for (const e of entries) {
       const candidates: { where: string; text: string }[] = [];
-      if (opts.scope === "all" || opts.scope === "tldr") candidates.push({ where: "tldr", text: e.tldr ?? "" });
-      if (opts.scope === "all" || opts.scope === "keywords") candidates.push({ where: "keywords", text: (e.keywords ?? []).join(" ") });
+      // Order matters: we `break` on first hit, so the richest source goes
+      // FIRST (rhino's free-win catch). Pre-fix, the 240-char tldr always
+      // won over the much richer SUMMARY.md, even with --scope all.
       if (opts.scope === "all" || opts.scope === "summaries") {
         const sp = path.join(e.path, "SUMMARY.md");
         if (fs.existsSync(sp)) candidates.push({ where: "summary", text: fs.readFileSync(sp, "utf8") });
       }
+      if (opts.scope === "all" || opts.scope === "tldr") candidates.push({ where: "tldr", text: e.tldr ?? "" });
+      if (opts.scope === "all" || opts.scope === "keywords") candidates.push({ where: "keywords", text: (e.keywords ?? []).join(" ") });
       for (const c of candidates) {
         const m = c.text.match(re);
         if (m) {
@@ -173,7 +176,16 @@ switch (op) {
     // condensed (or --children on a leaf, which is meaningless): walk parents.
     if (e.kind === "leaf") die("leaf has no children — drop --children");
     if (!e.parents?.length) { console.log("(condensed has no parent ids — corrupted index?)"); break; }
+    // Cycle guard: a manually-edited META.yaml could create
+    // `arch_A.parents=[arch_B], arch_B.parents=[arch_A]` and crash this
+    // expand into an infinite loop if anyone adds transitive walking later.
+    // Cheap insurance now (~5 lines) so the future variant doesn't hang.
+    // Keystone #5.
+    const visited = new Set<string>();
+    visited.add(e.id);
     for (const pid of e.parents) {
+      if (visited.has(pid)) { console.log(`---\n${pid}: already visited (cycle in parent chain)`); continue; }
+      visited.add(pid);
       const sub = findById(pid);
       if (!sub) { console.log(`---\n${pid}: NOT FOUND in index`); continue; }
       const sp = path.join(sub.entry.path, "SUMMARY.md");

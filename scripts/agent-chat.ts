@@ -46,6 +46,43 @@ function detectTty(): string | undefined {
   return undefined;
 }
 
+// Optional NFSv3 probe at init time: if /proc/self/mountinfo shows the
+// CONVERSATIONS_DIR sits on an NFSv3 mount, warn the user. The wx-EXCL
+// semantics this skill depends on are historically lossy on NFSv2/v3
+// (server may report success when another client already holds the file).
+// Sentinel S-MED-5 + pulsar's Q3 conclusion: "single-host filesystem only"
+// is an explicit non-goal; this is the observability hook that catches
+// users who accidentally cross that line.
+function nfsv3ProbeWarn(): void {
+  if (process.platform !== "linux") return;
+  let mountinfo = "";
+  try { mountinfo = fs.readFileSync("/proc/self/mountinfo", "utf8"); } catch { return; }
+  // Find the longest mount-point prefix matching CONVERSATIONS_DIR's resolved path.
+  const target = (() => { try { return fs.realpathSync(SKILL_ROOT); } catch { return SKILL_ROOT; } })();
+  let bestPrefix = "";
+  let bestLine = "";
+  for (const line of mountinfo.split("\n")) {
+    // Format: <id> <parent> <maj:min> <root> <mount-point> <opts> ... - <fstype> <source> ...
+    const fields = line.split(/\s+/);
+    const mp = fields[4];
+    if (!mp) continue;
+    if (target === mp || target.startsWith(mp.endsWith("/") ? mp : mp + "/")) {
+      if (mp.length > bestPrefix.length) { bestPrefix = mp; bestLine = line; }
+    }
+  }
+  if (!bestLine) return;
+  const dashIdx = bestLine.indexOf(" - ");
+  if (dashIdx < 0) return;
+  const tail = bestLine.slice(dashIdx + 3).split(/\s+/);
+  const fstype = tail[0];
+  if (fstype === "nfs" || fstype === "nfs3") {
+    console.error(`[agent-chat] WARNING: ${SKILL_ROOT} is on an NFS mount (${fstype}). This skill is single-host-only; multi-host use can corrupt locks and cause gc to delete other hosts' state.`);
+  } else if (fstype === "nfs4") {
+    // NFSv4 has working O_EXCL — informational only.
+    console.error(`[agent-chat] note: ${SKILL_ROOT} is on an NFSv4 mount. Single-host-only is supported; multi-host is still untested.`);
+  }
+}
+
 function pickTopologyDefault(): string | null {
   // If exactly one topology is currently in use by other live sessions on
   // this host, use that. Saves the user typing it for sessions 2..N.
@@ -106,6 +143,7 @@ function stopMonitor(pid: number | undefined, starttime: number | null | undefin
 // ----- subcommands ---------------------------------------------------------
 
 function cmdInit(args: string[]): void {
+  nfsv3ProbeWarn();
   const positional: string[] = [];
   let force = false;
   let noMonitor = false;

@@ -42,6 +42,115 @@ describe("parseTopologyYaml", () => {
   });
 });
 
+describe("parseTopologyYaml — P2 hardening (lumeyon)", () => {
+  test("rejects unknown top-level keys (kills __proto__/constructor pollution)", () => {
+    expect(() =>
+      parseTopologyYaml(`topology: x\n__proto__: bad\nagents:\n  - a\n  - b\nedges:\n  - [a, b]\n`),
+    ).toThrow(/unknown top-level/);
+    expect(() =>
+      parseTopologyYaml(`topology: x\nconstructor: bad\nagents:\n  - a\n  - b\nedges:\n  - [a, b]\n`),
+    ).toThrow(/unknown top-level/);
+  });
+  test("rejects an agent name with shell metacharacters", () => {
+    expect(() =>
+      parseTopologyYaml(`topology: x\nagents:\n  - "a;rm -rf /"\nedges:\n  - [a, b]\n`),
+    ).toThrow(/invalid agent name/);
+  });
+  test("rejects an agent name with path traversal", () => {
+    expect(() =>
+      parseTopologyYaml(`topology: x\nagents:\n  - ../etc/passwd\n  - b\nedges:\n  - [b, b]\n`),
+    ).toThrow(/invalid agent name/);
+  });
+  test("uses Object.create(null) for output (no Object prototype on the parsed object)", () => {
+    const t = parseTopologyYaml(`topology: x\nagents:\n  - a\n  - b\nedges:\n  - [a, b]\n`);
+    expect(Object.getPrototypeOf(t)).toBeNull();
+  });
+});
+
+describe("parseSections — fenced-code awareness (keystone #2)", () => {
+  test("a `## fake` line inside a triple-backtick fence is NOT a section break", async () => {
+    const { parseSections } = await import("../scripts/lib.ts");
+    const convo = [
+      "header preamble",
+      "",
+      "## orion — real (UTC 2026-05-01T01:00:00Z)",
+      "body line",
+      "```",
+      "## fake heading inside code",
+      "```",
+      "",
+      "## lumeyon — also real (UTC 2026-05-01T02:00:00Z)",
+      "body",
+    ].join("\n");
+    const r = parseSections(convo);
+    expect(r.sections).toHaveLength(2);
+    expect(r.sections[0]).toContain("## fake heading inside code");
+    expect(r.sections[1]).toContain("lumeyon");
+  });
+  test("a `## fake` line inside a tilde fence is also not a section break", async () => {
+    const { parseSections } = await import("../scripts/lib.ts");
+    const convo = [
+      "## orion — real (UTC 2026-05-01T01:00:00Z)",
+      "body",
+      "~~~",
+      "## fake",
+      "~~~",
+    ].join("\n");
+    expect(parseSections(convo).sections).toHaveLength(1);
+  });
+});
+
+describe("presenceFile — defense-in-depth sanitization (lyra L1)", () => {
+  test("path-traversal characters in agent name are replaced with underscores", async () => {
+    const { presenceFile } = await import("../scripts/lib.ts");
+    const p = presenceFile("../etc/passwd");
+    expect(p).not.toContain("..");
+    expect(p).not.toContain("/etc/");
+    expect(p).toMatch(/_etc_passwd/);
+  });
+});
+
+describe("exclusiveWriteOrFail — unlink on writeFileSync error (carina bonus 2)", () => {
+  // We can't easily simulate ENOSPC, but we can verify the contract: on a
+  // successful write the file exists and matches, AND a follow-up wx call
+  // fails with EEXIST (meaning the slot is genuinely held). The destructive
+  // path is exercised by code-review.
+  test("happy path leaves the file present and contents correct", async () => {
+    const { exclusiveWriteOrFail } = await import("../scripts/lib.ts");
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const tmp = path.join(os.tmpdir(), `agent-chat-excl-${process.pid}-${Date.now()}.txt`);
+    try {
+      exclusiveWriteOrFail(tmp, "hello");
+      expect(fs.readFileSync(tmp, "utf8")).toBe("hello");
+      expect(() => exclusiveWriteOrFail(tmp, "again")).toThrow(/EEXIST/);
+    } finally { try { fs.unlinkSync(tmp); } catch {} }
+  });
+});
+
+describe("readAgentNameFile — `# comment` tolerance (lyra L3)", () => {
+  test(".agent-name with trailing # comments parses correctly", async () => {
+    const { resolveIdentity } = await import("../scripts/lib.ts");
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-comment-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = cwd;
+    fs.writeFileSync(path.join(cwd, ".agent-name"), "name: orion # main project\ntopology: petersen # graph\n");
+    try {
+      const id = resolveIdentity(cwd);
+      expect(id.name).toBe("orion");
+      expect(id.topology).toBe("petersen");
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("edgeId", () => {
   test("alphabetical canonicalization is order-independent", () => {
     expect(edgeId("orion", "lumeyon")).toBe("lumeyon-orion");
@@ -553,11 +662,15 @@ describe("parseLockFile", () => {
   });
 });
 
-describe("processTag", () => {
+describe("processTag / displayTag (lyra L2)", () => {
   test("formats agent@host:pid", () => {
     const tag = processTag("orion");
     expect(tag).toMatch(/^orion@.+:\d+$/);
-    expect(tag).toContain(`:${process.pid}`);
+  });
+  test("displayTag uses stableSessionPid (not the throwaway bun pid)", async () => {
+    const { displayTag, stableSessionPid } = await import("../scripts/lib.ts");
+    const tag = displayTag("orion");
+    expect(tag).toContain(`:${stableSessionPid()}`);
   });
 });
 
