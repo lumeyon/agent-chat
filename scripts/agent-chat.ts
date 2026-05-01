@@ -353,7 +353,8 @@ function safeUnlink(p: string): boolean {
   catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
 }
 
-function cmdGc(_args: string[]): void {
+function cmdGc(args: string[]): void {
+  const pruneLogs = args.includes("--prune-logs");
   let removed = 0;
   const myHost = os.hostname();
   for (const rec of listSessions()) {
@@ -361,9 +362,10 @@ function cmdGc(_args: string[]): void {
     // filesystem — we have no authority to GC them. See cadence F8 (P0 #2).
     if (rec.host !== myHost) continue;
     if (!processIsOriginal(rec.pid, rec.pid_starttime)) {
+      const monStillThere = rec.monitor_pid && processIsOriginal(rec.monitor_pid, rec.monitor_pid_starttime);
       stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
       deleteSessionRecord(rec);
-      console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} is gone)`);
+      console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} gone${rec.monitor_pid ? `; monitor pid ${rec.monitor_pid} ${monStillThere ? "killed" : "already gone"}` : ""})`);
       removed++;
     }
   }
@@ -390,6 +392,23 @@ function cmdGc(_args: string[]): void {
           console.log(`gc: removed orphan presence ${f}`);
           removed++;
         }
+      }
+    }
+  }
+  // --prune-logs: remove monitor log files for agents that no longer have
+  // a live session OR a presence record on this host. Nothing else cleans
+  // these up; long-running boxes accumulate them. Keep ALL logs for
+  // currently-live agents (cadence F9 / P3 cleanup).
+  if (pruneLogs) {
+    const logDir = path.join(SKILL_ROOT, "conversations", ".logs");
+    if (fs.existsSync(logDir)) {
+      const liveAgents = new Set<string>();
+      for (const r of listSessions()) if (processIsOriginal(r.pid, r.pid_starttime) && r.host === myHost) liveAgents.add(r.agent);
+      for (const f of fs.readdirSync(logDir)) {
+        const m = f.match(/^monitor-([A-Za-z0-9_-]+)\.log$/);
+        if (!m) continue;
+        if (liveAgents.has(m[1])) continue;
+        if (safeUnlink(path.join(logDir, f))) { console.log(`gc: pruned monitor log ${f}`); removed++; }
       }
     }
   }
@@ -437,8 +456,10 @@ switch (cmd) {
       `      presence files. Safe to skip — \`gc\` cleans up dead sessions.\n\n` +
       `  who\n` +
       `      List live (and stale) sessions on this host.\n\n` +
-      `  gc\n` +
-      `      Sweep stale session/presence files (pid no longer alive).\n\n` +
+      `  gc [--prune-logs]\n` +
+      `      Sweep stale session/presence files (pid no longer alive).\n` +
+      `      With --prune-logs, also remove monitor log files for agents\n` +
+      `      that aren't live on this host.\n\n` +
       `  whoami\n` +
       `      Print this session's identity in one line.\n`,
     );

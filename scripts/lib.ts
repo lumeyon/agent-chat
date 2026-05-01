@@ -700,9 +700,11 @@ export type IndexEntry = {
 
 export function archiveId(kind: ArchiveKind, latestAt: string): string {
   // arch_<kind-prefix>_<UTC compact>_<short hash>
-  // Keeps archive ids sortable by time and visibly typed.
+  // Keeps archive ids sortable by time and visibly typed. Suffix bumped from
+  // 4 bytes → 8 bytes (16 hex chars) to make collision impossible in
+  // practice even if someone scripts seal in a tight loop (keystone #8).
   const stamp = latestAt.replace(/[-:T]/g, "").replace(/Z$/, "");
-  const rand = crypto.randomBytes(4).toString("hex");
+  const rand = crypto.randomBytes(8).toString("hex");
   const prefix = kind === "leaf" ? "L" : "C";
   return `arch_${prefix}_${stamp}_${rand}`;
 }

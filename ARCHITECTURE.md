@@ -549,6 +549,44 @@ canonical identity record. cwd and tty are used only as
 *resume keys* (matching a returning session to a prior identity),
 never as identity *sources*. (Round 5.)
 
+### 9. Single-host filesystem only — multi-host is an explicit non-goal
+
+The lock layer (wx-EXCL), gc semantics, and `pidIsAlive`/`processIsOriginal`
+all assume one host shares the filesystem. Multi-host introduces failure
+modes the skill does not defend against:
+
+- **wx-EXCL on NFSv2/v3** is historically lossy — the server may report
+  success when another client already holds the file, defeating the
+  serialization that lock acquisition depends on. NFSv4 has working
+  O_EXCL but multi-host coordination beyond it is still untested.
+- **`gc` on a shared dir** would otherwise unlink other hosts' live
+  state, because their pids are meaningless in our pid namespace. The
+  P0 multi-host gc fix (`if (rec.host !== os.hostname()) continue`) at
+  every gc decision point is a *defense*, not an enabler — it prevents
+  catastrophic data loss when someone accidentally crosses the line, but
+  it does not make multi-host work.
+- **`agent-chat init`** runs `nfsv3ProbeWarn()` which parses
+  `/proc/self/mountinfo` and emits a stderr WARN if `conversations/`
+  sits on NFS. NFSv3 is a hard warn; NFSv4 is a soft note.
+
+If multi-host ever becomes a goal, the design changes are: link()-based
+lock acquisition (NFSv2/v3 fallback) per `lib.ts:exclusiveWriteOrFail`
+note, and a remote-pid liveness check (e.g., a heartbeat file the holder
+touches every N seconds) instead of the local `pidIsAlive`. (Round 8 —
+formalized after the petersen-graph hardening audit revealed the
+multi-host gc bug as the loudest unguarded failure.)
+
+### 10. fsync is opt-in, not default
+
+`writeFileAtomic` and `appendIndexEntry` accept an `{fsync?: boolean}`
+flag. Commit paths set `fsync: true` (durability matters once the
+validator has passed); seal paths fsync the BODY.md before destroying
+the source CONVO.md (the source-destruction window is the only place
+durability actually matters). Everything else skips fsync — the syscall
+budget would be wasted on intermediate state that's rebuildable from
+session records. The `.turn` file specifically is NOT crash-durable
+to power loss; recovery is a manual re-init. (Round 8.)
+
 ---
 
 ## Future work, deferred until evidence demands it
