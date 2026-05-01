@@ -207,3 +207,53 @@ describe("session file resolution wins over env and .agent-name", () => {
     expect(r.stdout).toContain("orion@petersen");
   });
 });
+
+describe("session-key collision resistance (Bug A regression)", () => {
+  // The earlier design keyed sessions by $CLAUDE_CODE_SSE_PORT, which we
+  // observed empirically collides between two Claude Code instances that
+  // share a VS Code remote dev parent. Two inits with the same SSE port
+  // would silently overwrite each other's session record.
+  //
+  // The fix keys by `pid:<stableSessionPid>`, which is unique per agent
+  // runtime instance. Verify that even under a colliding SSE port, two
+  // distinct CLAUDE_SESSION_IDs (the explicit override) produce two
+  // distinct session records that don't clobber each other.
+
+  test("two sessions with distinct CLAUDE_SESSION_IDs do not clobber each other", () => {
+    const sidA = fakeSessionId("orion");
+    const sidB = fakeSessionId("lumeyon");
+    // Both sessions get the same hypothetical SSE port; if it were the
+    // session key, they'd collide. The explicit ids should win.
+    const sharedSse = "55112";
+    runScript("agent-chat.ts", ["init", "orion", "pair", "--no-monitor"],
+      envWith({ CLAUDE_SESSION_ID: sidA, CLAUDE_CODE_SSE_PORT: sharedSse }));
+    runScript("agent-chat.ts", ["init", "lumeyon", "pair", "--no-monitor"],
+      envWith({ CLAUDE_SESSION_ID: sidB, CLAUDE_CODE_SSE_PORT: sharedSse }));
+    // Both records must still be readable. If session-key collision
+    // happened, only the second init's record would survive.
+    expect(readSession(CONVO_DIR, sidA)).not.toBeNull();
+    expect(readSession(CONVO_DIR, sidB)).not.toBeNull();
+    expect(readSession(CONVO_DIR, sidA)!.agent).toBe("orion");
+    expect(readSession(CONVO_DIR, sidB)!.agent).toBe("lumeyon");
+    // Each session's whoami resolves to its OWN identity, not the other's.
+    const oR = runScript("agent-chat.ts", ["whoami"],
+      envWith({ CLAUDE_SESSION_ID: sidA, CLAUDE_CODE_SSE_PORT: sharedSse }));
+    expect(oR.stdout).toContain("orion@pair");
+    const lR = runScript("agent-chat.ts", ["whoami"],
+      envWith({ CLAUDE_SESSION_ID: sidB, CLAUDE_CODE_SSE_PORT: sharedSse }));
+    expect(lR.stdout).toContain("lumeyon@pair");
+  });
+
+  test("when no CLAUDE_SESSION_ID is set, key falls back to pid:<stableSessionPid>", () => {
+    // Without an explicit session id, currentSessionKey() returns
+    // `pid:<n>`. We can't easily test for a specific pid value here,
+    // but we can confirm the prefix.
+    const env = envWith({});
+    delete env.CLAUDE_SESSION_ID;
+    delete env.CLAUDE_CODE_SESSION_ID;
+    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"], env);
+    // The session record file is named after the (sanitized) key.
+    const files = fs.readdirSync(path.join(CONVO_DIR, ".sessions"));
+    expect(files.some((f) => f.startsWith("pid_") || f.startsWith("pid:"))).toBe(true);
+  });
+});

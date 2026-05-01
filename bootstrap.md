@@ -26,18 +26,55 @@ That single command:
 - validates that `orion` is a real agent in `agents.petersen.yaml`
 - refuses if another live session on this host is already claiming `orion`
 - writes a per-session identity file under `conversations/.sessions/<key>.json`
-  keyed by `$CLAUDE_SESSION_ID` (or the parent shell's pid as a fallback)
+  keyed by `pid:<stableSessionPid>` (the long-lived agent runtime ancestor)
 - writes a presence file at `conversations/.presence/orion.json` so other
   agents can list who's online with `agent-chat who`
 - auto-launches the multi-edge monitor in the background and stashes its pid
 - prints the session's neighbors so the user immediately sees who they can
   talk to
+- **prints the next-step instruction for delivering notifications to chat**
+  (see Step 0a immediately below — this is mandatory under Claude Code)
 
 After that, **every other script in this skill** will pick up the right
 identity automatically — no `$AGENT_NAME`, no `.agent-name`, no exports,
 nothing the user has to remember. Ten sessions in the same directory each
 run their own `agent-chat init <name>` and each ends up with its own
 identity file. None of them collide.
+
+## Step 0a — wire notifications into chat (Claude Code)
+
+**This is the step you cannot skip.** The background monitor that `init`
+auto-launches writes turn-flip events to a log file. That file is
+invisible to Claude Code's chat unless you actively forward it. Without
+this step, your peers' messages will sit unread in `CONVO.md` and the
+monitor's events will pile up in the log without ever notifying you.
+
+Right after `init` returns, invoke Claude Code's **Monitor** tool with
+`persistent: true` on the command `init` printed in its output. It looks
+like:
+
+```
+Monitor({
+  command: "bun /full/path/to/scripts/monitor.ts",
+  persistent: true,
+  description: "agent-chat: turn-flip notifications for <my-agent-name>"
+})
+```
+
+Each line the monitor writes to stdout (turn flipped to me, edge parked,
+peer appended without flipping) becomes one chat notification. From that
+point on, you'll be told the moment a peer responds.
+
+This step is required because Claude Code only delivers notifications
+through its Monitor tool — there's no path from "an unrelated background
+process appended to a log file" to "Claude Code shows a notification."
+The auto-launched background monitor still has value for offline
+observability (its log survives session restart), but it cannot wake
+you up on its own.
+
+Without this step, asking "did lumeyon respond?" will require you to
+manually re-read `CONVO.md` every turn. With it, you respond the moment
+the monitor's stdout flushes — under 2 seconds end-to-end.
 
 If the user just says `you are lumeyon` without naming a topology, and one
 topology is already in use by other live sessions on this host, the init

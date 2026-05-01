@@ -179,13 +179,28 @@ function cmdInit(args: string[]): void {
   console.log(`  pid:         ${rec.pid}`);
   console.log(`  cwd:         ${cwd}`);
   if (rec.monitor_pid) {
-    console.log(`  monitor:     pid ${rec.monitor_pid}, log conversations/.logs/monitor-${name}.log`);
+    const logPath = path.join(SKILL_ROOT, "conversations", ".logs", `monitor-${name}.log`);
+    console.log(`  monitor:     pid ${rec.monitor_pid} (background; writes to ${logPath})`);
   } else {
     console.log(`  monitor:     not launched (--no-monitor)`);
   }
   // Print neighbors so the user immediately sees who they can talk to.
   const edges = edgesOf(topo, name);
   console.log(`  neighbors (${edges.length}): ${edges.map((e) => e.peer).join(", ")}`);
+  // CRITICAL: notification delivery. The background monitor writes to a
+  // file; that file is invisible to Claude Code's chat unless something
+  // tails it via the Monitor tool. Print explicit instructions so the
+  // agent knows the next step.
+  if (process.env.CLAUDECODE === "1") {
+    const monitorScript = path.join(SKILL_ROOT, "scripts", "monitor.ts");
+    console.log("");
+    console.log("NEXT STEP — deliver notifications to chat:");
+    console.log("  Invoke Claude Code's Monitor tool with persistent: true on:");
+    console.log(`    bun ${monitorScript}`);
+    console.log("  Each turn-flip / park / CONVO.md change becomes a chat notification.");
+    console.log("  Without this step, monitor events go ONLY to the log file and");
+    console.log("  you (the agent) will not be told when peers respond.");
+  }
 }
 
 function cmdExit(_args: string[]): void {

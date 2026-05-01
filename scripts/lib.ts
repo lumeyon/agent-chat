@@ -143,23 +143,29 @@ export function ensureControlDirs(): void {
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
 }
 
-// Returns the session key for the *current* process. Resolution order:
-//   1. $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID — explicit session id.
-//   2. $CLAUDE_CODE_SSE_PORT — Claude Code's per-instance SSE port. Stable
-//      across every bash invocation within one Claude Code session, and
-//      different between two Claude Code sessions on the same host (each
-//      starts its own SSE server). This is the practical default for
-//      Claude Code <= 2.1.x which doesn't expose a session id env var.
-//   3. ppid — last-ditch fallback for plain shell / scripts. Note that
-//      every fresh shell command has its own PPID, so this only works
-//      when the *same long-running shell* runs every script call.
+// Returns the session key for the *current* process. Must be:
+//   - stable across every bun invocation within ONE agent session
+//   - different between two agent sessions on the same host (no collisions)
+//   - cheap to compute (no syscalls beyond /proc reads)
+//
+// Resolution order:
+//   1. $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID — explicit session id,
+//      if the runtime sets one.
+//   2. `pid:<stableSessionPid>` — derived from the long-lived agent runtime
+//      ancestor (Claude Code main process via /proc walk on Linux, or
+//      process.ppid on plain shell / non-Linux). Each Claude Code instance
+//      has a different main pid, so two instances on the same host get
+//      different keys. Stable across every bun invocation within a session
+//      because the ancestor pid doesn't change.
+//
+// We deliberately do NOT key by $CLAUDE_CODE_SSE_PORT: empirically, two
+// Claude Code instances under the same VS Code remote dev parent can share
+// a single SSE port, and a shared key silently clobbers the prior session's
+// record. The pid-based key is collision-free.
 export function currentSessionKey(): string {
   const cs = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID;
   if (cs && cs.trim()) return cs.trim();
-  const ssePort = process.env.CLAUDE_CODE_SSE_PORT;
-  if (ssePort && ssePort.trim()) return `cc-sse:${ssePort.trim()}`;
-  const ppid = process.ppid;
-  return `ppid:${ppid}`;
+  return `pid:${stableSessionPid()}`;
 }
 
 export function sessionFile(key: string): string {
