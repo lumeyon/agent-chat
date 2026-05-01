@@ -142,11 +142,12 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# agent-chat runtime state — per-machine, per-session, never committed.
-conversations/.sessions/
-conversations/.presence/
-conversations/.logs/
-
-# Conversation transcripts and archives are user content, not code. Uncomment
-# if you want them tracked in git; they're noisy by default.
-# conversations/
+# agent-chat: the entire conversations/ tree is per-machine runtime state.
+# Session/presence/log files are throwaway. Conversation transcripts and
+# archives are user content (the user's actual chats), not skill code, and
+# they grow noisy fast. The scripts create the tree on demand, so absence
+# from a fresh clone is the expected state.
+#
+# If you DO want to version a particular conversation (e.g. for a public
+# example), force-add the specific edge directory: `git add -f conversations/pair/lumeyon-orion/CONVO.md`
+conversations/
