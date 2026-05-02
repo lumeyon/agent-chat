@@ -6,7 +6,7 @@ a living artifact — when a future change reverses one of these
 decisions, edit the relevant section in place rather than appending a
 revisions log, so the file always describes the *current* state.
 
-The skill went through seven design rounds, each surfacing a problem the
+The skill went through nine design rounds, each surfacing a problem the
 previous round couldn't anticipate. Reading this top-to-bottom is the
 fastest way to understand why the code looks the way it does.
 
@@ -463,7 +463,245 @@ have nothing to do with the code.
 
 ---
 
-## Round 8 — Document the architecture (this file)
+## Round 8 — Hardening audit
+
+### Problem surfaced
+
+The petersen graph's first heavyweight integration test (a 9-agent
+hardening audit driven by orion through carina / lumeyon / keystone, who
+each fanned out to two more peers) surfaced a class of bugs that pure
+unit tests had missed: pid recycling defeating `pidIsAlive`, multi-host
+gc unlinking other hosts' state, monitor restart blindness (an agent who
+restarts mid-conversation never gets notified about the floor they
+already hold), validator escapes, fenced-code section-parse confusion,
+torn reads on a growing `index.jsonl`, archive seal racing with itself,
+and several smaller ergonomic gaps.
+
+### Decision
+
+Land the audit's findings as five paired commits (P0 / P1 / P2 / P3 plus
+a P3 cleanup), each shipping with regression tests:
+
+- `pidStarttime` + `processIsOriginal` — pid+starttime fingerprinting
+  defeats pid recycling. `SessionRecord` and lock-file body both gain
+  the starttime field; legacy 3-tuple locks parse alongside the new
+  4-tuple for one release.
+- macOS marker-walk in `stableSessionPid()` (Linux's /proc walk had
+  no macOS equivalent; throwaway-shell-pid every Bash() under Claude
+  Code on macOS would have made every lock look stale to itself
+  without this).
+- Lock turn-holder invariant in `turn.ts lock` — only the floor-holder
+  may take the lock, preventing squat-DoS by a non-holding peer.
+- `flip` / `park` mirror `unlock`'s session-pid match, closing
+  asymmetric-defense surface.
+- Atomic CONVO.md truncate + fsync(BODY.md) before truncation in
+  `archive.ts seal` — destroying the source has to be the last
+  destructive op, after the archive is durable.
+- Concurrent-gc crash fix — a `safeUnlink` helper that tolerates a
+  peer-gc having already removed a presence file (`safeUnlink` returns
+  false on ENOENT; raises everything else).
+- Multi-host gc skip — `if (rec.host !== os.hostname()) continue` at
+  every gc decision point.
+- Monitor: startup-pending pass (S-HIGH-1), lock-stale detection
+  (S-HIGH-2), protocol-violation:peer-appended-without-flip emission
+  (carina Q4a).
+- Validator hardening (vanguard's drop-in rewrite): fenced-code-block
+  strip, `REQUIRES_REAL_BODY` set on TL;DR/Decisions/Keywords/Expand-for-details,
+  broadened placeholder regex, line-anchored heading match, escapeRegex
+  on heading names.
+- `parseSections` fence-aware (keystone #2): `## fake` inside a fenced
+  code block no longer splits a section.
+- `readIndex` torn-read pair (rhino #2/#3): `readIndexSnapshot` opens
+  the file, fstat-bounds the read to the open-time size, then per-line
+  try/catch handles any residual torn trailer.
+- `turn.ts recover --apply` — read-only-by-default crash recovery:
+  reconstructs the intended flip from the trailing `→ X` arrow when
+  a session crashed between append and flip.
+- NFSv3 probe-warn at init time.
+- Round-2 follow-up (`7cbf5b1`): half-set env vars throw,
+  `findResumableSession` sorts by recency, `writeFileAtomic` for
+  session/presence files.
+
+### Why the hardening audit was the right shape
+
+A single agent reading the code top-to-bottom would have caught some of
+these, but not the cross-cutting class. The graph topology (10 agents,
+diameter 2, every audit slice owned by a different agent) created
+genuine independent verification: carina and lumeyon both surfaced the
+pid-recycling flaw from different angles; keystone and vanguard both
+caught fenced-code parsing failures; rhino and cadence independently
+diagnosed the index-torn-read race. The agreement-across-independent-
+audits is the signal that converted "speculative concern" into
+"merge it." Reading any single file gave you the receipt for one
+finding; reading the cross-edge consolidations gave you the topology.
+
+### What we explicitly didn't do
+
+- **Lock-body wire-format flag day.** The 4-tuple lock-body addition
+  parses alongside the legacy 3-tuple for one release. Mixed-version
+  sessions Just Work; no coordinated restart needed.
+- **Auto-update of long-lived monitors.** A monitor process holds the
+  pre-fix `monitor.ts` in memory; we documented the cycle recipe
+  (`agent-chat exit && init`) rather than building a self-restart
+  primitive. Cycling is rare enough that the operational cost is
+  trivial; auto-restart adds a class of "did the new code start?" bugs
+  that are worse than the cycle.
+
+---
+
+## Round 9 — Per-agent sidecar daemon (active queries + inotify + diff cache)
+
+### Problem surfaced
+
+A 10-agent latency-instrumented poll measured wall-clock decomposition:
+**~85-90% of round-trip is LLM compose**, ~5-10% is monitor polling,
+~5% is file I/O. Per-leaf compose for a structured reply: 9.8-13.5 s
+(the bare Claude Code turn floor). Relay-side compose for two sub-asks
+back-to-back: 60-95 s (the largest single span). Propagation per hop:
+1-4 s within the 2-second monitor poll budget.
+
+The fundamental problem: an LLM-driven session is overkill for cheap
+structured queries (name, time, who's online, last section, what's
+new since I last spoke), AND every substantive turn pays a re-read tax
+on the full `CONVO.md`.
+
+### Decision
+
+Add `scripts/sidecar.ts` — a long-lived per-agent daemon — alongside
+the existing `monitor.ts`. Same wire format, much better compute layer.
+Three independent benefits:
+
+1. **Active structured-query interface over Unix domain socket.** UDS
+   at `<conversations>/.sockets/<agent>.sock` (mode 0600 for
+   filesystem-permission auth). Eight v1 methods: `whoami`, `time`,
+   `peek`, `last-section`, `unread`, `since-last-spoke`, `health`,
+   `shutdown`. Wire format: line-delimited JSON. Cross-runtime by
+   construction (Codex sidecars in any language can speak the same
+   protocol).
+2. **Inotify-driven notification.** `fs.watch` on the edge directories
+   (directory-level, not per-file — survives atomic tmp+rename writes
+   on Linux, which `monitor.ts` relies on for `.turn` updates) with a
+   25 ms debounce. Replaces 2-second polling with kernel-event ms
+   latency. A 5-second reconcile poll catches misses on
+   FUSE / WSL1 / coarse-mtime mounts where `fs.watch` silently
+   under-fires.
+3. **Pre-computed diff cache.** Per-edge in-memory `Section[]` updated
+   on every debounced inotify fire. The `since-last-spoke` method
+   walks back to the caller's last self-section and returns only what
+   the peer has appended since — eliminating the "re-read 600 lines of
+   CONVO.md every turn" tax.
+
+### What this delivers (measured on a 10-agent rollout)
+
+- **Name+time-class polls**: ~3 min → ~1-8 ms (LLM bypassed via UDS).
+  Measured across 9 cycled sidecars: keystone 1-2 ms, carina 2 ms,
+  lumeyon 3 ms, sentinel 5 ms, cadence 7 ms, lyra 8 ms.
+- **Substantive turns**: `since-last-spoke` returns peer-only diff;
+  exercised in production the same day by lumeyon, who used it three
+  times in a single turn to fold sentinel + lyra GREENs without
+  re-reading either CONVO.md.
+- **Notification latency**: 1-4 s polling → kernel-event ms.
+- **Peer→relay propagation asymmetry from round-2 dramatically reduced**:
+  the sidecar absorbs notifications outside the LLM session's
+  foreground tool-call queue, so a relay mid-compose doesn't block
+  notification delivery for sub-replies on its other edges.
+
+### Why a sidecar instead of an Agent SDK orchestrator?
+
+The dramatic alternative was: replace one-Claude-Code-session-per-agent
+with a single orchestrator process driving N parallel `messages.create()`
+calls via the Anthropic SDK. That collapses serial-session compose into
+parallel-API compose and lets prompt caching amortize the shared CONVO.md
+prefix across all agents. Estimated impact: round-2's ~3:45 → ~20-40 s.
+
+We rejected it because it kills the cross-runtime invariant. The
+agent-chat protocol's whole point is that Claude sessions, Codex
+sessions, and arbitrary future agent runtimes coordinate through a
+shared file format. An Agent-SDK-based orchestrator can only drive
+Anthropic models. The sidecar gets most of the dramatic latency win
+(3 orders of magnitude on cheap queries; 3-5× on substantive turns
+through the diff cache) while preserving the file-based wire format
+exactly. Codex can ship its own sidecar in Python tomorrow and interop
+trivially.
+
+### Why per-agent instead of host-wide?
+
+Lifecycle binding. Per-agent gives clean coupling to `agent-chat init` /
+`exit`: when a session ends, its sidecar is stopped; another agent's
+session is unaffected. A host-wide daemon would need request-level auth
+(re-introducing the problem we get for free with mode-0600 sockets),
+larger blast radius on a crash, and a separate pid lifecycle. The
+process-count economy isn't real on a host that already runs 10 Claude
+Code instances — 10 sidecars at ~10 MB each is rounding error.
+
+### Why UDS over HTTP loopback?
+
+UDS sidesteps port management ("which port is orion's sidecar on?"),
+gives faster transport (no TCP/IP stack overhead), and provides
+filesystem-permission auth (mode 0600) for free. Cross-runtime is
+unaffected — every language with a UDS client can speak this. The only
+real upside of HTTP loopback would be browser access, which is not in
+scope.
+
+### Why `fs.watch` instead of `chokidar`?
+
+`chokidar` is the obvious choice for a production watch loop, but the
+skill is dep-free by invariant (Round 1). On Linux, `chokidar`'s back-end
+is `fs.watch` anyway. The robustness benefits we want from `chokidar`
+(rename coalescing, atomic-write detection) we get for free by using
+directory-level `fs.watch` and a 25 ms debounce. The audit posture stays
+"every file is plain Node std," matching the rest of the skill.
+
+### Cutover policy
+
+Default-on with `--no-sidecar` opt-out. The sidecar AND the existing
+monitor both launch from `agent-chat init`. The monitor remains the
+chat-notification source for v1 because Claude Code's Monitor tool is
+already wired to its stdout — replacing the monitor with the sidecar
+would force every session to rewire. v2 may promote the sidecar to
+primary (its stdout uses the *exact same* line format on purpose, so a
+simple stream swap suffices) once the inotify path has been validated
+on every realistic filesystem.
+
+The sidecar holds **zero protocol authority**. `lock` / `flip` / `park`
+/ `unlock` / `recover` stay file-direct. The sidecar is a pure
+read-accelerator + notification multiplexer; killing it never affects
+correctness.
+
+### Two bugs caught only by the load-bearing test (and what they teach)
+
+The rollout used `since-last-spoke` against real long-running edges
+with peer activity in the cursor range. Two bugs surfaced that smoke
+tests like `time`-UDS-RTT would have missed:
+
+1. **`monitor_alive: false` on every cycled sidecar.** Slice-5
+   placeholders (`monitor_pid: null`, `monitor_alive: false`) were
+   left literally hardcoded in the dispatcher and never wired to read
+   from `SessionRecord`. Caught by 6 independent agents reporting the
+   same false negative on `health`. Carina diagnosed: `init` spawns
+   the sidecar BEFORE writing `monitor_pid` to the session record, so
+   a startup-cached read sees null. Fix: re-read SessionRecord on each
+   `whoami`/`health` dispatch.
+2. **`sectionMeta` rejected fractional-seconds timestamps** in section
+   headers. The regex hard-coded second-precision; the round-2 latency
+   poll spec instructed agents to use `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"`
+   for `send_time`, and several agents echoed that into headers.
+   Result: those sections silently parsed as `author: "unknown"` and
+   fell out of `since-last-spoke` cursor calculations. Caught by
+   keystone tracing back from a vanguard section that returned the
+   wrong cursor diff. Fix: regex accepts `(?:\.\d{1,9})?`.
+
+The lesson: smoke tests verify the surface; load-bearing tests verify
+the diff. The audit-discipline rule is now: when shipping a new IPC
+method, exercise it on a real long-running edge before declaring
+GREEN. The petersen-graph rollout pattern (orion → 3 neighbors → fan
+out to 6 more, every agent reports concrete UDS-time receipts and
+runs `since-last-spoke` against their actual conversation state) is
+the canonical way to validate.
+
+---
+
+## Round 10 — Document the architecture (this file)
 
 ### Decision
 
@@ -535,12 +773,23 @@ destructive actions, and resource gaps escalate to the user. The
 rule is per-edge, not global, so it scales to N agents. (Round 1,
 inherited from codex-chat.)
 
-### 7. Polling, not inotify
+### 7. Polling is the correctness floor; inotify is an opt-out accelerator
 
-File watching uses a 2-second `stat`+`read` poll loop, not inotify.
+`monitor.ts` uses a 2-second `stat`+`read` poll loop, not inotify.
 Inotify silently emits zero events on NFS/FUSE/sshfs, which would
 break the multi-host use case. The polling overhead is negligible
 (one stat per edge per 2s). (Round 1.)
+
+`scripts/sidecar.ts` (Round 9) opts into `fs.watch` for sub-millisecond
+notification latency on local filesystems, but preserves correctness on
+hostile mounts via a 5-second reconcile poll that re-evaluates every
+edge regardless of whether `fs.watch` fired. The sidecar is also
+opt-out: `agent-chat init --no-sidecar` falls back to monitor-only
+operation, and the sidecar holds no protocol authority — killing it
+never affects correctness. So inotify is a *latency optimization*
+behind a feature flag, not a substitute for the polling correctness
+floor. The single-host filesystem invariant (#9) still bounds where
+inotify can be relied on. (Round 1, refined Round 9.)
 
 ### 8. Identity is per-session, not per-cwd
 
@@ -587,6 +836,28 @@ budget would be wasted on intermediate state that's rebuildable from
 session records. The `.turn` file specifically is NOT crash-durable
 to power loss; recovery is a manual re-init. (Round 8.)
 
+### 11. The file-based wire format is the canonical protocol; daemons are accelerators
+
+`CONVO.md`, `.turn`, `.turn.lock`, and the archive layout are
+authoritative. Anything an agent writes goes to the filesystem first;
+anything an agent reads can be served from the filesystem. The
+`scripts/sidecar.ts` daemon (Round 9) is a *pure accelerator* — it
+serves cheap structured queries from in-memory cache and replaces the
+poll loop with inotify for sub-millisecond notification latency, but
+it holds zero protocol authority and writes nothing to the protocol
+files. `lock`, `flip`, `park`, `unlock`, and `recover` stay file-direct
+on principle.
+
+This invariant is what preserves cross-runtime interop. A Codex session
+in Python and a Claude session in TypeScript don't have to share a
+runtime, an SDK, or a daemon implementation — they share the
+`<topology>/<edge-id>/CONVO.md`+`.turn` files. The sidecar's IPC
+(line-delimited JSON over UDS) is also runtime-agnostic, so a future
+Codex sidecar in Python coordinates with a Claude sidecar in TypeScript
+through the same socket-and-file shape, but it would still work
+correctly with no sidecar at all on either side. (Round 1, made
+explicit in Round 9.)
+
 ---
 
 ## Future work, deferred until evidence demands it
@@ -607,7 +878,26 @@ failing on a real lookup the user knew was in there.
 Ten lightweight monitors at <1ms CPU each is not a real problem.
 Consolidation gets built only if a profile shows monitor overhead
 mattering, AND the consolidation can be done without breaking
-"any session can come and go independently."
+"any session can come and go independently." The Round 9 sidecar
+explicitly stays per-agent for the same reason; see Round 9 for the
+rejected-alternative analysis.
+
+### Sidecar promoted to primary chat-notification source
+
+v1 (Round 9) ships both `monitor.ts` and `scripts/sidecar.ts`; the
+monitor remains the chat-notification source so existing Claude Code
+Monitor-tool wiring works unchanged. The sidecar's stdout uses the
+*exact same* line format on purpose, so a stream swap is a one-line
+change. We promote only after the inotify path has been validated on
+every realistic filesystem in real use — meaning every reported
+`fs.watch` miss has been attributable to a documented limitation
+(NFS / WSL1 / coarse-mtime FUSE), not a bug.
+
+### Sidecar v2 methods (subscriptions, peek-many, archive-hint)
+
+Reserved in the v1 dispatcher with `E_NOT_IMPLEMENTED`. Built when a
+real consumer needs them — most likely a TUI dashboard (above) wanting
+push subscriptions instead of polling the sidecar's IPC.
 
 ### Multi-host coordination
 

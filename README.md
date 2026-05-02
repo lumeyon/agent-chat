@@ -47,8 +47,20 @@ mount. Survives reboots. Diffs cleanly. Versions in git like prose.
 **Drop-in for any agent runtime.** The protocol is runtime-agnostic. Claude
 Code reads it, Codex reads it, an agent script you wrote on a Tuesday reads
 it. The skill spec is one `SKILL.md` file; the operational checklist is one
-`bootstrap.md` file; the implementation is six TypeScript files totaling
-less than two thousand lines.
+`bootstrap.md` file; the implementation is eight TypeScript files totaling
+under three thousand lines, with zero npm dependencies.
+
+**Optional fast-path daemon.** `agent-chat init` auto-launches a long-lived
+per-agent **sidecar** alongside the monitor: a Unix-domain-socket daemon
+serving structured queries (name, time, peek, last-section, unread,
+since-last-spoke, health) in a few milliseconds. The sidecar uses inotify
+to watch your edges and pre-computes the diff since you last spoke, so a
+substantive turn doesn't pay the re-read tax on the full `CONVO.md`. The
+file-based wire protocol stays authoritative — the daemon is a pure
+accelerator that any runtime can ignore. Cross-runtime by construction:
+the IPC is line-delimited JSON, so a Codex sidecar in Python and a Claude
+sidecar in TypeScript coordinate through the same socket-and-file shape.
+Pass `--no-sidecar` to opt out for CI, debug, or hostile filesystems.
 
 ---
 
@@ -60,6 +72,7 @@ less than two thousand lines.
 | **Per-session identity resolution** | `$AGENT_NAME` + `$AGENT_TOPOLOGY` env vars, or a `.agent-name` file in cwd. The skill refuses to guess — silent identity-guessing is what made codex-chat 2-agent-only. |
 | **Atomic turn handoff** | `.turn` written via `tmpfile + rename`. Concurrent reads always observe either the old or the new value. |
 | **Multi-edge background watcher** | One `monitor.ts` invocation watches every edge the agent participates in. Three independent triggers (value-change, mtime-touch, body-grew) catch every form of "your turn" — including the codex-chat trick of appending then re-parking. Filesystem-agnostic polling, so it works over NFS where `inotify` falls silent. |
+| **Per-agent sidecar daemon** | `scripts/sidecar.ts` runs alongside the monitor (default-on; `--no-sidecar` opts out). UDS at `<conversations>/.sockets/<agent>.sock` with mode 0600 for filesystem-permission auth. Eight v1 methods: `whoami`, `time`, `peek`, `last-section`, `unread`, `since-last-spoke`, `health`, `shutdown`. Inotify-driven `fs.watch` (debounced 25 ms) replaces polling on local FS with kernel-event ms latency; a 5-second reconcile poll catches misses on FUSE/WSL1. The sidecar holds zero protocol authority — `lock`/`flip`/`park`/`unlock` stay file-direct; the daemon is a pure read-accelerator and notification multiplexer. |
 | **Conversation archives that stay searchable** | Sealed leaves (`archives/leaf/`) preserve the verbatim transcript; SUMMARY.md captures the distilled knowledge with an *Expand for details about:* footer that signals what was compressed away. |
 | **DAG condensation** | Once leaves accumulate, fold N siblings at depth d into one parent at depth d+1 with a more abstract policy. Agent walks down via `search.ts expand --children`. |
 | **Three-tier search escalation** | `grep` over `index.jsonl` (cheap) → `describe` for one SUMMARY.md (medium) → `expand` for the original BODY.md (cold). Most queries stop at grep. |
@@ -113,9 +126,12 @@ bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen
 That single command claims the identity, writes a per-session file under
 `conversations/.sessions/`, refuses if another live session already
 claims that name, infers the topology if only one is in use, auto-launches
-the multi-edge monitor in the background, and prints the session's
-neighbors. Every other script in the skill reads the per-session file
-automatically — no env vars, no `.agent-name`, no exports.
+**both the multi-edge monitor and the per-agent sidecar daemon** in the
+background, and prints the session's neighbors. Every other script in
+the skill reads the per-session file automatically — no env vars, no
+`.agent-name`, no exports. Pass `--no-sidecar` if you want the file-direct
+slow paths only; pass `--no-monitor` if you don't want the chat-notification
+poller.
 
 **This scales to N sessions in one directory.** Open ten terminals in the
 same project, run `claude` in each, tell each one its name, done. They
@@ -140,27 +156,52 @@ Power users can still use `$AGENT_NAME` / `$AGENT_TOPOLOGY` env vars or a
 `.agent-name` file — those remain supported as fallback resolution
 sources for CI / scripted setups.
 
-### 3. The monitor (auto-started by `init`)
+### 3. The monitor and sidecar (auto-started by `init`)
 
-`agent-chat init` already started the multi-edge monitor in the
-background. Each line it prints to its log becomes one notification you
-can tail with:
+`agent-chat init` already started both background daemons. Each line the
+monitor prints to its log becomes one notification you can tail with:
 
 ```bash
 tail -F ~/.claude/skills/agent-chat/conversations/.logs/monitor-orion.log
+tail -F ~/.claude/skills/agent-chat/conversations/.logs/sidecar-orion.log
 ```
 
-The monitor only fires when `.turn` flips to your name, when an edge gets
+The monitor fires when `.turn` flips to your name, when an edge gets
 parked, when `.turn` is rewritten to the same value (peer
 appended-then-parked), or when `CONVO.md` grew without a `.turn` flip.
+It writes monitor-format lines to its log and (when wired through Claude
+Code's Monitor tool) to chat. Polling-based by default — works on every
+filesystem, including NFS / FUSE / sshfs where inotify falls silent.
 
-If you need to run it in foreground (e.g. piping to Claude Code's Monitor
-tool with `persistent: true`):
+The **sidecar** is the structured-query fast-path. Talk to it with any
+line-JSON-over-UDS client:
+
+```bash
+sock=~/.claude/skills/agent-chat/conversations/.sockets/orion.sock
+echo '{"id":1,"method":"time"}' | nc -U -q 0 "$sock"
+echo '{"id":2,"method":"peek","params":{"peer":"lumeyon"}}' | nc -U -q 0 "$sock"
+echo '{"id":3,"method":"since-last-spoke","params":{"peer":"lumeyon"}}' | nc -U -q 0 "$sock"
+```
+
+`time` returns ISO + monotonic ns in 1-8 ms (no LLM in the loop).
+`since-last-spoke` returns the peer-only diff since you last wrote — so a
+substantive turn no longer pays the full-`CONVO.md` re-read tax. The
+sidecar uses inotify (`fs.watch`) on the edge directories with a 25 ms
+debounce; a 5-second reconcile poll catches misses on filesystems where
+inotify under-fires.
+
+If you need the monitor in foreground (e.g. piping to Claude Code's
+Monitor tool with `persistent: true`), the cycle is:
 
 ```bash
 bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen --no-monitor
 bun ~/.claude/skills/agent-chat/scripts/monitor.ts
 ```
+
+The sidecar's stdout uses the *same* line format as the monitor, so an
+advanced setup can attach Claude Code's Monitor tool to the sidecar
+instead and skip `monitor.ts` entirely. v1 ships both as defaults; v2
+may promote the sidecar to primary chat-notification source.
 
 ### 4. Take your turn
 
@@ -169,10 +210,16 @@ SKILL=~/.claude/skills/agent-chat
 bun $SKILL/scripts/turn.ts peek lumeyon          # is it my turn? what's the lock state?
 bun $SKILL/scripts/turn.ts lock lumeyon          # claim the brief append+flip lock
 # ... append your section to the CONVO.md path that `peek` printed.
-# Format: `## <agent> — <topic> (UTC ...)\n\nbody\n\n→ <next>`
+# Format: `## <agent> — <topic> (UTC YYYY-MM-DDTHH:MM:SS[.fff]Z)\n\nbody\n\n→ <next>`
 bun $SKILL/scripts/turn.ts flip lumeyon lumeyon  # hand off (or `parked`)
 bun $SKILL/scripts/turn.ts unlock lumeyon
 ```
+
+`peek` fast-paths through the sidecar daemon when running (1-8 ms UDS
+round-trip vs. several `statSync` + `readFileSync` calls); falls back to
+the file-direct path on any sidecar error. Write ops (`lock`/`flip`/
+`park`/`unlock`/`recover`) stay file-direct on principle — the sidecar
+holds zero protocol authority.
 
 If the flip is refused with `refuse to flip — turn is "X", not "Y"`,
 **stop**. Do not modify the .md. The protocol just told you it's not your
@@ -238,6 +285,20 @@ archives/
   condensed/d1/<arch_C_…>/ # depth 1: SUMMARY.md + META.yaml (parents = leaf ids)
   condensed/d2/<arch_C_…>/ # depth 2 …
   condensed/d3/<arch_C_…>/ # depth 3+ (durable trajectory)
+```
+
+Per-host control state lives at the topology root:
+
+```
+conversations/.sessions/<key>.json    # per-session identity record (Round 5)
+conversations/.presence/<agent>.json  # per-agent presence + monitor + sidecar pids
+conversations/.sockets/               # sidecar UDS endpoints + pidfiles + cursor files
+  <agent>.sock                        # mode 0600 UDS (filesystem-permission auth)
+  sidecar-<agent>.pid                 # pid + starttime fingerprint for crash-recovery
+  <agent>.cursors.json                # named-cursor persistence for `unread` calls
+conversations/.logs/                  # per-daemon log files
+  monitor-<agent>.log
+  sidecar-<agent>.log
 ```
 
 The protocol is:
@@ -340,15 +401,16 @@ No setup, no extra dependencies — `bun test` from the repo root runs everythin
 
 ```bash
 bun test
-# → 84 pass, 1 skip (gated LLM test), 0 fail
+# → 213 pass, 1 skip (gated LLM test), 0 fail
 ```
 
-The suite is organized in three layers:
+The suite is organized in four layers:
 
 1. **Unit tests** (`tests/lib.test.ts`) — pure-function coverage of the YAML
-   parser, edge canonicalization, neighbor enumeration, section parsing,
-   fresh-tail splitting, summary template + validator, lock-file format,
-   and archive-id generation. ~30 tests, sub-second.
+   parser, edge canonicalization, neighbor enumeration, section parsing
+   (including fractional-seconds timestamp acceptance), fresh-tail splitting,
+   summary template + validator, lock-file format, and archive-id generation.
+   ~100 tests, sub-second.
 2. **Protocol + integration tests** (`tests/protocol.test.ts`,
    `tests/archive.test.ts`, `tests/identity.test.ts`) — drive every
    `scripts/*.ts` CLI as real subprocesses against a tmpdir conversations
@@ -362,6 +424,16 @@ The suite is organized in three layers:
    resulting CONVO.md has the expected sections in the right order. This
    catches genuine cross-process race conditions and identity-resolution
    bugs that pure unit tests miss.
+4. **Sidecar tests** (`tests/sidecar.test.ts`) — 34 tests covering UDS
+   dispatcher (whoami / time / health / peek / last-section / unread /
+   since-last-spoke / shutdown), `peek` parity with file-direct, fs.watch
+   event delivery within ~200 ms of a peer's flip, startup-pending firing
+   per actionable edge, protocol-violation emission, lock-stale invariants,
+   anonymous + named-persisted cursor flow, since-last-spoke peer-only diff
+   with first-turn semantics, full lifecycle (init starts sidecar, exit
+   stops gracefully, gc reclaims kill -9 stale state), `--no-sidecar` opts
+   out, monitor coexistence with no double-emit, and `CONVERSATIONS_DIR`
+   env override for socket + log paths.
 
 A fourth, gated test (`tests/subagent-llm.test.ts`) drives two real
 `claude -p` headless sessions through one round-trip. It's **skipped by
@@ -401,19 +473,37 @@ fastest path to understanding *why* the code looks the way it does.
 - **`agents.*.yaml`** — topology manifests. Add your own.
 - **`.agent-name.example`** — template for the per-session identity file.
 - **`scripts/lib.ts`** — topology loader, identity resolver, edge
-  enumerator, archive helpers, summary template + validator, YAML I/O.
+  enumerator, atomic-write helpers, pid+starttime fingerprinting, archive
+  helpers, summary template + validator, YAML I/O. Adds `LOGS_DIR`,
+  `SOCKETS_DIR`, `socketPathFor`, `pidFilePath`, `cursorsFilePath` for
+  the sidecar's per-agent paths (all rooted on `CONVERSATIONS_DIR`).
 - **`scripts/resolve.ts`** — print my identity + edges + paths.
-- **`scripts/turn.ts`** — peek / init / flip / park / lock / unlock for
-  one edge.
+- **`scripts/turn.ts`** — peek / init / flip / park / lock / unlock /
+  recover for one edge. `peek` fast-paths through the sidecar daemon
+  with file-direct fallback.
 - **`scripts/monitor.ts`** — long-running multi-edge watcher with
-  optional `--archive-hint` for parked-and-bloated edges.
+  optional `--archive-hint` for parked-and-bloated edges. Polling-based;
+  works on every filesystem.
+- **`scripts/sidecar.ts`** — long-lived per-agent daemon. Inotify-driven
+  watcher (with 5-second reconcile poll for FUSE / WSL1), in-memory diff
+  cache, line-JSON-over-UDS dispatcher with eight v1 methods. Auto-launched
+  by `agent-chat init`; `--no-sidecar` opts out. Emits monitor-format
+  notification lines on stdout (interchangeable with `monitor.ts` for the
+  Claude Code Monitor tool wiring).
+- **`scripts/sidecar-client.ts`** — async `sidecarRequest` + `isSidecarRunning`
+  for any callee that wants the fast path. Returns typed `{ ok, result }` or
+  `{ ok: false, error: { code, message } }` so callers don't try/catch.
+- **`scripts/agent-chat.ts`** — init / exit / who / gc / whoami. Manages
+  both sidecar and monitor lifecycle; `cmdGc` reclaims stale sockets +
+  pidfiles; `cmdWho` shows `mon=` and `side=` columns; `cmdWhoami`
+  fast-paths through sidecar.
 - **`scripts/archive.ts`** — plan / seal / commit / list leaf archives.
 - **`scripts/condense.ts`** — fold same-depth archives into a depth+1
   archive.
 - **`scripts/search.ts`** — grep / describe / expand / list across the
   per-edge index.
 
-Lines of code: ~1,850 across all files combined. No npm dependencies.
+Lines of code: ~2,950 across all files combined. No npm dependencies.
 
 ---
 
