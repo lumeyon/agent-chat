@@ -6,7 +6,7 @@ a living artifact — when a future change reverses one of these
 decisions, edit the relevant section in place rather than appending a
 revisions log, so the file always describes the *current* state.
 
-The skill went through nine design rounds, each surfacing a problem the
+The skill went through ten design rounds, each surfacing a problem the
 previous round couldn't anticipate. Reading this top-to-bottom is the
 fastest way to understand why the code looks the way it does.
 
@@ -701,7 +701,204 @@ the canonical way to validate.
 
 ---
 
-## Round 10 — Document the architecture (this file)
+## Round 10 — Multi-user transparency (humans + AI on one graph)
+
+### Problem surfaced
+
+Up through Round 9 the skill was implicitly framed as "AI agents talking
+to AI agents," with humans as the *driver* of a Claude Code session
+rather than first-class participants. Two questions made that framing
+inadequate:
+
+1. **One Claude Code session, multiple humans typing.** ("I'm eyon
+   talking; now I'm john talking now.") Each human's conversation
+   needs its own thread; switching humans should not corrupt the prior
+   thread, leak across threads, or require restarting the session.
+2. **Long-term memory of user-AI conversations.** The lossless-claw
+   archive layer (Round 2) was always going to compound most when it
+   captured human↔AI threads spanning weeks, not just AI↔AI audit
+   rounds that wrap in hours. Wiring user prompts and assistant
+   responses into the existing CONVO.md / .turn / archive shape was
+   the natural extension.
+
+The user explicitly required **transparency as an invariant**: "to be
+a truly effective organisation we don't want truly private
+conversations. Everyone needs to be accountable for what they say."
+That constraint collapsed several otherwise-ambiguous design choices
+(privacy controls, per-edge ACLs, role distinctions) into clean
+"don't" answers.
+
+### Decision
+
+Treat humans as **first-class agents in a topology**, indistinguishable
+from AI agents at every protocol layer. Add three artifacts plus one
+queued closeout-item, totaling ~750 LoC across new code and tests:
+
+1. **`agents.org.yaml`** — new topology declaring 12 agents (2 humans
+   + 10 AI) and 36 edges. Bipartite-plus-petersen shape: every human
+   has an edge to every AI (20 edges), eyon-john for human-to-human
+   (1 edge), the existing 15 petersen edges among the AI subset
+   preserved verbatim. **Zero `lib.ts` changes required** — humans-as-
+   agents is a naming convention atop the existing primitives. The
+   `parseTopologyYaml` allowlist, `isValidAgentName` regex, and edge
+   canonicalization all accept the larger graph as-is.
+2. **`agent-chat speaker <name>`** CLI subcommand + per-session state
+   file at `.sessions/<key>.current_speaker.json` (mode 0600). Pure
+   write-only-to-state — never writes CONVO.md or .turn. Speaker
+   resolution is "live state, not durable identity"; resume-on-init
+   wipes it.
+3. **`agent-chat record-turn`** CLI subcommand. Reads the
+   `current_speaker`, validates it's a topology agent (rejects
+   AI-to-AI misroute via degree heuristic — humans=11, AI=5 in the
+   org topology), uses two-flips-per-turn protocol on the
+   `<speaker>-<agent>` edge: lock → flip to AI → append two sections
+   (user turn + assistant response) → flip back to speaker → unlock.
+   Idempotent retries via per-edge `recorded_turns.jsonl` ledger
+   (sha256 of speaker+user+assistant). Speaker-switch handoff: the
+   first record-turn after a speaker change writes a handoff section
+   to the OLD edge (`## prev — handoff to new` ending `→ parked`,
+   `.turn=parked`) before proceeding on the new edge.
+4. **`monitor.ts --no-parked-startup`** flag (round-3 closeout item 1
+   of 7, bundled here). At org-topology degree=11, every monitor
+   restart for a human session can fire up to 11 parked-startup
+   notifications — load-bearing UX flag the hardening-audit closeout
+   list had queued. The other 6 closeout items remain queued for a
+   separate commit.
+
+### Why "humans = first-class agents" is structurally correct
+
+The transparency invariant means privacy controls are explicitly NOT
+in the design space. That choice eliminates the only thing that would
+have justified a role distinction in the schema:
+
+- **Edge canonicalization** (`alphabetical-min-max`) works the same
+  for human-AI as for AI-AI. `eyon-orion` and `john-orion` are just
+  edge ids.
+- **Lock semantics** are agent-name-scoped, not role-scoped. A human
+  taking the floor is the same protocol primitive as an AI taking the
+  floor.
+- **The archive layer** (Round 2) compounds across all edges
+  uniformly — user-AI threads and AI-AI audit chains both seal into
+  the same `index.jsonl` and become grep-able through one query.
+- **Cross-runtime interop** (Round 9 invariant #11) is preserved.
+  A Codex session in Python can be a fourth human; the file-based
+  wire format doesn't care.
+
+The bipartite-plus-petersen edge shape gives the AI-to-AI misroute
+defense for free: humans have degree=11 (every AI plus the other
+human), AI have degree=5 (3 petersen peers plus 2 humans). The
+`record-turn` dispatcher refuses any turn where
+`degree(speaker) <= degree(agent)`, which exactly catches "AI tried
+to record a turn through the human-record-turn path" without any
+schema marker.
+
+### Soft-discipline mechanism for the hook
+
+Claude Code's `Stop` hook is session-level (one fire per session, at
+session end), not per-turn, and its payload doesn't include the user
+prompt or assistant response. So there's no kernel-level guarantee
+that the agent calls `record-turn` after every response. v1 ships as
+a soft-discipline mechanism: SKILL.md instructs the agent to call the
+CLI at end of every response; the per-edge `recorded_turns.jsonl`
+ledger is a grep-able audit signal — a session that ran for N turns
+but has 0 ledger entries is detectable post-hoc.
+
+`docs/HOOK_REQUEST.md` files the hard-discipline ask with the Claude
+Code team: a `PostResponse` hook that fires after every assistant
+response with `{user_prompt, assistant_response}` on stdin. If/when
+that ships, the dispatcher gets a one-line wire-up; the protocol
+above is unchanged.
+
+### Cross-review caught two real bugs that solo work would have shipped
+
+The four-phase orchestration (plan → cross-pollinate → implement →
+cross-review → integrate) ran end-to-end through the petersen graph
+without escalation. The round-robin Phase-4 review pattern surfaced
+two genuine bugs at the cross-slice integration layer that the
+slice authors couldn't have caught on their own:
+
+1. **`listSessions` contamination** — the speaker CLI's
+   `current_speaker.json` files live in `SESSIONS_DIR` with a `.json`
+   suffix. `listSessions()` blindly accepted any `.json` file and
+   pushed `{name, set_at}` records as if they were SessionRecords.
+   `agent-chat who` then crashed in `r.agent.padEnd(undefined)`.
+   Lumeyon caught it because she knew `listSessions`'s contract;
+   carina didn't because that helper wasn't part of slice 2.
+2. **`fetchSpeaker` dead-code field path** — keystone's `record-turn`
+   read `r.result.name` from the sidecar `speaker` UDS response;
+   carina's actual response shape was `{ current_speaker: { name,
+   set_at } | null }`. Field path mismatch meant the dedicated
+   fast-path was *always* falling through to the file-direct path —
+   functionally correct, but the optimization that motivated
+   shipping the dedicated UDS method was silently dead. Carina
+   caught it because she knew her own UDS response shape.
+
+Same structural lesson as the Round 9 sidecar bug-fix round (where
+load-bearing tests caught the `monitor_alive` placeholder and the
+fractional-seconds regex bug that smoke tests missed). Bugs that
+surface at integration are the ones that pure unit tests cannot see.
+The round-robin review is now validated as the load-bearing-test
+rule applied to code-review.
+
+### What we explicitly didn't do (anti-creep)
+
+- **No `kind: human | ai` schema tag.** The transparency invariant
+  means there are no behaviors that fork on agent role; uniform
+  treatment is the simplest correct design. The degree heuristic
+  derives the human-set when needed (record-turn AI-to-AI defense)
+  with no schema extension.
+- **No org-wide grep CLI.** The existing per-edge `search.ts` already
+  works on the org topology; an aggregate command is cosmetic and
+  defers to v2.
+- **No timeline / `agent-chat thread-of <topic>` view.** Same — pure
+  ergonomic, defers to v2 once we have actual recall queries that
+  miss.
+- **No PostResponse hook wired by Claude Code.** `record-turn` is a
+  CLI the agent calls explicitly; the v2 hook is filed as a feature
+  ask in `docs/HOOK_REQUEST.md`.
+- **No prose-level speaker switch detection.** "I am john now" is
+  not parsed; the user runs `agent-chat speaker john` (or the agent
+  runs it on the user's behalf when they say so). Cross-cutting
+  invariant #2 — never silently guess identity.
+
+### Closeout-commit accounting
+
+The round-3 closeout commit had 7 items queued. This commit ships
+**1 of 7** (`--no-parked-startup` flag + 3 tests, bundled into
+slice 1 because it was load-bearing UX at degree=11 for human
+sessions). Remaining 6 still queued for a separate commit:
+
+- `turn.ts resume <peer>` CLI (sentinel's CLI gap finding)
+- pulsar (a) — `turn.ts:142` `process.pid` → `stableSessionPid()`
+- pulsar (b) — `recover --apply` symmetric `processIsOriginal` guard
+- parked-startup test (sentinel HIGH-1 ack)
+- v-next observability fields on `unread`/`since-last-spoke`
+  (`malformed_count`, `parse_warnings: []`)
+- `validate.ts` cartesian-vs-declared edges check (sentinel's
+  slice-1 sub-relay finding from this round)
+
+### Process observation
+
+This rollout was the first heavyweight integration where the user
+explicitly authorized the team to operate autonomously: "leave me
+out of this and build this with your team." The 5-phase pattern
+(plan → cross-pollinate → consolidate → implement → cross-review →
+integrate) ran end-to-end without escalation. Total wall-clock from
+kickoff (22:53Z) to commit-ready (~23:40Z) was ~50 min for ~750 LoC
+of new code, including two real bugs caught and fixed in review.
+
+The compound win: the structural changes from Round 9 (sidecar +
+`since-last-spoke`) made the team's own coordination dramatically
+faster — lumeyon's report noted "~13ms each to fetch sentinel's +
+lyra's replies," carina's noted "the diff between my last write and
+orion's Phase-2 dispatch was the only thing I needed to read, ~250
+lines vs the full ~1100." The latency primitive built in Round 9
+made the multi-agent rollout in Round 10 feasible at the wall-clock
+budget the user expected.
+
+---
+
+## Round 11 — Document the architecture (this file)
 
 ### Decision
 

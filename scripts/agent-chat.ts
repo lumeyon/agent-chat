@@ -19,17 +19,21 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import * as child_process from "node:child_process";
 import {
   loadTopology, listSessions, readSessionRecord, writeSessionRecord,
   deleteSessionRecord, currentSessionKey, sessionFile, presenceFile,
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
-  utcStamp, edgesOf,
-  exclusiveWriteOrFail, writeFileAtomic,
+  utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
+  writeTurnAtomic, resolveIdentity,
+  exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
-  type SessionRecord,
+  CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
+  writeCurrentSpeaker,
+  type SessionRecord, type CurrentSpeaker,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
 
@@ -265,10 +269,17 @@ function cmdInit(args: string[]): void {
   }
 
   // If resumable matches the requested name, offer informational context.
+  // Also wipe any stale current_speaker from the prior session on the same
+  // terminal: speaker is conversational state (cadence slice-2 round —
+  // "speaker is conversational state, not durable identity"), and a re-init
+  // implies the human picked up a new session. Live in the resume-prompt
+  // path explicitly so the wipe doesn't fire on first-init-no-resumable.
   if (resumable && resumable.agent === name && resumable.topology === topology) {
     console.error(`[agent-chat] resume: prior session for ${name}@${topology} in this terminal is gone — taking over identity.`);
+    safeUnlink(currentSpeakerPath(resumable.session_key));
   } else if (resumable && (resumable.agent !== name || resumable.topology !== topology)) {
     console.error(`[agent-chat] note: this terminal previously hosted ${resumable.agent}@${resumable.topology}; new identity is ${name}@${topology}.`);
+    safeUnlink(currentSpeakerPath(resumable.session_key));
     deleteSessionRecord(resumable);
   }
 
@@ -408,6 +419,11 @@ async function cmdExit(_args: string[]): Promise<void> {
   // pidfile on graceful exit; if it didn't (kill -9 mid-shutdown), gc reclaims.
   await stopSidecar(rec);
   stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
+  // Also drop any current_speaker.json — it's session-scoped live state, not
+  // durable identity. cadence slice-2 round flagged this lifecycle: clean
+  // exit means no consumer should see a stale speaker. safeUnlink (not
+  // unlinkSync) tolerates a peer race per cadence's F4-class concern.
+  safeUnlink(currentSpeakerPath(key));
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
 }
@@ -440,14 +456,11 @@ function cmdWho(_args: string[]): void {
   }
 }
 
-// Unlink that tolerates a peer having already removed the file.
-// Concurrent gc passes used to crash here: the inner `unlinkSync` on a
-// file a peer just deleted threw ENOENT past the loop boundary, aborting
-// the rest of the sweep. See cadence Q4 (P0 Major #1).
-function safeUnlink(p: string): boolean {
-  try { fs.unlinkSync(p); return true; }
-  catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
-}
+// safeUnlink moved to lib.ts (slice-2 refactor — single source of truth so
+// sidecar.ts and tests can use it without importing from agent-chat.ts).
+// Original rationale (cadence Q4 / P0 Major #1): concurrent gc passes used
+// to crash here when one peer's unlinkSync hit a file another peer had just
+// removed; ENOENT-tolerance kept the sweep from aborting mid-loop.
 
 function cmdGc(args: string[]): void {
   const pruneLogs = args.includes("--prune-logs");
@@ -468,12 +481,42 @@ function cmdGc(args: string[]): void {
       }
       try { safeUnlink(socketPathFor(rec.agent)); } catch {}
       try { safeUnlink(pidFilePath(rec.agent, "sidecar")); } catch {}
+      // Slice-2 (multi-user): drop the stale current_speaker.json next to
+      // the session record. Folded into the session-pass per cadence's
+      // recommendation — keeps the "session is dead" decision colocated and
+      // inherits Major #1 (safeUnlink ENOENT-tolerant) and Major #2
+      // (multi-host skip via the foreign-host continue above) for free.
+      try { safeUnlink(currentSpeakerPath(rec.session_key)); } catch {}
       deleteSessionRecord(rec);
       const sideAnnotation = rec.sidecar_pid
         ? `; sidecar pid ${rec.sidecar_pid} ${sideStillThere ? "killed" : "already gone"}`
         : "";
       console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} gone${rec.monitor_pid ? `; monitor pid ${rec.monitor_pid} ${monStillThere ? "killed" : "already gone"}` : ""}${sideAnnotation})`);
       removed++;
+    }
+  }
+  // Slice-2 defense-in-depth: orphan current_speaker.json files whose
+  // session_key has no matching SessionRecord at all (e.g. user manually
+  // `rm`'d the session record but the speaker file remained). The
+  // session-pass above catches the common case (live session record + dead
+  // pid); this pass catches the manual-rm / file-corruption tail. cadence
+  // slice-2 round explicitly recommended this as a 5-LoC addition.
+  if (fs.existsSync(SESSIONS_DIR)) {
+    const liveKeys = new Set(listSessions().map((r) => r.session_key));
+    for (const f of fs.readdirSync(SESSIONS_DIR)) {
+      if (!f.endsWith(CURRENT_SPEAKER_FILE_SUFFIX)) continue;
+      // Reverse the sanitization in currentSpeakerPath: strip the suffix and
+      // use the remainder as the session_key candidate. Sanitization replaces
+      // characters with "_" so the round-trip isn't byte-perfect for
+      // non-conformant keys, but the only purpose here is to test "is this
+      // tail-aligned to a live session_key" — which `liveKeys.has` does.
+      const key = f.slice(0, -CURRENT_SPEAKER_FILE_SUFFIX.length);
+      if (liveKeys.has(key)) continue;
+      const fp = path.join(SESSIONS_DIR, f);
+      if (safeUnlink(fp)) {
+        console.log(`gc: removed orphan speaker file ${f} (no matching session record)`);
+        removed++;
+      }
     }
   }
   // Defense-in-depth: orphan sockets/pidfiles whose pidfile points to a dead
@@ -563,12 +606,17 @@ async function cmdWhoami(_args: string[]): Promise<void> {
   if (rec) {
     // Fast-path through sidecar when running (saves a session-file read on
     // every invocation). Falls back to the file-direct line on any error.
+    // current_speaker comes from the sidecar's response when available
+    // (sidecar reads the file fresh each dispatch — Bug 1 generalization),
+    // or file-direct via readCurrentSpeaker on the fallback path.
     const r = await sidecarRequest<any>(rec.agent, "whoami", {}, { timeoutMs: 200 });
     if (r.ok) {
-      console.log(`${r.result.agent}@${r.result.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${r.result.sidecar_pid}  uptime=${r.result.uptime_ms}ms`);
+      const speaker = r.result.current_speaker?.name ?? readCurrentSpeaker(key)?.name ?? "-";
+      console.log(`${r.result.agent}@${r.result.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${r.result.sidecar_pid}  speaker=${speaker}  uptime=${r.result.uptime_ms}ms`);
       return;
     }
-    console.log(`${rec.agent}@${rec.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${rec.sidecar_pid ?? "-"}`);
+    const speaker = readCurrentSpeaker(key)?.name ?? "-";
+    console.log(`${rec.agent}@${rec.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${rec.sidecar_pid ?? "-"}  speaker=${speaker}`);
     return;
   }
   // Fall through to env / .agent-name resolution to give a useful answer.
@@ -582,15 +630,324 @@ async function cmdWhoami(_args: string[]): Promise<void> {
   }
 }
 
+// ----- speaker (slice 2: multi-user transparency) -------------------------
+//
+// `speaker <name>` declares which human is currently typing in this Claude
+// Code session. State persists in conversations/.sessions/<key>.current_speaker.json
+// (live state only; durable speaker history lives in CONVO.md handoff
+// sections owned by keystone's record-turn dispatcher, not here). 0-arg
+// reads the current value; --clear unsets. Validation: name must be in
+// the active topology's agents list and must not equal `id.name` (a
+// self-edge would be a degenerate AI-talks-to-itself routing).
+//
+// Schema rationale: pulsar slice-2 round flagged a `prev` field as a
+// read-modify-write race surface; cadence flagged it as scope-creep.
+// Dropped. Audit trail is keystone's CONVO.md handoff sections.
+
+function cmdSpeaker(args: string[]): void {
+  const key = currentSessionKey();
+  const rec = readSessionRecord(key);
+  if (!rec) {
+    die(`no active session for key ${key} — run \`agent-chat init <name>\` first.`);
+  }
+  if (args.length === 0) {
+    const cur = readCurrentSpeaker(key);
+    if (!cur) console.log("(no speaker set)");
+    else console.log(`${cur.name}  set_at=${cur.set_at}`);
+    return;
+  }
+  if (args.length === 1 && args[0] === "--clear") {
+    const cur = readCurrentSpeaker(key);
+    const removed = safeUnlink(currentSpeakerPath(key));
+    if (removed && cur) {
+      console.error(`[agent-chat] speaker cleared (was ${cur.name})`);
+    } else if (removed) {
+      console.error(`[agent-chat] speaker cleared`);
+    } else {
+      console.error(`[agent-chat] speaker was already not set`);
+    }
+    return;
+  }
+  if (args.length !== 1 || args[0].startsWith("--")) {
+    die("usage: agent-chat.ts speaker [<name> | --clear]");
+  }
+  const name = args[0];
+  // Validate against the active topology's agents list. Inline check —
+  // shared isAgentInTopology helper deferred per orion's Phase-2 cross-slice
+  // tension #2 resolution ("keep validation inline; add a helper if a third
+  // caller materializes").
+  const topo = loadTopology(rec.topology);
+  if (!topo.agents.includes(name)) {
+    die(`speaker "${name}" is not a declared agent in topology "${rec.topology}". Known agents: ${topo.agents.join(", ")}`);
+  }
+  // No self-edge: setting the speaker to the same name as the AI session
+  // would yield an alphabetical edge id of `<name>-<name>` which canonicalizes
+  // to a degenerate self-loop. Refuse loudly.
+  if (name === rec.agent) {
+    die(`speaker "${name}" is the same as this session's agent identity (${rec.agent}); a self-edge is not meaningful.`);
+  }
+  const prev = readCurrentSpeaker(key);
+  writeCurrentSpeaker(key, name);
+  if (prev) {
+    console.error(`[agent-chat] speaker: ${prev.name} → ${name}`);
+  } else {
+    console.error(`[agent-chat] speaker: ${name}`);
+  }
+}
+
+// ----- record-turn (slice 3) ----------------------------------------------
+//
+// `record-turn` is the multi-user dispatcher: it reads the current speaker
+// (set by `agent-chat speaker`, slice 2) and the AI agent's identity
+// (resolveIdentity), then appends a (user-turn, assistant-response) section
+// pair to the appropriate <speaker>-<agent> edge with the standard lock +
+// flip cycle.
+//
+// v1 wire shape: agents run this CLI at end of every assistant response.
+// Claude Code's `Stop` hook fires only at session end (no per-turn payload),
+// so a hook-driven path is deferred to a future PostResponse hook (see
+// docs/HOOK_REQUEST.md).
+//
+// Idempotency: per-edge `recorded_turns.jsonl` ledger keyed by sha256 of
+// (speaker + user_prompt + assistant_response). A second invocation with
+// the same payload is a silent no-op so retried hook calls don't double-write.
+
+function recordedTurnsLedger(edgeDir: string): string {
+  return path.join(edgeDir, "recorded_turns.jsonl");
+}
+
+// Read current_speaker via sidecar fast-path (carina's `speaker` UDS method)
+// with file-direct fallback (carina's lib-exported `readCurrentSpeaker`).
+// Returns the speaker name or null. Renamed from the obvious `readSpeaker`
+// to avoid shadowing the lib-exported sync helper of the same name.
+async function fetchSpeaker(agent: string, key: string): Promise<string | null> {
+  // Sidecar `speaker` UDS method returns `{ current_speaker: {name, set_at} | null }`
+  // — the field is nested under `current_speaker`. Pre-fix, this read
+  // `r.result.name` (always undefined) and silently fell through to the
+  // file-direct path on every call, defeating the dedicated UDS optimization
+  // that motivated shipping the method in slice 2. Caught at Phase-4
+  // cross-review by carina (multi-user rollout).
+  const r = await sidecarRequest<any>(agent, "speaker", {}, { timeoutMs: 200 });
+  if (r.ok && r.result?.current_speaker?.name) return r.result.current_speaker.name as string;
+  return readCurrentSpeaker(key)?.name ?? null;
+}
+
+function turnHash(speaker: string, user: string, assistant: string): string {
+  const h = crypto.createHash("sha256");
+  h.update(speaker + "\n" + user + "\n" + assistant);
+  return h.digest("hex");
+}
+
+function alreadyRecorded(ledgerPath: string, sha256: string): boolean {
+  if (!fs.existsSync(ledgerPath)) return false;
+  const text = fs.readFileSync(ledgerPath, "utf8");
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    try { if (JSON.parse(line)?.sha256 === sha256) return true; } catch {}
+  }
+  return false;
+}
+
+function appendLedger(
+  ledgerPath: string,
+  entry: { sha256: string; ts: string; speaker: string; agent: string },
+): void {
+  fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+  fs.appendFileSync(ledgerPath, JSON.stringify(entry) + "\n");
+  try { fs.chmodSync(ledgerPath, 0o600); } catch {}
+}
+
+// Take the floor on an edge under speaker-switch / user-typed-prompt
+// authorization. The OLD-edge handoff write needs this because the prior
+// .turn points at the leaving speaker; the NEW-edge normal flow needs it
+// because the speaker had the floor before they typed. Both are equivalent
+// to the user-authorized atomic .turn rename pattern documented for
+// upgrade-ping unparks. Returns true if the edge ended up with .turn=agent
+// (or already was), false if the edge was uninitialized.
+function authorityTakeFloor(turnFile: string, agent: string): boolean {
+  const cur = fs.existsSync(turnFile) ? fs.readFileSync(turnFile, "utf8").trim() : null;
+  if (cur === null) return false;
+  if (cur === agent) return true;
+  const tmp = `${turnFile}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, agent);
+  fs.renameSync(tmp, turnFile);
+  return true;
+}
+
+async function cmdRecordTurn(args: string[]): Promise<void> {
+  let userText: string | undefined;
+  let assistantText: string | undefined;
+  let useStdin = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--user") userText = args[++i];
+    else if (args[i] === "--assistant") assistantText = args[++i];
+    else if (args[i] === "--stdin") useStdin = true;
+  }
+  if (useStdin) {
+    const stdin = fs.readFileSync(0, "utf8");
+    try {
+      const obj = JSON.parse(stdin);
+      userText = userText ?? obj.user;
+      assistantText = assistantText ?? obj.assistant;
+    } catch (err) {
+      die(`--stdin: invalid JSON: ${(err as Error).message}`, 70);
+    }
+  }
+  if (typeof userText !== "string" || typeof assistantText !== "string") {
+    die(
+      "usage: agent-chat.ts record-turn --user <text> --assistant <text>\n" +
+      "       agent-chat.ts record-turn --stdin   (reads JSON {user, assistant})",
+      70,
+    );
+  }
+
+  const id = resolveIdentity();
+  const topo = loadTopology(id.topology);
+  const key = currentSessionKey();
+  const rec = readSessionRecord(key);
+
+  // Speaker required — transparency invariant. Never silently drop a turn.
+  const speaker = await fetchSpeaker(id.name, key);
+  if (!speaker) die("no current speaker; run 'agent-chat speaker <name>' first", 64);
+  if (!topo.agents.includes(speaker)) {
+    die(
+      `speaker '${speaker}' is not a member of topology '${id.topology}'; ` +
+      `valid speakers: ${topo.agents.join(", ")}`,
+      65,
+    );
+  }
+
+  const edges = edgesOf(topo, id.name);
+  const edge = edges.find((e) => e.peer === speaker);
+  if (!edge) {
+    die(
+      `no edge between speaker '${speaker}' and agent '${id.name}' in topology '${id.topology}'`,
+      66,
+    );
+  }
+  // Defensive: refuse AI-to-AI misroute. Humans have higher topology degree
+  // (in agents.org.yaml: humans 11, AI 5). record-turn handles only the
+  // human→AI direction; AI-to-AI uses turn.ts directly.
+  const sd = neighborsOf(topo, speaker).length;
+  const ad = neighborsOf(topo, id.name).length;
+  if (sd <= ad) {
+    die(
+      `refuse: speaker '${speaker}' (degree ${sd}) is not a higher-degree (human) shape ` +
+      `than agent '${id.name}' (degree ${ad}). record-turn is for human→AI only; ` +
+      `AI-to-AI uses turn.ts directly.`,
+      66,
+    );
+  }
+
+  const sha = turnHash(speaker, userText, assistantText);
+  const ledger = recordedTurnsLedger(edge.dir);
+  if (alreadyRecorded(ledger, sha)) {
+    console.log(`record-turn: idempotent skip — turn already recorded (sha256=${sha.slice(0, 12)}…)`);
+    return;
+  }
+
+  // Speaker-change handoff write on the OLD edge.
+  const prevSpeaker = rec?.last_recorded_speaker;
+  if (prevSpeaker && prevSpeaker !== speaker) {
+    const oldEdge = edges.find((e) => e.peer === prevSpeaker);
+    if (oldEdge) {
+      ensureEdgeFiles(oldEdge, [prevSpeaker, id.name].sort() as [string, string]);
+      authorityTakeFloor(oldEdge.turn, id.name);
+      const oldBody = `${lockTag(id.name)} ${utcStamp()}\n`;
+      try {
+        exclusiveWriteOrFail(oldEdge.lock, oldBody);
+      } catch (err: any) {
+        if (err.code !== "EEXIST") throw err;
+        const lk = parseLockFile(oldEdge.lock);
+        if (lk && lk.agent === id.name && lk.pid === stableSessionPid()) {
+          // idempotent re-lock — proceed
+        } else if (lk && !processIsOriginal(lk.pid, lk.starttime)) {
+          fs.unlinkSync(oldEdge.lock);
+          exclusiveWriteOrFail(oldEdge.lock, oldBody);
+        } else {
+          die(
+            `refuse: handoff blocked — old edge ${oldEdge.id} locked by ` +
+            `${lk?.agent ?? "?"}@${lk?.host ?? "?"}:${lk?.pid ?? "?"}`,
+            71,
+          );
+        }
+      }
+      try {
+        const handoffStamp = utcStamp();
+        const handoffSection =
+          `\n---\n\n## ${prevSpeaker} — handoff to ${speaker} (UTC ${handoffStamp})\n\n` +
+          `Heading out; ${speaker} is taking over this thread.\n\n→ parked\n`;
+        fs.appendFileSync(oldEdge.convo, handoffSection);
+        writeTurnAtomic(oldEdge.turn, "parked");
+      } finally {
+        try { if (fs.existsSync(oldEdge.lock)) fs.unlinkSync(oldEdge.lock); } catch {}
+      }
+    }
+  }
+
+  // Main flow on the NEW edge.
+  ensureEdgeFiles(edge, [speaker, id.name].sort() as [string, string]);
+  authorityTakeFloor(edge.turn, id.name);
+  const body = `${lockTag(id.name)} ${utcStamp()}\n`;
+  try {
+    exclusiveWriteOrFail(edge.lock, body);
+  } catch (err: any) {
+    if (err.code !== "EEXIST") throw err;
+    const lk = parseLockFile(edge.lock);
+    if (lk && lk.agent === id.name && lk.pid === stableSessionPid()) {
+      // idempotent re-lock — proceed
+    } else if (lk && !processIsOriginal(lk.pid, lk.starttime)) {
+      fs.unlinkSync(edge.lock);
+      exclusiveWriteOrFail(edge.lock, body);
+    } else {
+      // Restore .turn to its pre-takefloor value so peers don't observe a
+      // phantom turn-flip without a section. authorityTakeFloor wrote
+      // .turn=id.name (us); on lock-blocked die, peer's monitor would see
+      // value→<id.name> + no .md-grew, refire on every poll. Reverting to
+      // `speaker` matches the protocol invariant "speaker has the floor
+      // before they speak; agent only takes it during the brief
+      // append-and-flip window." Caught at Phase-4 cross-review by carina
+      // (multi-user rollout, nit #2).
+      try { writeTurnAtomic(edge.turn, speaker); } catch {}
+      die(
+        `refuse: edge ${edge.id} locked by another live session ` +
+        `${lk?.agent ?? "?"}@${lk?.host ?? "?"}:${lk?.pid ?? "?"}`,
+        72,
+      );
+    }
+  }
+  try {
+    const stamp = utcStamp();
+    const sectionPair =
+      `\n---\n\n## ${speaker} — user turn (UTC ${stamp})\n\n${userText}\n\n→ ${id.name}\n` +
+      `\n---\n\n## ${id.name} — assistant response (UTC ${stamp})\n\n${assistantText}\n\n→ ${speaker}\n`;
+    fs.appendFileSync(edge.convo, sectionPair);
+    writeTurnAtomic(edge.turn, speaker);
+    appendLedger(ledger, { sha256: sha, ts: stamp, speaker, agent: id.name });
+  } finally {
+    try { if (fs.existsSync(edge.lock)) fs.unlinkSync(edge.lock); } catch {}
+  }
+
+  // Update session record so next record-turn detects speaker changes.
+  if (rec) {
+    rec.last_recorded_speaker = speaker;
+    writeSessionRecord(rec);
+  }
+
+  console.log(`record-turn: appended user+assistant pair on edge ${edge.id}; flipped to ${speaker}`);
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
 switch (cmd) {
-  case "init":     cmdInit(rest); break;
-  case "exit":     void cmdExit(rest); break;
-  case "who":      cmdWho(rest); break;
-  case "gc":       cmdGc(rest); break;
-  case "whoami":   void cmdWhoami(rest); break;
+  case "init":         cmdInit(rest); break;
+  case "exit":         void cmdExit(rest); break;
+  case "who":          cmdWho(rest); break;
+  case "gc":           cmdGc(rest); break;
+  case "whoami":       void cmdWhoami(rest); break;
+  case "speaker":      cmdSpeaker(rest); break;
+  case "record-turn":  void cmdRecordTurn(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -614,7 +971,21 @@ switch (cmd) {
       `      With --prune-logs, also remove monitor log files for agents\n` +
       `      that aren't live on this host.\n\n` +
       `  whoami\n` +
-      `      Print this session's identity in one line.\n`,
+      `      Print this session's identity in one line.\n\n` +
+      `  speaker [<name> | --clear]\n` +
+      `      Multi-user transparency: declare which human is currently typing\n` +
+      `      in this Claude Code session. <name> must be a declared agent in\n` +
+      `      the active topology. No-arg prints current; --clear unsets. Read\n` +
+      `      by 'record-turn' to route turns to <speaker>-<agent> edges.\n\n` +
+      `  record-turn --user <text> --assistant <text>\n` +
+      `  record-turn --stdin\n` +
+      `      Append a (user, assistant) section pair to the appropriate\n` +
+      `      <speaker>-<agent> edge. Reads current_speaker from session state\n` +
+      `      (set by 'agent-chat speaker'). Idempotent under retry via per-edge\n` +
+      `      recorded_turns.jsonl ledger keyed by sha256(speaker, user, assistant).\n` +
+      `      Emits a handoff section on the OLD edge when the speaker changes.\n` +
+      `      Exit codes: 64=no current speaker, 65=unknown speaker, 66=no edge,\n` +
+      `      70=bad args, 71/72=lock blocked.\n`,
     );
     break;
   default:

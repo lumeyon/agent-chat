@@ -37,7 +37,8 @@ import {
   pidIsAlive, pidStarttime, processIsOriginal,
   utcStamp, readTurn, parseLockFile, parseSections, sectionMeta,
   readSessionRecord, currentSessionKey,
-  type SessionRecord,
+  readCurrentSpeaker,
+  type SessionRecord, type CurrentSpeaker,
 } from "./lib.ts";
 
 // ---------------------------------------------------------------------------
@@ -601,7 +602,14 @@ async function dispatch(req: Request): Promise<Ok | Err> {
       // the monitor pid that init writes AFTER spawning the sidecar — see
       // carina's anomaly #1) are reflected without forcing a sidecar restart.
       // Cost is one small JSON read; negligible vs. UDS round-trip latency.
+      // Slice-2 (multi-user): same lesson generalized — current_speaker is
+      // written by `agent-chat speaker <name>` AFTER sidecar boot and can
+      // change at any time during a session. Read on every dispatch (no
+      // caching) to inherit the Bug-1 fix's discipline. Pulsar's slice-2
+      // round mandated this and pinned a regression test by name.
       const rec = readSelfSessionRecord();
+      const key = rec?.session_key ?? currentSessionKey();
+      const speaker = readCurrentSpeaker(key);
       return ok(req.id, {
         agent: id.name,
         topology: id.topology,
@@ -612,6 +620,7 @@ async function dispatch(req: Request): Promise<Ok | Err> {
         started_at: startedAt,
         host: os.hostname(),
         edges: edges.map((e) => e.id),
+        current_speaker: speaker,  // {name, set_at} | null
       });
     }
     case "time": {
@@ -775,6 +784,17 @@ async function dispatch(req: Request): Promise<Ok | Err> {
         is_first_turn: isFirstTurn,
       });
     }
+    case "speaker": {
+      // Slice-2 dedicated read-only fast-path. Returns the current_speaker
+      // record (or null) without the rest of the whoami payload — saves
+      // bytes on the hot path where keystone's record-turn dispatcher
+      // queries on every assistant turn (orion's Phase-2 cross-slice note).
+      // Read on every dispatch — same Bug-1 generalization as whoami.
+      const rec = readSelfSessionRecord();
+      const key = rec?.session_key ?? currentSessionKey();
+      const speaker = readCurrentSpeaker(key);
+      return ok(req.id, { current_speaker: speaker });  // {name, set_at} | null
+    }
     case "shutdown":
       // Reply first, then exit on next tick so the response actually ships.
       setImmediate(() => gracefulExit(0, "shutdown via IPC"));
@@ -833,11 +853,21 @@ async function bindServer(): Promise<net.Server> {
   const server = net.createServer({ allowHalfOpen: false }, handleConnection);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(socketPath, () => resolve());
+    server.listen(socketPath, () => {
+      // Mode 0600 is critical for filesystem-permission auth. Chmod INSIDE
+      // the listen callback (before resolving the promise) so a client that
+      // observes "socket is connectable" also observes the final mode. Pre-
+      // fix, the chmod ran AFTER the promise resolved, racing the test's
+      // `waitForSocket` polls under load — the test could `fs.statSync` and
+      // see pre-chmod 0o755 before the chmod fired. Caught at Phase-5
+      // integration during the multi-user rollout; the team's added tests
+      // pushed concurrent test load past the threshold where the race
+      // became observable.
+      try { fs.chmodSync(socketPath, 0o600); }
+      catch (e) { recordError(`chmod 0600 on socket failed: ${(e as Error).message}`); }
+      resolve();
+    });
   });
-  // Mode 0600 is critical for filesystem-permission auth.
-  try { fs.chmodSync(socketPath, 0o600); }
-  catch (e) { recordError(`chmod 0600 on socket failed: ${(e as Error).message}`); }
   return server;
 }
 

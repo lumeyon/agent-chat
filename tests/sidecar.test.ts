@@ -107,8 +107,18 @@ describe("sidecar.ts — slice 1: UDS skeleton + dispatcher", () => {
     const socketPath = path.join(CONVO_DIR, ".sockets", "orion.sock");
     await waitForSocket(socketPath);
 
-    const stat = fs.statSync(socketPath);
-    expect(stat.mode & 0o777).toBe(0o600);
+    // Under concurrent test-runner load, Bun's net.connect-based
+    // waitForSocket can succeed AFTER the kernel binds the socket file but
+    // BEFORE the sidecar's listen-callback chmod fires. Poll for the mode
+    // to settle to 0o600 (capped at 500ms; chmod is one syscall away).
+    let mode = -1;
+    const deadline = Date.now() + 500;
+    while (Date.now() < deadline) {
+      mode = fs.statSync(socketPath).mode & 0o777;
+      if (mode === 0o600) break;
+      await sleep(10);
+    }
+    expect(mode).toBe(0o600);
 
     const resp = await rawRequest(socketPath, { id: 1, method: "whoami" });
     expect(resp.id).toBe(1);

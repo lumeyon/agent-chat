@@ -15,6 +15,15 @@
 //                                                           Off by default to keep notifications
 //                                                           focused on .turn flips.
 //   bun scripts/monitor.ts --archive-threshold 200          line count above which the hint fires
+//   bun scripts/monitor.ts --no-parked-startup               suppress the parked branch of the
+//                                                           startup-pending pass. Default keeps
+//                                                           the topology-snapshot behavior on (one
+//                                                           line per parked edge at init); the flag
+//                                                           is for noise-sensitive deployments
+//                                                           (e.g. the org topology where humans
+//                                                           have degree 11 and an init can fire 11
+//                                                           parked-startup lines on every cycle —
+//                                                           sentinel S-HIGH-1 round-3 closeout).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -27,6 +36,7 @@ function parseArgs(argv: string[]) {
     archiveHint: false,
     archiveThreshold: 200,
     staleLockSec: 30,           // seconds a lock can be held before we suspect the holder is dead
+    noParkedStartup: false,     // suppress parked branch of startup-pending pass (degree-11 noise floor)
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--interval") a.interval = Math.max(1, parseInt(argv[++i] ?? "2", 10));
@@ -34,6 +44,7 @@ function parseArgs(argv: string[]) {
     else if (argv[i] === "--archive-hint") a.archiveHint = true;
     else if (argv[i] === "--archive-threshold") a.archiveThreshold = Math.max(50, parseInt(argv[++i] ?? "200", 10));
     else if (argv[i] === "--stale-lock-sec") a.staleLockSec = Math.max(1, parseInt(argv[++i] ?? "30", 10));
+    else if (argv[i] === "--no-parked-startup") a.noParkedStartup = true;
   }
   return a;
 }
@@ -84,10 +95,20 @@ for (const e of edges) {
 // transition and we'd never notify ourselves about the pending floor. Emit
 // once per edge that's actionable AT STARTUP (sentinel S-HIGH-1). Distinct
 // reason tag (`startup-pending`) so consumers can grep-distinguish.
+//
+// The parked branch is opt-out via --no-parked-startup. Sentinel's original
+// HIGH-1 spec emitted only for turn=me; the broader behavior was kept by
+// default because the topology-snapshot at restart is genuinely useful at
+// petersen degree=3. At org-topology degree=11 (humans) the noise scales
+// linearly and starts to dominate, so noise-sensitive deployments pass the
+// flag. (Round-3 closeout, item 1 of 7.)
 for (const e of edges) {
   const cur = state.get(e.id)!;
   const lockHeld = fs.existsSync(e.lock);
-  if (!lockHeld && (cur.turn === id.name || cur.turn === "parked")) {
+  const turnIsMe = cur.turn === id.name;
+  const turnParked = cur.turn === "parked";
+  const shouldEmit = !lockHeld && (turnIsMe || (turnParked && !args.noParkedStartup));
+  if (shouldEmit) {
     const now = new Date().toISOString();
     console.log(`${now} edge=${e.id} peer=${e.peer} .turn=${cur.turn} startup-pending — re-read ${e.convo}`);
   }

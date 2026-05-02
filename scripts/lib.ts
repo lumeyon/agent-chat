@@ -176,6 +176,11 @@ export type SessionRecord = {
   // records keep working unchanged.
   sidecar_pid?: number;
   sidecar_pid_starttime?: number;
+  // Last speaker recorded by `agent-chat record-turn` in this session. Used
+  // by record-turn to detect speaker switches and emit a handoff section on
+  // the OLD edge before routing the next turn to the NEW edge. Optional so
+  // legacy session records keep working unchanged.
+  last_recorded_speaker?: string;
 };
 
 export const SESSIONS_DIR = path.join(CONVERSATIONS_DIR, ".sessions");
@@ -217,6 +222,74 @@ export function cursorsFilePath(agent: string): string {
 
 export function logPathFor(agent: string, kind: "sidecar" | "monitor"): string {
   return path.join(LOGS_DIR, `${kind}-${safeAgent(agent)}.log`);
+}
+
+// ---------------------------------------------------------------------------
+// current_speaker.json — slice 2 (multi-user transparency).
+//
+// One file per session, keyed by session_key. Live-state only — declares
+// which human is currently typing in this Claude Code session. Schema is
+// {name, set_at}. No `prev` field: pulsar slice-2 round flagged that as a
+// read-modify-write race surface; cadence flagged it as scope-creep
+// (durable speaker history belongs in keystone's CONVO.md handoff sections,
+// not in a live-state file). Mode 0600 to avoid leaking human identity to
+// other local users on shared hosts (pulsar's mode recommendation).
+//
+// Lifecycle: written by `agent-chat speaker <name>`, read on every dispatch
+// by sidecar's whoami/speaker UDS methods (no caching — same lesson as
+// orion's Bug 1 fix for monitor_pid), unlinked by `agent-chat exit` and
+// reclaimed by `agent-chat gc` for orphan session_keys.
+// ---------------------------------------------------------------------------
+
+export const CURRENT_SPEAKER_FILE_SUFFIX = ".current_speaker.json";
+
+export type CurrentSpeaker = {
+  name: string;
+  set_at: string;
+};
+
+export function currentSpeakerPath(key: string): string {
+  // Mirror sessionFile's sanitization so the writer and reaper resolve
+  // identical paths regardless of session_key shape (cadence flagged
+  // path-helper drift between writer and reaper as a slice-2 risk).
+  const safe = key.replace(/[^A-Za-z0-9_:.-]/g, "_");
+  return path.join(SESSIONS_DIR, `${safe}${CURRENT_SPEAKER_FILE_SUFFIX}`);
+}
+
+export function readCurrentSpeaker(key: string): CurrentSpeaker | null {
+  const f = currentSpeakerPath(key);
+  if (!fs.existsSync(f)) return null;
+  try {
+    const obj = JSON.parse(fs.readFileSync(f, "utf8"));
+    if (!obj || typeof obj.name !== "string" || typeof obj.set_at !== "string") return null;
+    return { name: obj.name, set_at: obj.set_at };
+  } catch (err) {
+    // Surface to stderr so a corrupt file is observable; return null so
+    // callers see "speaker not set" rather than crashing (the documented
+    // ENOENT-equivalent semantic). Same shape as readSessionRecord's
+    // corrupt-file handling.
+    console.error(`[agent-chat] speaker file ${f} is unreadable: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+export function writeCurrentSpeaker(key: string, name: string): void {
+  ensureControlDirs();
+  const rec: CurrentSpeaker = { name, set_at: utcStamp() };
+  const json = JSON.stringify(rec, null, 2) + "\n";
+  // Mode 0600: file embeds human identity, default umask would yield 0644
+  // and leak the identifier to other local users on shared hosts.
+  writeFileAtomic(currentSpeakerPath(key), json, { mode: 0o600 });
+}
+
+// ENOENT-tolerant unlink. Mirrors agent-chat.ts:safeUnlink for callers that
+// need it from lib.ts (sidecar.ts, tests, future modules) without forcing
+// them to import from agent-chat.ts. Returns true if the file was removed,
+// false if it was already gone (peer race or already-cleaned). Throws on
+// any other error so a real EACCES / EBUSY surfaces.
+export function safeUnlink(p: string): boolean {
+  try { fs.unlinkSync(p); return true; }
+  catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
 }
 
 // Returns the session key for the *current* process. Must be:
@@ -280,9 +353,16 @@ export function writeSessionRecord(rec: SessionRecord): void {
   // --whoami) never see an empty/partial JSON window during a truncate-then-
   // write race (lyra round-2 Q3). writeFileAtomic uses tmp + rename within
   // the same directory.
+  // Mode 0o600 (owner-only): session and presence records contain
+  // identity-tagged data (`agent: <name>@<host>:<pid>`); on a shared host,
+  // 0o644 default would leak the identifier to other local users. Same
+  // rationale that justified 0o600 on .sockets/<agent>.sock and on the
+  // current_speaker.json file shipped in the multi-user rollout. Caught at
+  // Phase-4 cross-review by lumeyon as mode-asymmetry concern; uniform
+  // 0o600 across all per-session writes is the defense-in-depth answer.
   const json = JSON.stringify(rec, null, 2) + "\n";
-  writeFileAtomic(sessionFile(rec.session_key), json);
-  writeFileAtomic(presenceFile(rec.agent), json);
+  writeFileAtomic(sessionFile(rec.session_key), json, { mode: 0o600 });
+  writeFileAtomic(presenceFile(rec.agent), json, { mode: 0o600 });
 }
 
 export function deleteSessionRecord(rec: SessionRecord): void {
@@ -305,7 +385,19 @@ export function listSessions(): SessionRecord[] {
   const out: SessionRecord[] = [];
   for (const f of fs.readdirSync(SESSIONS_DIR)) {
     if (!f.endsWith(".json")) continue;
-    try { out.push(JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), "utf8"))); } catch {}
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), "utf8"));
+      // Defensive shape validation: SESSIONS_DIR also holds per-session
+      // sidecar artifacts like `<key>.current_speaker.json` that share the
+      // `.json` suffix but are NOT SessionRecords. Pre-fix, those files
+      // contaminated the return — `cmdWho`'s `r.agent.padEnd(...)` then
+      // crashed on `undefined`. Caught at Phase-4 cross-review by lumeyon
+      // (multi-user rollout); the fix is general defense against any future
+      // foreign `.json` file in SESSIONS_DIR (test fixtures, manual
+      // breadcrumbs, future feature sidecars).
+      if (!parsed || typeof parsed.agent !== "string" || typeof parsed.session_key !== "string") continue;
+      out.push(parsed as SessionRecord);
+    } catch {}
   }
   return out;
 }
@@ -785,12 +877,19 @@ export function indexFile(edgeDir: string): string {
 // loss between write and the page cache flush can't strand a 0-byte file.
 // Used by archive seal (which destroys the source) and by appendIndexEntry
 // when called from a commit path (durability matters once we've validated).
-export function writeFileAtomic(p: string, content: string, opts: { fsync?: boolean } = {}): void {
+export function writeFileAtomic(p: string, content: string, opts: { fsync?: boolean; mode?: number } = {}): void {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const tmp = `${p}.tmp.${process.pid}.${Date.now()}`;
-  const fd = fs.openSync(tmp, "w");
+  // openSync's mode arg is masked by umask at create time. fchmodSync after
+  // open forces the exact mode the caller requested (e.g. 0o600 for
+  // current_speaker.json which embeds human identity — pulsar's slice-2
+  // recommendation; mode 0644 default would leak it to other local users).
+  const fd = opts.mode != null
+    ? fs.openSync(tmp, "w", opts.mode)
+    : fs.openSync(tmp, "w");
   try {
     fs.writeFileSync(fd, content);
+    if (opts.mode != null) fs.fchmodSync(fd, opts.mode);
     if (opts.fsync) fs.fsyncSync(fd);
   } finally { fs.closeSync(fd); }
   fs.renameSync(tmp, p);

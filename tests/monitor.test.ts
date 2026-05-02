@@ -186,3 +186,68 @@ describe("monitor.ts new emissions (P1: startup-pending, lock-stale, protocol-vi
     expect(lines[0]).toMatch(/by=orion@/);
   }, 12000);
 });
+
+describe("monitor.ts --no-parked-startup flag (sentinel S-HIGH-1 round-3 closeout)", () => {
+  // Default behavior: startup-pending fires for parked edges (topology snapshot
+  // at restart). Org-topology human sessions at degree=11 produce up to 11
+  // parked-startup notifications per cycle — load-bearing UX issue. The flag
+  // suppresses the parked branch while leaving turn=me emission intact.
+  // Helper to park the lumeyon-orion edge cleanly: orion flips to lumeyon,
+  // lumeyon locks/parks/unlocks. Both tests need this same pre-state.
+  const parkEdge = () => {
+    runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV);
+    runScript("turn.ts", ["lock", "orion"], LUMEYON_ENV);
+    runScript("turn.ts", ["flip", "orion", "parked"], LUMEYON_ENV);
+    runScript("turn.ts", ["unlock", "orion"], LUMEYON_ENV);
+  };
+
+  test("default: parked edge fires startup-pending", async () => {
+    parkEdge();
+    const child = spawnScript("monitor.ts", ["--interval", "1"], LUMEYON_ENV) as
+      ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try { await sleep(1000); }
+    finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /startup-pending/.test(l));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("edge=lumeyon-orion");
+    expect(lines[0]).toContain(".turn=parked");
+  }, 8000);
+
+  test("--no-parked-startup: parked edge suppressed (no startup-pending emitted)", async () => {
+    parkEdge();
+    const child = spawnScript("monitor.ts", ["--interval", "1", "--no-parked-startup"], LUMEYON_ENV) as
+      ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try { await sleep(1000); }
+    finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /startup-pending/.test(l));
+    // No parked startup-pending. The flag suppressed the only actionable edge
+    // (lumeyon-orion is parked; lumeyon-sentinel and lumeyon-lyra were never
+    // initialized so their .turn returns null and they're not actionable).
+    expect(lines.length).toBe(0);
+  }, 8000);
+
+  test("--no-parked-startup: turn=me edge STILL fires startup-pending (only parked branch is gated)", async () => {
+    // Setup: orion flips to lumeyon, leaves it (turn=lumeyon, no parking).
+    runScript("turn.ts", ["flip", "lumeyon", "lumeyon"], ORION_ENV);
+    const child = spawnScript("monitor.ts", ["--interval", "1", "--no-parked-startup"], LUMEYON_ENV) as
+      ChildProcessByStdio<null, Readable, Readable>;
+    let stdoutBuf = "";
+    child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+    const exited = new Promise<void>((res) => child.on("exit", () => res()));
+    try { await sleep(1000); }
+    finally { child.kill("SIGTERM"); await exited; }
+
+    const lines = stdoutBuf.split("\n").filter((l) => /startup-pending/.test(l));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("edge=lumeyon-orion");
+    expect(lines[0]).toContain(".turn=lumeyon");
+  }, 8000);
+});

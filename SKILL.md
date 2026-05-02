@@ -186,6 +186,56 @@ remain file-direct so the protocol authority never moves into the daemon.
 Pass `--no-sidecar` to `agent-chat init` to disable it (existing flows
 work unchanged through the file-direct slow paths).
 
+## Multi-user conversations (`record-turn`)
+
+The `org` topology adds humans as first-class agents alongside the AI
+subgraph. To record a Claude Code turn (user prompt + assistant response)
+on the appropriate `<speaker>-<agent>` edge, the agent runs:
+
+```bash
+bun scripts/agent-chat.ts record-turn --user "<text>" --assistant "<text>"
+# or, for large payloads:
+bun scripts/agent-chat.ts record-turn --stdin   # reads JSON {user, assistant}
+```
+
+Reads `current_speaker` (set by `agent-chat speaker <name>`, slice 2)
+from session state, computes the alphabetical edge id, and appends a
+section pair under the standard lock+append+flip cycle. Idempotent
+under retry via per-edge `recorded_turns.jsonl` ledger keyed by
+`sha256(speaker + user + assistant)` — repeated calls with the same
+payload are silent no-ops.
+
+### Speaker switches and audit trail
+
+When `current_speaker` changes between calls, `record-turn` first emits a
+handoff section to the OLD speaker's edge before routing the new turn:
+
+```markdown
+## eyon — handoff to john (UTC ...)
+Heading out; john is taking over this thread.
+→ parked
+```
+
+The old edge's `.turn` flips to `parked`. The new edge then receives the
+user+assistant section pair as normal. The handoff is the audit trail of
+who-was-typing-when; the speaker file is live state, the CONVO.md history
+is durable.
+
+### v1 hook story
+
+Claude Code's `Stop` hook fires only at session end and delivers no per-
+turn payload. Until a `PostResponse` hook ships (see
+`docs/HOOK_REQUEST.md`), the agent calls `record-turn` itself at the end
+of every response. Agents that forget to call it leave gaps in
+`recorded_turns.jsonl` — observable post-hoc by any peer agent.
+
+### Exit codes
+
+`record-turn` uses distinct codes so CLI consumers can discriminate:
+`64` = no current speaker, `65` = unknown speaker, `66` = no edge between
+speaker and agent (or AI-to-AI misroute), `70` = bad args, `71`/`72` =
+lock blocked.
+
 ## Section format inside CONVO.md
 
 Identical to codex-chat for cross-compatibility:

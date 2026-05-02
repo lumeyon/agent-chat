@@ -83,6 +83,33 @@ describe("agent-chat init", () => {
     expect(r.stdout).toContain("✓ this session is lumeyon@petersen");
     expect(r.stderr).toContain("inferring topology");
   });
+
+  // Load-bearing test for slice 1: init a HUMAN agent (eyon) on the org
+  // topology and exercise the full init path end-to-end. This is the
+  // discipline-rule receipt — would catch any presence-file path-traversal
+  // regression (lyra L1), displayTag drift (lyra L2), or AI-only branch
+  // sneaking into resolveIdentity. Round-2 found two bugs (monitor_alive
+  // placeholder + fractional-seconds regex) that smoke tests missed and
+  // only this kind of end-to-end exercise caught.
+  test("init eyon org writes session + presence; whoami enumerates 11 human-degree neighbors", () => {
+    const sid = fakeSessionId("eyon");
+    const r = runScript("agent-chat.ts", ["init", "eyon", "org", "--no-monitor"],
+      envWith({ CLAUDE_SESSION_ID: sid }));
+    expect(r.stdout).toContain("✓ this session is eyon@org");
+    // Human degree under the org topology is 11 (10 AI + 1 other human).
+    expect(r.stdout).toMatch(/neighbors \(11\):/);
+    // Verify session record + presence file landed at the sanitized path.
+    const sess = readSession(CONVO_DIR, sid);
+    expect(sess).not.toBeNull();
+    expect(sess.agent).toBe("eyon");
+    expect(sess.topology).toBe("org");
+    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "eyon.json"))).toBe(true);
+    // whoami source-attribution pulls from the session record, not env / .agent-name.
+    const w = runScript("agent-chat.ts", ["whoami"],
+      envWith({ CLAUDE_SESSION_ID: sid }));
+    expect(w.stdout).toContain("eyon@org");
+    expect(w.stdout).toContain(`session_key=${sid}`);
+  });
 });
 
 describe("agent-chat exit", () => {

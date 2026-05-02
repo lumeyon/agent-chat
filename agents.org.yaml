@@ -1,0 +1,56 @@
+topology: org
+description: Multi-user organization topology. 2 humans (eyon, john) + 10 AI agents (the petersen subgraph). Every human has an edge to every AI; the two humans share an edge; AI-to-AI edges preserve the petersen graph verbatim. Total 36 edges (1 human-human + 20 human-AI + 15 petersen). Humans and AI are first-class agents — uniform treatment, no privacy controls; the audit trail is the only access mechanism. The human-set is implicit (derivable from edge-degree distribution: humans have degree 11, AI have degree 5), no schema marker.
+agents:
+  - eyon
+  - john
+  - orion
+  - lumeyon
+  - lyra
+  - keystone
+  - sentinel
+  - vanguard
+  - carina
+  - pulsar
+  - cadence
+  - rhino
+edges:
+  # human × human (1)
+  - [eyon, john]
+  # eyon × AI (10)
+  - [eyon, orion]
+  - [eyon, lumeyon]
+  - [eyon, lyra]
+  - [eyon, keystone]
+  - [eyon, sentinel]
+  - [eyon, vanguard]
+  - [eyon, carina]
+  - [eyon, pulsar]
+  - [eyon, cadence]
+  - [eyon, rhino]
+  # john × AI (10)
+  - [john, orion]
+  - [john, lumeyon]
+  - [john, lyra]
+  - [john, keystone]
+  - [john, sentinel]
+  - [john, vanguard]
+  - [john, carina]
+  - [john, pulsar]
+  - [john, cadence]
+  - [john, rhino]
+  # AI × AI petersen (15) — verbatim from agents.petersen.yaml
+  - [orion, lumeyon]
+  - [lumeyon, sentinel]
+  - [sentinel, vanguard]
+  - [vanguard, keystone]
+  - [keystone, orion]
+  - [orion, carina]
+  - [lumeyon, lyra]
+  - [sentinel, pulsar]
+  - [vanguard, cadence]
+  - [keystone, rhino]
+  - [carina, pulsar]
+  - [pulsar, rhino]
+  - [rhino, lyra]
+  - [lyra, cadence]
+  - [cadence, carina]

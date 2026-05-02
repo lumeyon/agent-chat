@@ -5,7 +5,7 @@ import {
   parseTopologyYaml, edgeId, neighborsOf, edgesOf, parseSections,
   splitForArchive, sectionMeta, timeRangeOf, validateSummary,
   extractTldr, extractKeywords, parseLockFile, processTag,
-  archiveId, depthPolicy, renderSummaryStub,
+  archiveId, depthPolicy, renderSummaryStub, loadTopology,
 } from "../scripts/lib.ts";
 
 describe("parseTopologyYaml", () => {
@@ -335,6 +335,63 @@ describe("neighborsOf / edgesOf", () => {
     expect(edges).toHaveLength(2);
     expect(edges.map((e) => e.peer)).toEqual(["b", "c"]);
     expect(edges.map((e) => e.id)).toEqual(["a-b", "a-c"]);
+  });
+});
+
+// org topology: 2 humans (eyon, john) + 10 AI agents = 12 agents,
+// 36 edges (1 human-human + 20 human-AI + 15 petersen-AI-AI). The
+// existing parseTopologyYaml + loadTopology + neighborsOf accept it
+// without code changes — humans-as-agents is a pure naming convention
+// atop the existing primitives. These tests pin that contract: any
+// regression that special-cases agent role or breaks edge enumeration
+// at this density would fail here.
+describe("loadTopology — org topology (multi-user, slice 1)", () => {
+  test("loads 12 agents and 36 edges", () => {
+    const t = loadTopology("org");
+    expect(t.topology).toBe("org");
+    expect(t.agents).toHaveLength(12);
+    expect(t.agents).toContain("eyon");
+    expect(t.agents).toContain("john");
+    expect(t.agents).toContain("orion");
+    expect(t.edges).toHaveLength(36);
+  });
+
+  test("human degree is 11, AI degree is 5", () => {
+    const t = loadTopology("org");
+    expect(neighborsOf(t, "eyon")).toHaveLength(11);
+    expect(neighborsOf(t, "john")).toHaveLength(11);
+    expect(neighborsOf(t, "orion")).toHaveLength(5);
+    expect(neighborsOf(t, "rhino")).toHaveLength(5);
+    // Every human neighbors every AI plus the other human.
+    expect(neighborsOf(t, "eyon")).toContain("john");
+    expect(neighborsOf(t, "eyon")).toContain("orion");
+    // AI sees both humans plus their petersen peers.
+    expect(neighborsOf(t, "orion")).toContain("eyon");
+    expect(neighborsOf(t, "orion")).toContain("john");
+    expect(neighborsOf(t, "orion")).toContain("lumeyon");
+  });
+
+  test("edge canonicalization is order-independent for human-AI edges", () => {
+    expect(edgeId("eyon", "orion")).toBe("eyon-orion");
+    expect(edgeId("orion", "eyon")).toBe("eyon-orion");
+    expect(edgeId("eyon", "john")).toBe("eyon-john");
+    expect(edgeId("john", "eyon")).toBe("eyon-john");
+  });
+
+  test("edgesOf for a human enumerates all 11 edges with canonical ids", () => {
+    const t = loadTopology("org");
+    const edges = edgesOf(t, "eyon");
+    expect(edges).toHaveLength(11);
+    // Each edge id matches the alphabetical canonicalization. "eyon" sorts
+    // AFTER "cadence" and "carina" but BEFORE all other peers, so 9 edges
+    // start with "eyon-" and 2 start with the peer name.
+    for (const e of edges) {
+      expect(e.id).toBe(edgeId("eyon", e.peer));
+    }
+    expect(edges.find((e) => e.peer === "carina")!.id).toBe("carina-eyon");
+    expect(edges.find((e) => e.peer === "cadence")!.id).toBe("cadence-eyon");
+    expect(edges.find((e) => e.peer === "orion")!.id).toBe("eyon-orion");
+    expect(edges.find((e) => e.peer === "john")!.id).toBe("eyon-john");
   });
 });
 
