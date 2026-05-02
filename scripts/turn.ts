@@ -20,6 +20,7 @@ import {
   stableSessionPid, pidStarttime,
   exclusiveWriteOrFail,
 } from "./lib.ts";
+import { sidecarRequest } from "./sidecar-client.ts";
 
 function die(msg: string): never { console.error(msg); process.exit(2); }
 
@@ -33,8 +34,30 @@ const edge = edges.find((e) => e.peer === peer);
 if (!edge) die(`${peer} is not a neighbor of ${id.name} in topology ${id.topology}`);
 const participants: [string, string] = [id.name, peer].sort() as [string, string];
 
+// `peek` is a read-only op and the sidecar's `peek` returns the same
+// information faster (avoids 3 statSync + 2 readFileSync). Fall back to the
+// file-direct path on any sidecar error so existing flows never break. All
+// write ops (lock/flip/park/unlock/recover) stay file-direct on principle.
+async function peekViaSidecar(): Promise<boolean> {
+  const r = await sidecarRequest<any>(id.name, "peek", { peer }, { timeoutMs: 200 });
+  if (!r.ok) return false;
+  const res = r.result;
+  console.log(`edge:        ${res.edge_id}`);
+  console.log(`turn:        ${res.turn ?? "(uninitialized)"}`);
+  if (res.lock) {
+    const stStr = res.lock.starttime != null ? `:${res.lock.starttime}` : "";
+    console.log(`lock:        ${res.lock.agent}@${res.lock.host}:${res.lock.pid}${stStr} ${res.lock.ts}`);
+  } else {
+    console.log(`lock:        (none)`);
+  }
+  console.log(`convo:       ${res.convo_path}`);
+  return true;
+}
+
+async function runOp() {
 switch (op) {
   case "peek": {
+    if (await peekViaSidecar()) break;
     const v = readTurn(edge.turn);
     const lockExists = fs.existsSync(edge.lock);
     console.log(`edge:        ${edge.id}`);
@@ -233,6 +256,9 @@ switch (op) {
   default:
     die(`unknown op: ${op}`);
 }
+}
+
+void runOp();
 
 // Helper: refuse flip/park if the lock is held by another agent OR by
 // another live session of the same agent name. Mirrors `unlock`'s

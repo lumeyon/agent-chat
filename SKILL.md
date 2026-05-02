@@ -31,8 +31,15 @@ identical.
                                #   archive helpers (DAG, summary template/validator, index.jsonl I/O)
     resolve.ts                 # CLI: print my identity, my edges, and their conversation paths
     turn.ts                    # CLI: peek / init / flip / park / lock / unlock for one edge
+                               #   peek fast-paths through the sidecar daemon when available
     monitor.ts                 # CLI: long-running multi-edge watcher; one stdout line per actionable transition;
                                #   optional `--archive-hint` for parked-and-bloated edges
+    sidecar.ts                 # CLI: long-lived per-agent daemon. Inotify-driven watcher, in-memory diff
+                               #   cache, UDS at .sockets/<agent>.sock for structured queries (whoami, time,
+                               #   peek, last-section, unread, since-last-spoke, health). Auto-launched by
+                               #   `agent-chat init`; `--no-sidecar` opts out.
+    sidecar-client.ts          # client library: sidecarRequest(agent, method, params); used by other CLIs
+                               #   to fast-path read-only ops with file-direct fallback when the sidecar isn't running
     archive.ts                 # CLI: plan / seal / commit / list — leaf archives (depth 0)
     condense.ts                # CLI: plan / seal / commit — fold same-depth archives into depth+1 summaries
     search.ts                  # CLI: grep / describe / expand / list — LCM-style escalation over the index
@@ -45,6 +52,13 @@ identical.
       leaf/<arch_L_...>/       # depth-0 archives: BODY.md (verbatim) + SUMMARY.md + META.yaml
       condensed/d1/<arch_C_...>/  # depth-1: SUMMARY.md + META.yaml (parents = leaf ids)
       condensed/d2/<arch_C_...>/  # depth-2 ... and so on through d3+
+  conversations/.sockets/      # per-agent UDS + pidfiles + cursors (mode 0600)
+    <agent>.sock               # sidecar UDS endpoint
+    sidecar-<agent>.pid        # pidfile (pid + starttime) for crash-recovery
+    <agent>.cursors.json       # named-cursor persistence for `unread` calls
+  conversations/.logs/         # per-agent log files (rooted on CONVERSATIONS_DIR)
+    monitor-<agent>.log
+    sidecar-<agent>.log
 ```
 
 All script paths are resolved relative to the skill root (`SKILL_ROOT` in
@@ -148,6 +162,29 @@ A two-line summary of the happy path:
    the turn file. **Unlock**.
 2. **Monitor** runs in a separate persistent shell and notifies you the
    instant a peer flips a `.turn` to your name or parks.
+
+### Sidecar fast path (default-on)
+
+`agent-chat init` auto-launches a per-agent **sidecar daemon** alongside the
+monitor. The sidecar is a long-lived process that:
+
+- Watches all of this agent's edges via inotify-style `fs.watch` (no
+  polling) and emits the same notification format `monitor.ts` does.
+- Holds a parsed-section cache so cheap structured queries (name, time,
+  current floor-holder, last section, unread sections since a cursor)
+  return in a few milliseconds without re-reading CONVO.md.
+- Listens on a Unix domain socket at
+  `<CONVERSATIONS_DIR>/.sockets/<agent>.sock` (mode 0600, owner-only).
+- Speaks **line-delimited JSON** so cross-runtime clients (Codex, Python,
+  curl-style tooling) can call methods the same way Claude Code can.
+
+Methods (v1): `whoami`, `time`, `peek`, `last-section`, `unread`,
+`since-last-spoke`, `health`, `shutdown`. The protocol stays file-first:
+the sidecar only reads the wire-state files; `lock`/`flip`/`park`/`unlock`
+remain file-direct so the protocol authority never moves into the daemon.
+
+Pass `--no-sidecar` to `agent-chat init` to disable it (existing flows
+work unchanged through the file-direct slow paths).
 
 ## Section format inside CONVO.md
 

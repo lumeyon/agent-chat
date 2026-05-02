@@ -171,14 +171,52 @@ export type SessionRecord = {
   tty?: string;
   monitor_pid?: number;
   monitor_pid_starttime?: number;
+  // Sidecar daemon fields (slice 1+). Mirror monitor_pid pair for the same
+  // pid-recycling defense (processIsOriginal). Optional so legacy session
+  // records keep working unchanged.
+  sidecar_pid?: number;
+  sidecar_pid_starttime?: number;
 };
 
 export const SESSIONS_DIR = path.join(CONVERSATIONS_DIR, ".sessions");
 export const PRESENCE_DIR = path.join(CONVERSATIONS_DIR, ".presence");
+// LOGS_DIR is rooted on CONVERSATIONS_DIR so that AGENT_CHAT_CONVERSATIONS_DIR
+// overrides redirect log writes too. Pre-fix, agent-chat.ts hardcoded
+// path.join(SKILL_ROOT, "conversations", ".logs") for monitor logs and
+// --prune-logs, which broke env-var-aware test harnesses (carina/cadence P1
+// "silent destructive on a path the env-var-aware harness assumes hermetic").
+export const LOGS_DIR = path.join(CONVERSATIONS_DIR, ".logs");
+// SOCKETS_DIR holds per-agent Unix domain sockets for the sidecar daemon.
+// Same env-var rooting as the other control dirs.
+export const SOCKETS_DIR = path.join(CONVERSATIONS_DIR, ".sockets");
 
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
+  fs.mkdirSync(LOGS_DIR, { recursive: true });
+  fs.mkdirSync(SOCKETS_DIR, { recursive: true });
+}
+
+// Per-agent path helpers. All sanitize the agent name the same way
+// presenceFile() does (lyra L1 defense-in-depth).
+function safeAgent(agent: string): string {
+  return agent.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+export function socketPathFor(agent: string): string {
+  return path.join(SOCKETS_DIR, `${safeAgent(agent)}.sock`);
+}
+
+export function pidFilePath(agent: string, kind: "sidecar" | "monitor"): string {
+  return path.join(SOCKETS_DIR, `${kind}-${safeAgent(agent)}.pid`);
+}
+
+export function cursorsFilePath(agent: string): string {
+  return path.join(SOCKETS_DIR, `${safeAgent(agent)}.cursors.json`);
+}
+
+export function logPathFor(agent: string, kind: "sidecar" | "monitor"): string {
+  return path.join(LOGS_DIR, `${kind}-${safeAgent(agent)}.log`);
 }
 
 // Returns the session key for the *current* process. Must be:
@@ -897,10 +935,17 @@ export function splitForArchive(convoText: string, freshTailCount: number): Conv
 }
 
 // Best-effort timestamp + author extraction from a section header:
-//   ## <author> — <topic> (UTC YYYY-MM-DDTHH:MM:SSZ)
+//   ## <author> — <topic> (UTC YYYY-MM-DDTHH:MM:SS[.fff]Z)
 // Falls back to (file mtime, "unknown") if a section doesn't match.
+// Fractional-seconds suffix is optional — covers `.SSS` (ms), `.SSSSSS` (µs),
+// and `.SSSSSSSSS` (ns). Pre-fix the regex hard-coded second-precision and
+// silently dropped any agent's section header using millisecond precision
+// (e.g. round-2 latency-poll spec instructed `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"`
+// for send_time and several agents echoed that into the section header,
+// causing those sections to parse as author=null and fall out of
+// `since-last-spoke` cursor calculations — keystone's round-1 sidecar fold).
 export function sectionMeta(section: string): { author: string; ts: string | null } {
-  const m = section.match(/^##\s+([A-Za-z0-9_-]+)\s+—.*?\(UTC\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\)/m);
+  const m = section.match(/^##\s+([A-Za-z0-9_-]+)\s+—.*?\(UTC\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z)\)/m);
   if (!m) return { author: "unknown", ts: null };
   return { author: m[1].toLowerCase(), ts: m[2] };
 }

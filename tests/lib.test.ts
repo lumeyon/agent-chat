@@ -400,6 +400,31 @@ describe("sectionMeta / timeRangeOf", () => {
     expect(sectionMeta(sec)).toEqual({ author: "unknown", ts: null });
   });
 
+  test("accepts fractional-seconds (ms / µs / ns) precision", () => {
+    // Regression: round-2 latency-poll spec instructed agents to use
+    // `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"` for send_time, and several
+    // agents (vanguard, carina) echoed that into their section headers.
+    // Pre-fix the regex hard-coded second-precision, parsed those headers
+    // as author=null/ts=null, and silently dropped them from
+    // `since-last-spoke` cursor calculations.
+    const ms = "## vanguard — reply (UTC 2026-05-01T21:16:58.580Z)\n\nbody\n";
+    expect(sectionMeta(ms)).toEqual({ author: "vanguard", ts: "2026-05-01T21:16:58.580Z" });
+    const us = "## carina — reply (UTC 2026-05-01T21:16:58.123456Z)\n\nbody\n";
+    expect(sectionMeta(us).author).toBe("carina");
+    expect(sectionMeta(us).ts).toBe("2026-05-01T21:16:58.123456Z");
+    const ns = "## lumeyon — reply (UTC 2026-05-01T21:16:58.123456789Z)\n\nbody\n";
+    expect(sectionMeta(ns).author).toBe("lumeyon");
+  });
+
+  test("rejects bogus placeholder timestamp like (UTC 2026-05-01T21:18:??Z)", () => {
+    // Carina's anomaly #2 — a literal `??` placeholder she forgot to splice.
+    // Strict parsing is correct here: garbage timestamps must NOT propagate
+    // into the cursor file. This test pins the strictness so the
+    // fractional-seconds fix above doesn't accidentally relax it further.
+    const bad = "## carina — placeholder (UTC 2026-05-01T21:18:??Z)\n\nbody\n";
+    expect(sectionMeta(bad)).toEqual({ author: "unknown", ts: null });
+  });
+
   test("timeRangeOf finds earliest and latest", () => {
     const secs = [
       "## a — x (UTC 2026-05-02T00:00:00Z)\n",
