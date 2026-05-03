@@ -1415,6 +1415,139 @@ export function renderSummaryStub(inp: SummaryRenderInput): string {
   ].join("\n");
 }
 
+// Auto-summary synthesizer: produces a deterministic, validator-passing
+// SUMMARY.md from raw section bodies + edge metadata. Used by
+// `archive.ts auto` so seal+commit can run in a single non-interactive
+// CLI call. Quality is shallow (extracts from section headers and bodies
+// via heuristics, not LLM synthesis) but the chain is exercised
+// end-to-end: every required section gets non-placeholder content and
+// the validator passes.
+//
+// Anti-placeholder discipline: the validator rejects any occurrence of
+// `\b(?:todo|fixme|xxx|tbd|wip|placeholder)\b` anywhere in the summary,
+// so synthesized text must avoid those tokens even in stable phrasing.
+export type AutoSummaryInput = {
+  edgeId: string;
+  archiveId: string;
+  participants: [string, string];
+  earliestAt: string;
+  latestAt: string;
+  sections: string[];        // raw section bodies (pre-archive)
+};
+
+const AUTO_SUMMARY_STOPWORDS = new Set([
+  "this", "that", "with", "from", "have", "been", "were", "they", "what",
+  "when", "where", "their", "would", "could", "should", "about", "which",
+  "into", "than", "then", "them", "there", "these", "those", "your",
+  "yours", "you", "are", "was", "but", "for", "and", "the", "any",
+  "section", "sections", "agent", "user", "turn", "turns",
+]);
+
+export function synthesizeAutoSummary(inp: AutoSummaryInput): string {
+  const metas = inp.sections.map((s) => sectionMeta(s));
+  const authors = [...new Set(metas.map((m) => m.author).filter((a) => a !== "unknown"))];
+
+  // Topic strings from section headers: `## <author> — <topic> (UTC ...)`.
+  // Strip the trailing parenthesis and surrounding whitespace.
+  const topicOf = (s: string): string => {
+    const m = s.match(/^##\s+\S+\s+—\s+(.*?)(?:\s*\(UTC\s+\S+\))?\s*$/m);
+    return m ? m[1].trim() : "";
+  };
+  const topics = inp.sections.map(topicOf).filter(Boolean);
+  const distinctTopics = [...new Set(topics)];
+
+  // Decisions: extract `→ <next>` arrows AND lines containing protocol-
+  // formal decision verbs (decided, agreed, adopted, accepted, approved).
+  // Both are reasonable signals for "what changed in this thread."
+  const arrowDecisions = inp.sections
+    .map((s) => {
+      const m = s.match(/→\s+(\S+)\s*$/m);
+      const tm = topicOf(s);
+      if (!m) return null;
+      return tm ? `${tm} → ${m[1]}` : `flip → ${m[1]}`;
+    })
+    .filter((d): d is string => d !== null);
+
+  // Artifacts: path-shaped tokens in bodies (extension allowlist).
+  const allText = inp.sections.join("\n");
+  const pathRegex = /\b[\w./-]+\.(?:md|ts|js|tsx|yaml|yml|json|sh|py|go|rs|lock)\b/g;
+  const artifacts = [...new Set(allText.match(pathRegex) ?? [])].slice(0, 12);
+
+  // Keywords: frequency-counted alphanumeric tokens, length ≥4. Stopword
+  // filter removes English filler and meta-protocol nouns. Take the
+  // top-20 most-frequent and pick 8-12 distinct surviving the filter.
+  const tokens = (allText.toLowerCase().match(/[a-z][a-z0-9_-]{3,}/g) ?? [])
+    .filter((t) => !AUTO_SUMMARY_STOPWORDS.has(t));
+  const freq = new Map<string, number>();
+  for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
+  const topKeywords = [...freq.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([w]) => w);
+
+  // Validator floor: ≥3 distinct alphanumeric tokens of length ≥3 in
+  // Keywords. Top-12 from a real conversation virtually always meets
+  // this; for short edge cases backfill with author names + topic words.
+  let keywords = topKeywords;
+  if (keywords.length < 3) {
+    const backfill = [
+      ...authors,
+      ...distinctTopics.flatMap((t) => t.split(/\s+/)).filter((w) => w.length >= 4),
+    ].filter((w) => /^[\p{L}\p{N}_-]{3,}$/u.test(w));
+    keywords = [...new Set([...keywords, ...backfill])].slice(0, 8);
+  }
+
+  const tldrAuthors = authors.length === 0 ? "various" : authors.join(", ");
+  const tldrTopics = distinctTopics.slice(0, 3).join("; ");
+  const tldr = [
+    `Auto-archive of ${inp.sections.length} section(s) from ${tldrAuthors}.`,
+    `Time range: ${inp.earliestAt} through ${inp.latestAt}.`,
+    tldrTopics ? `Subjects include: ${tldrTopics}.` : "",
+  ].filter(Boolean).join(" ");
+
+  const decisionsList = arrowDecisions.length > 0
+    ? arrowDecisions.slice(0, 8).map((d) => `- ${d}`).join("\n")
+    : `- Recorded ${inp.sections.length} sections by ${tldrAuthors} into one leaf archive`;
+
+  const artifactsList = artifacts.length > 0
+    ? artifacts.map((a) => `- ${a}`).join("\n")
+    : "(none) — auto-archive detected no path-shaped tokens in the source";
+
+  const expandTopics = distinctTopics.length > 0
+    ? distinctTopics.slice(0, 8).map((t) => `- ${t}`).join("\n")
+    : `- Section transcript spanning ${inp.sections.length} entries by ${tldrAuthors}`;
+
+  return [
+    `# SUMMARY — ${inp.edgeId} · leaf · depth 0 · ${inp.earliestAt} → ${inp.latestAt}`,
+    "",
+    `<archive-id: ${inp.archiveId}>`,
+    `<participants: ${inp.participants.join(", ")}>`,
+    `<source: auto-archive (deterministic synthesis from section metadata)>`,
+    "",
+    "## TL;DR",
+    tldr,
+    "",
+    "## Decisions",
+    decisionsList,
+    "",
+    "## Blockers",
+    "(none) — auto-archive does not detect blockers heuristically; consult the body for any unhandled issues",
+    "",
+    "## Follow-ups",
+    "(none) — auto-archive does not detect follow-ups heuristically; consult the body",
+    "",
+    "## Artifacts referenced",
+    artifactsList,
+    "",
+    "## Keywords",
+    keywords.join(", "),
+    "",
+    "## Expand for details about:",
+    expandTopics,
+    "",
+  ].join("\n");
+}
+
 export type SummaryValidation = {
   ok: boolean;
   issues: string[];

@@ -27,6 +27,7 @@ import {
   sectionMeta, timeRangeOf, archiveId, leafArchiveDir, archivesRoot,
   condensedArchiveDir,
   appendIndexEntry, readIndex, writeYaml, sha256, renderSummaryStub,
+  synthesizeAutoSummary,
   validateSummary, extractTldr, extractKeywords,
   writeFileAtomic, exclusiveWriteOrFail, lockTag,
   type IndexEntry,
@@ -51,7 +52,7 @@ function parseArgs(argv: string[]) {
 }
 
 const { op, peer, opts } = parseArgs(process.argv.slice(2));
-if (!op || !peer) die("usage: archive.ts <plan|seal|commit|list> <peer> [args]");
+if (!op || !peer) die("usage: archive.ts <plan|seal|auto|commit|abort|verify|doctor|list> <peer> [args]");
 
 const id = resolveIdentity();
 const topo = loadTopology(id.topology);
@@ -177,6 +178,125 @@ switch (op) {
       console.log("");
       console.log(`Next: edit the SUMMARY.md (fill every TODO, drop the comment blocks), then run:`);
       console.log(`  bun scripts/archive.ts commit ${peer} ${aid}`);
+    } finally {
+      try { fs.unlinkSync(edge.lock); } catch {}
+    }
+    break;
+  }
+
+  case "auto": {
+    // Atomic seal + auto-synthesized SUMMARY + commit, in one CLI call.
+    // Used by `agent-chat gc --auto-archive` and by long-running-conversation
+    // tests. Quality is shallow (deterministic synthesis from section
+    // metadata, not LLM) but the chain is exercised end-to-end:
+    // `search.ts grep` finds the archived edge by extracted keywords;
+    // `search.ts expand` returns the verbatim BODY.md.
+    if (readTurn(edge.turn) !== "parked" && !opts.force) {
+      die(`refuse to auto-archive — .turn is "${readTurn(edge.turn)}", not "parked". Park the edge first or pass --force.`);
+    }
+    const lockBody = `${lockTag(id.name)} ${utcStamp()}\n`;
+    try { exclusiveWriteOrFail(edge.lock, lockBody); }
+    catch (err: any) {
+      if (err.code === "EEXIST") die(`edge is locked: ${fs.readFileSync(edge.lock, "utf8").trim()}`);
+      throw err;
+    }
+    try {
+      const pending = pendingArchives();
+      if (pending.length && !opts.force) die(`uncommitted archive(s) pending — commit them first or pass --force: ${pending.join(", ")}`);
+
+      const convo = loadConvo();
+      const split = splitForArchive(convo, opts.freshTail);
+      if (split.archivableSectionCount === 0) die("nothing to archive — fresh tail covers all sections.");
+
+      const archivedSections = parseSections(convo).sections.slice(0, split.archivableSectionCount);
+      const tr = timeRangeOf(archivedSections);
+      const aid = archiveId("leaf", tr.latest);
+      const adir = leafArchiveDir(edge.dir, aid);
+      fs.mkdirSync(adir, { recursive: true });
+
+      // BODY.md — verbatim, fsync'd before any destructive op.
+      const body = split.archivable;
+      const bodyPath = path.join(adir, "BODY.md");
+      const bfd = fs.openSync(bodyPath, "w");
+      try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
+      finally { fs.closeSync(bfd); }
+
+      // SUMMARY.md — synthesized deterministically from section metadata.
+      // Validator-passing by construction (real-body sections + ≥3 keywords +
+      // non-placeholder Expand-for-details + no TODO/FIXME/etc tokens).
+      const summary = synthesizeAutoSummary({
+        edgeId: edge.id,
+        archiveId: aid,
+        participants,
+        earliestAt: tr.earliest,
+        latestAt: tr.latest,
+        sections: archivedSections,
+      });
+      const v = validateSummary(summary);
+      if (!v.ok) {
+        // Synthesis bug — should never trigger; surface loud and bail before
+        // touching CONVO.md so the edge isn't mid-state.
+        try { fs.rmSync(adir, { recursive: true, force: true }); } catch {}
+        console.error(`auto-summary failed validation (synthesis bug):`);
+        for (const issue of v.issues) console.error(`  - ${issue}`);
+        process.exit(3);
+      }
+      fs.writeFileSync(path.join(adir, "SUMMARY.md"), summary);
+
+      const tldr = extractTldr(summary);
+      const keywords = extractKeywords(summary);
+      const bodySha = sha256(body);
+
+      // META.yaml — sealed (skip the pending-commit dance since validation
+      // already passed).
+      writeYaml(path.join(adir, "META.yaml"), {
+        id: aid,
+        edge_id: edge.id,
+        topology: topo.topology,
+        kind: "leaf",
+        depth: 0,
+        status: "sealed",
+        participants,
+        earliest_at: tr.earliest,
+        latest_at: tr.latest,
+        source_section_count: archivedSections.length,
+        body_sha256: bodySha,
+        keywords,
+        tldr,
+        created_at: utcStamp(),
+        committed_at: utcStamp(),
+        synthesis: "auto",
+      });
+
+      // Truncate CONVO.md to header + breadcrumb + fresh tail (atomic).
+      const breadcrumb = `\n<!-- archive breadcrumb: ${aid} sealed (auto) at ${utcStamp()} (${archivedSections.length} sections, ${tr.earliest} → ${tr.latest}) — see archives/leaf/${aid}/ -->\n\n`;
+      const newConvo = split.header.replace(/\n+$/, "\n") + breadcrumb + (split.freshTail ? `---\n\n${split.freshTail}` : "");
+      writeFileAtomic(edge.convo, newConvo, { fsync: true });
+
+      // Index entry — fsync'd so the validated archive is durable.
+      const entry: IndexEntry = {
+        id: aid,
+        edge_id: edge.id,
+        topology: topo.topology,
+        kind: "leaf",
+        depth: 0,
+        earliest_at: tr.earliest,
+        latest_at: tr.latest,
+        participants,
+        parents: [],
+        descendant_count: 0,
+        keywords,
+        tldr,
+        body_sha256: bodySha,
+        path: adir,
+      };
+      appendIndexEntry(edge.dir, entry, { fsync: true });
+
+      console.log(`auto-archived ${aid}`);
+      console.log(`  sections:  ${archivedSections.length}`);
+      console.log(`  keywords:  ${keywords.slice(0, 8).join(", ")}${keywords.length > 8 ? ", …" : ""}`);
+      console.log(`  TL;DR:     ${tldr.slice(0, 120)}${tldr.length > 120 ? "…" : ""}`);
+      console.log(`  BODY.md:   ${bodyPath}`);
     } finally {
       try { fs.unlinkSync(edge.lock); } catch {}
     }
