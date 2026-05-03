@@ -1,14 +1,22 @@
 # agent-chat
 
-**N agents. One graph. Real conversations. No daemon, no database, no token ceiling.**
+**N agents. One graph. Real conversations. Filesystem-first, no database, no token ceiling.**
 
 `agent-chat` is a Claude Code / Codex skill that lets multiple AI sessions
 collaborate on real work through a shared on-disk protocol — and unlike most
-multi-agent frameworks, it's just markdown files and a few hundred lines of
-TypeScript. You can read every byte of every conversation with `cat`. You
-can grep your entire history with `rg`. You can move it between machines
-with `rsync`. And it scales to long-running, branching, multi-week threads
-without bloating any single session's context window.
+multi-agent frameworks, the wire format is just markdown files and JSONL.
+You can read every byte of every conversation with `cat`. You can grep your
+entire history with `rg`. You can move it between machines with `rsync`.
+And it scales to long-running, branching, multi-week threads without
+bloating any single session's context window.
+
+The skill is also **built by** the kind of multi-agent collaboration it
+enables. Every architectural change since Round 8 has been planned,
+implemented, cross-reviewed, and integrated through the petersen graph
+itself, by ten Claude sessions running in parallel. The
+[How this codebase is built](#how-this-codebase-is-built) section below
+explains why we believe this produces measurably better code than solo
+work — with the bug receipts to back it.
 
 It started as the natural generalization of a
 two-agent turn protocol where Claude and Codex pass a shared markdown file
@@ -39,16 +47,20 @@ verbatim transcript. **Nothing is lost. Everything stays cheap to re-read.**
 
 [lcm]: https://losslesscontext.ai
 
-**Filesystem-only.** No SQLite, no Postgres, no daemon, no MCP server, no
-external service. The entire substrate is markdown + YAML + a one-line
-JSONL index per edge. Works on local disk, NFS, sshfs, and any other
-mount. Survives reboots. Diffs cleanly. Versions in git like prose.
+**Filesystem-first.** The wire protocol is markdown + YAML + a one-line
+JSONL index per edge. No external service, no MCP server, no Postgres.
+Works on local disk, NFS, sshfs, and any other mount. Survives reboots.
+Diffs cleanly. Versions in git like prose. The optional sidecar daemon
+(below) is an *accelerator* layered on top — the protocol works without
+it; sidecar holds zero protocol authority and is rebuildable from the
+filesystem state if it crashes.
 
 **Drop-in for any agent runtime.** The protocol is runtime-agnostic. Claude
 Code reads it, Codex reads it, an agent script you wrote on a Tuesday reads
 it. The skill spec is one `SKILL.md` file; the operational checklist is one
-`bootstrap.md` file; the implementation is eight TypeScript files totaling
-under three thousand lines, with zero npm dependencies.
+`bootstrap.md` file; the implementation is fourteen TypeScript files
+totaling roughly seven thousand lines, with zero npm dependencies (we use
+Bun's built-ins where extras would be tempting).
 
 **Optional fast-path daemon.** `agent-chat init` auto-launches a long-lived
 per-agent **sidecar** alongside the monitor: a Unix-domain-socket daemon
@@ -350,6 +362,105 @@ agents list and rejects self-loops.
 
 ---
 
+## How this codebase is built
+
+The agent-chat protocol isn't just *for* multi-agent collaboration — it's
+*built by* multi-agent collaboration. Every architectural change since
+Round 8 (lock-semantics + lifecycle hardening) has been planned,
+implemented, cross-reviewed, and integrated through the petersen graph
+itself. Ten Claude sessions running in parallel as `orion`, `lumeyon`,
+`keystone`, `sentinel`, `vanguard`, `lyra`, `carina`, `pulsar`, `cadence`,
+`rhino`. Five-phase pattern per round:
+
+1. **Plan.** orion (the orchestrator) dispatches a kickoff to three direct
+   neighbors, each owning a slice. Each direct neighbor cross-pollinates
+   with their two sub-relays for slice-specific architectural decisions.
+2. **Consolidate.** orion resolves cross-slice tensions, locks contracts.
+3. **Implement.** Three peers code in parallel, each in their slice.
+4. **Cross-review.** Round-robin: each peer reviews one other peer's slice.
+5. **Integrate.** orion runs full test suite, single-commit + push.
+
+This is more wall-clock-effort than a single agent typing alone. We do it
+because **the cross-review catches real bugs that solo work would ship**.
+
+### Receipts
+
+Five real bugs caught at cross-review across four rounds, plus one caught
+at Phase-1 (during planning, not implementation):
+
+| Round | Phase | Caught by | Bug |
+|---|---|---|---|
+| 10 | Phase-4 | lumeyon | `listSessions` would have crashed `agent-chat who` for any session with a `current_speaker.json` |
+| 10 | Phase-4 | carina | `fetchSpeaker` had a dead-code field path — silent dead optimization that motivated the dedicated UDS method |
+| 11 | Phase-4 | lumeyon | chmod-race in `exclusiveWriteOrFail` — microsecond identity-leak window on shared hosts |
+| 11 | Phase-4 | lumeyon | self-require dead code in `resolveDefaultSpeaker` |
+| 12 | Phase-1 | rhino | lossless-claw routing regexes match 0/5 of agent-chat's actual vocabulary; routing feature would have shipped dead-on-arrival |
+
+None of these were caught by unit tests. All surfaced when a peer with a
+*different* slice's perspective reviewed the integration boundary.
+
+### Why cross-review catches what unit tests miss
+
+A slice author's mental model contains *exactly* the assumptions that
+produced their code. They can't see what they assumed. A reviewer from a
+different slice has different assumptions and sees the integration boundary
+differently. This is structurally what unit tests cannot provide — the same
+reason human code review catches things the author missed.
+
+### Forced articulation produces a durable design record
+
+The kickoff → Phase-1 plan → Phase-4 review structure makes us write down
+decisions with reasoning *before* implementing. Six weeks later the
+rationale lives in the `conversations/` tree, grep-able and durable. Solo
+work produces code; the team produces code + paper trail. This effect
+compounds: Round 11 was faster than Round 10 because the team had explicit
+rationale from Round 10 to refer to. Round 12's plan benefited from
+Round-11's documented decisions.
+
+### Problem decomposition gets done before coding
+
+Dispatching a slice with concrete sub-relay assignments forces understanding
+the problem shape before writing any code. Solo, we'd start coding the
+easiest piece and discover the architecture during implementation —
+usually meaning a refactor halfway through. The team's planning phase forces
+the design conversation up front.
+
+### The honest tradeoff
+
+Multi-agent has ~5-min round-trip latency per phase; solo has ~10s. For
+**small focused changes** (bug fix, rename, docs), solo is strictly faster
+and the team-coordination overhead dominates. For **changes that break
+cross-cutting invariants** or **introduce new architectural patterns**, the
+cross-review catches things that ship breakage otherwise. The skill of
+using this skill is knowing which is which.
+
+For most software engineering work, solo is fine. For load-bearing
+architectural changes, the team produces measurably better code at
+~50-100% wall-clock cost. We've used the team for rounds 8-12 (hardening
+audit, sidecar daemon, multi-user, orthogonal user overlay, lossless-claw
+parity); we've used solo for the dozens of small fixes between them.
+
+### What this is NOT
+
+- **It's not "wisdom of crowds."** Two heads aren't better than one when
+  there's a right answer; what helps is *independent perspective at the
+  integration boundary*, not opinion-aggregation.
+- **It's not faster than solo.** It's slower; we accept the cost for the
+  bug-catching value.
+- **It's not specialization.** All ten agents are the same Claude model
+  with the same training. The slice-ownership story is a coordination
+  pattern, not a skills-distribution one.
+- **It's not a replacement for unit tests.** Cross-review and unit tests
+  catch *different* failure modes. We use both, with cross-review focused
+  on the integration boundary unit tests can't reach.
+
+The full audit trail of every round lives under
+`conversations/petersen/<edge>/CONVO.md` — every plan, every review, every
+fix-decision is recorded. The conversation between the agents IS the
+design document.
+
+---
+
 ## Why a graph at all?
 
 Every multi-agent system that lets every agent talk to every other agent
@@ -514,7 +625,7 @@ No setup, no extra dependencies — `bun test` from the repo root runs everythin
 
 ```bash
 bun test
-# → 264 pass, 1 skip (gated LLM test), 0 fail
+# → 277 pass, 2 skip (gated LLM tests), 0 fail
 ```
 
 The suite is organized in four layers:
