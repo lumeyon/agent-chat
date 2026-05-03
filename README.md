@@ -62,21 +62,23 @@ the IPC is line-delimited JSON, so a Codex sidecar in Python and a Claude
 sidecar in TypeScript coordinate through the same socket-and-file shape.
 Pass `--no-sidecar` to opt out for CI, debug, or hostile filesystems.
 
-**Multi-user transparency on one graph.** Humans are first-class agents in
-a topology, alongside AI. `agents.org.yaml` ships a 12-agent graph (2
-humans + 10 AI, 36 edges) where every human has an edge to every AI, plus
-a human-to-human edge. The new `agent-chat speaker <name>` CLI declares
-which human is currently typing in this Claude Code session;
+**Multi-user transparency, automatic and orthogonal.** Humans live in a
+separate `agents.users.yaml` registry that overlays onto every topology
+at load time. Run `agents.petersen.yaml` + `agents.users.yaml` and you
+get the same 12-agent / 36-edge structure that `agents.org.yaml` shipped
+with — without coupling humans to a specific topology. `agent-chat init`
+auto-resolves the speaker from `$AGENT_CHAT_USER` || `$USER` (if
+registered) || `users.yaml default: true`, so capture is automatic;
+`agent-chat speaker <name>` remains as override for multi-user sessions.
 `agent-chat record-turn` captures user-prompt + assistant-response as two
 sequential sections on the appropriate `<speaker>-<agent>` edge with
 sha256-idempotent retries. Speaker switches emit a recorded handoff
 section to the OLD edge before routing the new turn — the audit trail of
 "who was talking when" lives in `CONVO.md`, not in any access-control
-layer. **No private channels:** the design rule is that everything in the
-protocol is on-the-record, transparency is an organizational value, and
+layer. **No private channels:** transparency is an organizational value;
 accountability is the audit trail. Long-running human-AI conversations
 fold into the same lossless-claw archive layer as everything else, so
-`search.ts grep` over the whole org returns hits across all threads.
+`search.ts grep` over the whole tree returns hits across all threads.
 
 ---
 
@@ -89,7 +91,7 @@ fold into the same lossless-claw archive layer as everything else, so
 | **Atomic turn handoff** | `.turn` written via `tmpfile + rename`. Concurrent reads always observe either the old or the new value. |
 | **Multi-edge background watcher** | One `monitor.ts` invocation watches every edge the agent participates in. Three independent triggers (value-change, mtime-touch, body-grew) catch every form of "your turn" — including the codex-chat trick of appending then re-parking. Filesystem-agnostic polling, so it works over NFS where `inotify` falls silent. |
 | **Per-agent sidecar daemon** | `scripts/sidecar.ts` runs alongside the monitor (default-on; `--no-sidecar` opts out). UDS at `<conversations>/.sockets/<agent>.sock` with mode 0600 for filesystem-permission auth. Eight v1 methods: `whoami`, `time`, `peek`, `last-section`, `unread`, `since-last-spoke`, `health`, `shutdown` (plus `speaker` for multi-user). Inotify-driven `fs.watch` (debounced 25 ms) replaces polling on local FS with kernel-event ms latency; a 5-second reconcile poll catches misses on FUSE/WSL1. The sidecar holds zero protocol authority — `lock`/`flip`/`park`/`unlock` stay file-direct; the daemon is a pure read-accelerator and notification multiplexer. |
-| **Humans as first-class agents** | The `org` topology declares humans alongside AI; `agent-chat speaker <name>` switches which human is typing in a Claude Code session; `agent-chat record-turn --user X --assistant Y` captures the turn as two CONVO.md sections on the appropriate `<speaker>-<agent>` edge. Idempotent retries via per-edge `recorded_turns.jsonl` ledger (sha256). Speaker switches emit recorded handoff sections to the prior edge. Privacy is an explicit non-goal — accountability is the audit trail. |
+| **Humans as first-class agents (orthogonal overlay)** | `agents.users.yaml` declares humans separately from any topology; `loadTopology()` overlays them at load time so any topology automatically gets human-AI edges. `agent-chat init` auto-resolves the speaker from environment (`$AGENT_CHAT_USER` / `$USER` / `users.yaml default`); `agent-chat speaker <name>` overrides for multi-user sessions. `agent-chat record-turn --user X --assistant Y` captures the turn as two CONVO.md sections on the appropriate `<speaker>-<agent>` edge. Idempotent retries via per-edge `recorded_turns.jsonl` ledger (sha256). Speaker switches emit recorded handoff sections to the prior edge. Privacy is an explicit non-goal — accountability is the audit trail. |
 | **Conversation archives that stay searchable** | Sealed leaves (`archives/leaf/`) preserve the verbatim transcript; SUMMARY.md captures the distilled knowledge with an *Expand for details about:* footer that signals what was compressed away. |
 | **DAG condensation** | Once leaves accumulate, fold N siblings at depth d into one parent at depth d+1 with a more abstract policy. Agent walks down via `search.ts expand --children`. |
 | **Three-tier search escalation** | `grep` over `index.jsonl` (cheap) → `describe` for one SUMMARY.md (medium) → `expand` for the original BODY.md (cold). Most queries stop at grep. |
@@ -340,7 +342,7 @@ That's it. Everything else — locks, archive sealing, condensation, search
 | `ring` | 10 | 10 | 2 | 5 | Smallest blast radius; gossip-style propagation. |
 | `petersen` | 10 | 15 | 3 | 2 | Sweet spot: bounded interruption, every non-neighbor reachable in one hop. |
 | `star` | 10 | 9 | 1 (spokes), 9 (hub) | 2 | Single orchestrator + nine specialists. No lateral chatter. |
-| `org` | 12 (2 humans + 10 AI) | 36 | 11 (humans), 5 (AI) | 2 | Bipartite-plus-petersen: every human has an edge to every AI, eyon-john for human-to-human, the petersen subgraph among the AI subset. Multi-user transparency: humans first-class, accountability via audit trail. |
+| `org` | 10 AI (humans overlaid via users.yaml) | 15 (+ 21 derived) | 5 AI, 11 humans (after overlay) | 2 | AI subgraph for the org cohort — identical to petersen. With `agents.users.yaml` present, `loadTopology("org")` returns 12/36 (overlay derives human-AI and human-human edges automatically). Use this OR petersen — they're equivalent post-overlay. |
 
 To define a custom topology, drop an `agents.<name>.yaml` file in the skill
 root. The validator in `lib.ts` checks every edge's endpoints exist in the
@@ -368,12 +370,16 @@ topology. Swapping graphs is a one-line edit in `.agent-name`.
 
 ---
 
-## Multi-user conversations (the `org` topology)
+## Multi-user conversations (orthogonal user overlay)
 
-agent-chat treats humans as first-class participants in the graph,
-indistinguishable from AI agents at every protocol layer. The shipped
-`org` topology has 12 agents (2 humans `eyon` + `john`; the 10 AI from
-the petersen graph) and 36 edges arranged bipartite-plus-petersen.
+agent-chat treats humans as first-class participants, **orthogonal to
+the topology**: the AI peer graph stays in `agents.<topology>.yaml`
+(petersen, ring, star, pair, org); humans live in a separate
+`agents.users.yaml` registry. `loadTopology()` overlays the two at load
+time so any topology automatically gets human-AI edges and (if you have
+multiple humans) human-human edges. There's no need to migrate to a
+special "humans-included" topology — petersen + users.yaml works
+identically to the older `org` topology.
 
 **Designed for transparency, not privacy.** All conversations are visible
 to all participants who can read the filesystem. Accountability comes
@@ -383,22 +389,32 @@ the audit trail compounds: long-running threads seal into searchable
 summaries; `search.ts grep` over the whole org returns hits across every
 human-AI thread.
 
-### Setting up a multi-user session
+### Setting up a multi-user session (the simple case)
 
 ```bash
 # In your Claude Code terminal, declare the AI side first:
-> you are orion in the org topology
-[Claude runs: agent-chat init orion org]
+> you are orion in the petersen graph
+[Claude runs: agent-chat init orion petersen]
 
-# Then tell it which human is talking. Claude will run:
-> agent-chat speaker eyon
+# That's it. `agent-chat init` reads agents.users.yaml, sees `eyon`
+# is registered with `default: true`, and auto-writes
+# .sessions/<key>.current_speaker.json. Stderr logs:
+#   [agent-chat] speaker auto-resolved to eyon (source: users.yaml default)
 
 # Type messages normally. After each assistant response, the agent records
 # the turn into the right edge:
 > agent-chat record-turn --user "let's debug the migration" --assistant "..."
-#   → appends two sections to conversations/org/eyon-orion/CONVO.md
+#   → appends two sections to conversations/petersen/eyon-orion/CONVO.md
 #   → flips .turn back to eyon for the next user message
 ```
+
+The auto-resolve order is:
+1. `$AGENT_CHAT_USER` (strict — must be in `users.yaml`, else hard-fail).
+2. `$USER` (silent fall-through if not in `users.yaml`).
+3. `users.yaml` `default: true` entry.
+
+Override with `agent-chat speaker <name>` for multi-user sessions where
+the OS user isn't the human typing right now.
 
 ### Switching speakers mid-session
 
@@ -498,7 +514,7 @@ No setup, no extra dependencies — `bun test` from the repo root runs everythin
 
 ```bash
 bun test
-# → 240 pass, 1 skip (gated LLM test), 0 fail
+# → 264 pass, 1 skip (gated LLM test), 0 fail
 ```
 
 The suite is organized in four layers:

@@ -11,7 +11,13 @@ import {
   mkTmpConversations, rmTmp, freshEnv, runScript, sessionEnv, fakeSessionId,
 } from "./helpers.ts";
 
-const TOPO = "org";
+// Switched from "org" to "petersen" after the overlay refactor: lumeyon's
+// load-time validation rejects topology+users.yaml name collisions, and
+// agents.org.yaml still bakes in eyon/john from yesterday's commit. Using
+// petersen makes the load-bearing assertion stronger anyway — `eyon-orion`
+// exists ONLY because of the users.yaml overlay, not because petersen.yaml
+// declares it. (orion's spec for the auto-resolve load-bearing test.)
+const TOPO = "petersen";
 const AGENT = "keystone";
 
 function writeCurrentSpeaker(dir: string, key: string, name: string | null): void {
@@ -44,19 +50,19 @@ function writeSessionRecord(dir: string, key: string, agent: string, topology: s
 }
 
 function readConvo(dir: string, edgeId: string): string {
-  return fs.readFileSync(path.join(dir, "org", edgeId, "CONVO.md"), "utf8");
+  return fs.readFileSync(path.join(dir, TOPO, edgeId, "CONVO.md"), "utf8");
 }
 
 function readTurn(dir: string, edgeId: string): string {
-  return fs.readFileSync(path.join(dir, "org", edgeId, "CONVO.md.turn"), "utf8").trim();
+  return fs.readFileSync(path.join(dir, TOPO, edgeId, "CONVO.md.turn"), "utf8").trim();
 }
 
 function lockExists(dir: string, edgeId: string): boolean {
-  return fs.existsSync(path.join(dir, "org", edgeId, "CONVO.md.turn.lock"));
+  return fs.existsSync(path.join(dir, TOPO, edgeId, "CONVO.md.turn.lock"));
 }
 
 function readLedger(dir: string, edgeId: string): any[] {
-  const f = path.join(dir, "org", edgeId, "recorded_turns.jsonl");
+  const f = path.join(dir, TOPO, edgeId, "recorded_turns.jsonl");
   if (!fs.existsSync(f)) return [];
   return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
@@ -214,7 +220,7 @@ describe("record-turn — negative cases (vanguard's design)", () => {
     expect(r.exitCode).toBe(64);
     expect(r.stderr).toMatch(/no current speaker/);
     // No CONVO files anywhere (no edge mkdir'd).
-    expect(fs.existsSync(path.join(tmp, "org"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, TOPO))).toBe(false);
   });
 
   test("65: unknown speaker name → exit 65, message lists valid agents", () => {
@@ -232,10 +238,32 @@ describe("record-turn — negative cases (vanguard's design)", () => {
     expect(r.stderr).toMatch(/john/);
   });
 
-  test("66: AI-to-AI misroute (speaker has no human-shape) → exit 66", () => {
-    // Speaker is another AI (orion). In agents.org.yaml's degree distribution:
-    // orion has degree 5 (3 AI peers + 2 humans = 5), keystone has degree 5 too.
-    // So orion's degree (5) is NOT > keystone's degree (5) — refused.
+  test("66: human-to-human refused (catches asymmetric refactor — agent-side check must also fire)", () => {
+    // Speaker=eyon (human ✓), agent=AI session role overridden to john (human).
+    // The membership check is `users.includes(speaker) && !users.includes(agent)`
+    // — both conditions must hold. If a future refactor drops the !users.includes(agent)
+    // half, this test catches the regression.
+    const key = fakeSessionId("hh");
+    writeSessionRecord(tmp, key, "john", TOPO);  // john is in users.yaml = human
+    writeCurrentSpeaker(tmp, key, "eyon");       // also human
+    const env = sessionEnv(tmp, "john", TOPO, key);
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "hi", "--assistant", "back",
+    ], env, { allowFail: true });
+    // Either exit 66 (caught by membership check) OR an earlier topology
+    // failure if `john` somehow isn't a valid id.name in petersen+overlay
+    // (the merge adds users to topo.agents, so this should resolve fine).
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/human|refuse|user/i);
+  });
+
+  test("66: AI-to-AI misroute (orion is not in users.yaml) → exit 66", () => {
+    // Speaker is another AI (orion). orion is in petersen.yaml's agents
+    // list but NOT in agents.users.yaml — so the membership check
+    // `users.includes(speaker)` returns false and the request is refused.
+    // This replaces the b11db98 degree heuristic with the schema-driven
+    // membership check (orion's Phase-2 resolution).
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);
     writeCurrentSpeaker(tmp, key, "orion");
@@ -245,6 +273,111 @@ describe("record-turn — negative cases (vanguard's design)", () => {
       "record-turn", "--user", "u", "--assistant", "a",
     ], env, { allowFail: true });
     expect(r.exitCode).toBe(66);
-    expect(r.stderr).toMatch(/refuse|no edge|human/i);
+    expect(r.stderr).toMatch(/human→AI only|refuse/i);
+    expect(r.stderr).toContain("orion");
+  });
+});
+
+// -----------------------------------------------------------------------
+// Auto-resolve overlay tests (Phase-3 refactor — orthogonal users.yaml).
+//
+// These exercise the full chain: agents.users.yaml → loadTopology merges
+// users into topo.agents → record-turn lands on an edge that exists ONLY
+// because of the overlay (not because petersen.yaml declares it). The
+// load-bearing assertion is that `eyon-keystone/CONVO.md` is a real file
+// after the test, despite eyon being absent from petersen.yaml.
+//
+// Note these tests rely on carina's slice 2 having shipped the auto-write
+// of current_speaker.json on init. If carina's slice hasn't landed yet,
+// these tests can be replicated by writing current_speaker.json directly
+// (which is what we do here for hermeticity — not depending on init's
+// auto-write means slice 3 tests are independent of slice 2 timing).
+// -----------------------------------------------------------------------
+
+describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)", () => {
+  let tmp: string;
+  beforeEach(() => { tmp = mkTmpConversations(); });
+  afterEach(() => { rmTmp(tmp); });
+
+  test("eyon (in users.yaml, not in petersen.yaml) records on petersen+overlay edge", () => {
+    // The load-bearing test: eyon-keystone exists ONLY because users.yaml
+    // overlays eyon onto petersen at loadTopology time.
+    const key = fakeSessionId("ovr1");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "eyon");
+    const env = sessionEnv(tmp, AGENT, TOPO, key);
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "from eyon overlay", "--assistant", "hi eyon",
+    ], env);
+    expect(r.exitCode).toBe(0);
+
+    // Edge dir lives under petersen/, NOT under any users-only namespace.
+    const convoPath = path.join(tmp, "petersen", "eyon-keystone", "CONVO.md");
+    expect(fs.existsSync(convoPath)).toBe(true);
+    const convo = fs.readFileSync(convoPath, "utf8");
+    expect(convo).toMatch(/## eyon — user turn/);
+    expect(convo).toMatch(/## keystone — assistant response/);
+    expect(convo).toContain("from eyon overlay");
+  });
+
+  test("john (also in users.yaml) records on a different overlay edge cleanly", () => {
+    // Second user, different edge id. Confirms multi-user overlay isn't
+    // collapsing distinct users to the same edge.
+    const key = fakeSessionId("ovr2");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "john");
+    const env = sessionEnv(tmp, AGENT, TOPO, key);
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "from john", "--assistant", "hi john",
+    ], env);
+    expect(r.exitCode).toBe(0);
+    const convoPath = path.join(tmp, "petersen", "john-keystone", "CONVO.md");
+    expect(fs.existsSync(convoPath)).toBe(true);
+    expect(fs.readFileSync(convoPath, "utf8")).toContain("from john");
+    // eyon-keystone NOT created in this test.
+    expect(fs.existsSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"))).toBe(false);
+  });
+
+  test("explicit speaker override wins over a previously-set default", () => {
+    // Backward-compat: yesterday's slice-2 explicit `agent-chat speaker`
+    // path must keep working. We simulate two writes (default → explicit
+    // override) by writing current_speaker.json twice.
+    const key = fakeSessionId("expl");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "eyon");  // initial (would be auto-resolved default)
+    writeCurrentSpeaker(tmp, key, "john");  // explicit override
+    const env = sessionEnv(tmp, AGENT, TOPO, key);
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "u", "--assistant", "a",
+    ], env);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(tmp, "petersen", "john-keystone", "CONVO.md"))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"))).toBe(false);
+  });
+
+  test("backward-compat: speaker switch from auto-resolved default produces handoff section", () => {
+    // Yesterday's slice-3 handoff test, but starting from an auto-resolved
+    // default speaker rather than an explicit `agent-chat speaker eyon`.
+    const key = fakeSessionId("hand");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "eyon");
+    const env = sessionEnv(tmp, AGENT, TOPO, key);
+
+    runScript("agent-chat.ts", ["record-turn", "--user", "u1", "--assistant", "a1"], env);
+    writeCurrentSpeaker(tmp, key, "john");  // speaker switch
+    runScript("agent-chat.ts", ["record-turn", "--user", "u2", "--assistant", "a2"], env);
+
+    // OLD edge gets handoff section.
+    const oldConvo = fs.readFileSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"), "utf8");
+    expect(oldConvo).toMatch(/## eyon — handoff to john/);
+    expect(fs.readFileSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md.turn"), "utf8").trim()).toBe("parked");
+
+    // NEW edge gets the new pair.
+    const newConvo = fs.readFileSync(path.join(tmp, "petersen", "john-keystone", "CONVO.md"), "utf8");
+    expect(newConvo).toMatch(/## john — user turn/);
+    expect(newConvo).toContain("u2");
   });
 });

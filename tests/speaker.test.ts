@@ -388,3 +388,163 @@ describe("speaker — gc orphan reclamation", () => {
     expect(fs.existsSync(deadSpeakerPath)).toBe(false);
   });
 });
+
+// ===========================================================================
+// Slice 2 REFACTOR — orthogonal user overlay (auto-resolve speaker on init).
+//
+// Tests against the production agents.users.yaml at SKILL_ROOT (eyon
+// default + john). resolveDefaultSpeaker is a pure function reading env
+// vars + that yaml; no per-test fixture override is needed.
+//
+// All tests use full `agent-chat init` to exercise the auto-write splice.
+// We pass --no-sidecar --no-monitor so the test doesn't leak background
+// daemons; the auto-resolve splice runs regardless of those flags.
+// ===========================================================================
+
+describe("speaker auto-resolve — slice 2 refactor", () => {
+  // Each test gets a fresh tmpdir via the outer beforeEach. We override
+  // beforeEach here to ALSO drop the pre-created session record (these
+  // tests run their own `agent-chat init`, which writes its own).
+  beforeEach(() => {
+    fs.rmSync(path.join(CONVO_DIR, ".sessions", `${SESSION_KEY}.json`), { force: true });
+  });
+
+  // Build env that includes everything ORION_ENV had plus our overrides.
+  // freshEnv (via sessionEnv) already strips host AGENT_CHAT_USER + USER so
+  // we can set them clean per test.
+  function envWith(overrides: Record<string, string | null>): Record<string, string> {
+    const out: Record<string, string> = { ...ORION_ENV };
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v == null) delete out[k];
+      else out[k] = v;
+    }
+    return out;
+  }
+
+  test("1. $AGENT_CHAT_USER auto-resolves to a registered user", () => {
+    const env = envWith({ AGENT_CHAT_USER: "eyon", USER: "" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toMatch(/speaker auto-resolved to eyon \(source: \$AGENT_CHAT_USER\)/);
+
+    const f = speakerFile(SESSION_KEY);
+    expect(fs.existsSync(f)).toBe(true);
+    const stat = fs.statSync(f);
+    expect(stat.mode & 0o777).toBe(0o600);
+    const body = JSON.parse(fs.readFileSync(f, "utf8"));
+    expect(body.name).toBe("eyon");
+    expect(typeof body.set_at).toBe("string");
+  });
+
+  test("2. $USER fallback when $AGENT_CHAT_USER is unset and $USER is registered", () => {
+    const env = envWith({ AGENT_CHAT_USER: null, USER: "john" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toMatch(/speaker auto-resolved to john \(source: \$USER\)/);
+    const body = JSON.parse(fs.readFileSync(speakerFile(SESSION_KEY), "utf8"));
+    expect(body.name).toBe("john");
+  });
+
+  test("3. users.yaml default fallback when no env hits", () => {
+    // Both env vars unset OR set to a name not in users.yaml → falls through to default.
+    const env = envWith({ AGENT_CHAT_USER: null, USER: "nobody-on-this-host" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toMatch(/speaker auto-resolved to eyon \(source: users.yaml default\)/);
+    const body = JSON.parse(fs.readFileSync(speakerFile(SESSION_KEY), "utf8"));
+    expect(body.name).toBe("eyon");
+  });
+
+  test("4. hard-fail on $AGENT_CHAT_USER set-but-unregistered (no state writes)", () => {
+    const env = envWith({ AGENT_CHAT_USER: "mallory", USER: "" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env, { allowFail: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/no user named 'mallory' in agents\.users\.yaml/);
+    // ZERO cleanup needed because the early-fail placement happens BEFORE
+    // any state writes (cadence's recommendation): no SessionRecord, no
+    // presence file, no current_speaker.json should exist.
+    expect(fs.existsSync(path.join(CONVO_DIR, ".sessions", `${SESSION_KEY}.json`))).toBe(false);
+    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "carina.json"))).toBe(false);
+    expect(fs.existsSync(speakerFile(SESSION_KEY))).toBe(false);
+  });
+
+  test("5. wx invariant — explicit speaker survives auto-resolve race (pulsar's load-bearing pin)", () => {
+    // Pre-stage a current_speaker.json simulating a `agent-chat speaker john`
+    // landing in the sub-second window between init's resolve check and the
+    // wx auto-write. exclusiveWriteOrFail must EEXIST and leave john alone.
+    const f = speakerFile(SESSION_KEY);
+    fs.writeFileSync(f, JSON.stringify({ name: "john", set_at: "2026-05-02T00:00:00Z" }));
+
+    const env = envWith({ AGENT_CHAT_USER: "eyon", USER: "" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    // Init's auto-resolve attempted eyon, EEXIST-ed, logged the skip.
+    expect(r.stderr).toMatch(/speaker already set to john \(explicit; auto-resolve to eyon from \$AGENT_CHAT_USER skipped\)/);
+    // John is preserved unchanged.
+    const body = JSON.parse(fs.readFileSync(f, "utf8"));
+    expect(body.name).toBe("john");
+    expect(body.set_at).toBe("2026-05-02T00:00:00Z");
+  });
+
+  test("6. pid-reuse stale-speaker poisoning fix (pulsar's #2): EEXIST-branch reclaim", () => {
+    // Simulate a pid-reuse scenario: a prior session for the same agent name
+    // ('carina') existed with a dead pid AND wrote current_speaker.json, then
+    // the pid got recycled to today's process. cmdInit's EEXIST presence-
+    // replacement path (isDead === true) must unlink the stale speaker BEFORE
+    // the auto-write attempt; otherwise the wx EEXIST would preserve the
+    // stale speaker and the new session inherits 'stale' instead of resolving
+    // to the env-asserted user.
+    //
+    // Use a different session_key for the prior (stale) session to model
+    // the realistic case: same agent name 'carina', different session_key
+    // (because the prior had a different stableSessionPid before recycling).
+    const prevKey = "test-stale-session";
+    const prevRec = {
+      agent: "carina", topology: "petersen", session_key: prevKey,
+      host: os.hostname(),
+      pid: 999999999,  // dead pid — processIsOriginal returns false
+      started_at: "2026-05-01T00:00:00Z", cwd: "/tmp",
+    };
+    fs.writeFileSync(path.join(CONVO_DIR, ".sessions", `${prevKey}.json`), JSON.stringify(prevRec));
+    fs.writeFileSync(path.join(CONVO_DIR, ".presence", "carina.json"), JSON.stringify(prevRec));
+    const stalePath = path.join(CONVO_DIR, ".sessions", `${prevKey}.current_speaker.json`);
+    fs.writeFileSync(stalePath, JSON.stringify({ name: "stale-speaker-from-prev-session", set_at: "2026-05-01T00:00:00Z" }));
+
+    const env = envWith({ AGENT_CHAT_USER: "eyon", USER: "" });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    // The stale speaker file under the PRIOR key was reclaimed by the
+    // EEXIST presence-replacement branch.
+    expect(fs.existsSync(stalePath)).toBe(false);
+    // The NEW session's auto-resolve fired (it didn't see a stale file at
+    // its OWN session_key path, so wx succeeded), writing eyon.
+    const newSpeaker = JSON.parse(fs.readFileSync(speakerFile(SESSION_KEY), "utf8"));
+    expect(newSpeaker.name).toBe("eyon");
+  });
+
+  test("7. sidecar Bug-1 regression — whoami reflects auto-resolved speaker after init", async () => {
+    // Pulsar's standard regression-test discipline: pin that the sidecar's
+    // whoami.current_speaker reflects the auto-resolved value AFTER init's
+    // wx write completes. The Bug-1-class concern is that sidecar might
+    // cache current_speaker.json at boot; mandate read-on-every-dispatch.
+    const env = envWith({ AGENT_CHAT_USER: "eyon", USER: "" });
+    // This time we DO let init spawn the sidecar (not --no-sidecar).
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-monitor"], env);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toMatch(/speaker auto-resolved to eyon/);
+
+    // Verify auto-write landed.
+    expect(fs.existsSync(speakerFile(SESSION_KEY))).toBe(true);
+
+    // Wait briefly for sidecar UDS to come up, then query whoami.
+    const socketPath = path.join(CONVO_DIR, ".sockets", "carina.sock");
+    await waitForSocket(socketPath);
+    const resp = await rawRequest(socketPath, { id: 1, method: "whoami" });
+    expect(resp.ok).toBe(true);
+    expect(resp.result.current_speaker).not.toBeNull();
+    expect(resp.result.current_speaker.name).toBe("eyon");
+
+    // Cleanup: graceful shutdown of the spawned sidecar via UDS.
+    try { await rawRequest(socketPath, { id: 99, method: "shutdown" }); } catch {}
+  }, 8000);
+});

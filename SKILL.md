@@ -188,9 +188,39 @@ work unchanged through the file-direct slow paths).
 
 ## Multi-user conversations (`record-turn`)
 
-The `org` topology adds humans as first-class agents alongside the AI
-subgraph. To record a Claude Code turn (user prompt + assistant response)
-on the appropriate `<speaker>-<agent>` edge, the agent runs:
+Humans are registered orthogonally in `agents.users.yaml` and overlaid
+onto any AI topology (petersen, ring, star, pair, org) at `loadTopology`
+time. The user's identity is auto-resolved by `agent-chat init` from
+`$AGENT_CHAT_USER` → `$USER` (if in users.yaml) → users.yaml `default:
+true` entry. Explicit `agent-chat speaker <name>` overrides the default.
+
+### Discipline rule (mandatory until `PostResponse` hook ships)
+
+**At the END of every assistant response, the agent MUST run:**
+
+```bash
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts record-turn \
+  --user "<verbatim user prompt>" \
+  --assistant "<verbatim assistant response>"
+```
+
+(Or `record-turn --stdin` with JSON `{user, assistant}` for >4KB
+payloads — flag args have argv length limits on most shells.)
+
+This is the **only** mechanism that puts the conversation into the
+audit trail in v1. Claude Code's `Stop` hook is session-level only;
+forgetting record-turn means the turn never lands in CONVO.md and
+peer agents grepping `recorded_turns.jsonl` for activity gaps will
+notice. See `docs/HOOK_REQUEST.md` for the v2 ergonomic upgrade ask
+(a `PostResponse` hook driven by Claude Code itself).
+
+The CLI is idempotent under retry — a second invocation with the
+same `(speaker, user, assistant)` triple is a silent no-op. Safe to
+call inside hook-retry harnesses or to recover from a partial write.
+
+### To record a Claude Code turn
+
+The agent runs (typically once per response, automatically):
 
 ```bash
 bun scripts/agent-chat.ts record-turn --user "<text>" --assistant "<text>"

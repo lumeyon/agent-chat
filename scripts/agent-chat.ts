@@ -27,13 +27,13 @@ import {
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
   utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
-  writeTurnAtomic, resolveIdentity,
+  writeTurnAtomic, resolveIdentity, loadUsers,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
-  writeCurrentSpeaker,
-  type SessionRecord, type CurrentSpeaker,
+  writeCurrentSpeaker, resolveDefaultSpeaker,
+  type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
 
@@ -257,6 +257,20 @@ function cmdInit(args: string[]): void {
     die(`agent "${name}" is not declared in topology "${topology}". Known agents: ${topo.agents.join(", ")}`);
   }
 
+  // Slice-2 refactor: resolve default speaker EARLY — before any state writes.
+  // cadence slice-2-refactor recommendation: place the resolve-or-fail check
+  // immediately after agent-name validation so a bad $AGENT_CHAT_USER fails
+  // BEFORE writeSessionRecord/startSidecar/startMonitor; failure path then
+  // needs zero cleanup. The resolved name (if non-null) is written by splice
+  // point #4 below, AFTER spawn, via exclusiveWriteOrFail (pulsar's wx-on-
+  // destination single-syscall CAS so an explicit `agent-chat speaker <name>`
+  // landing inside the auto-resolve window is preserved as the "explicit
+  // wins" invariant requires).
+  const speakerResolution: DefaultSpeakerResolution = resolveDefaultSpeaker();
+  if (speakerResolution.error) {
+    die(`[agent-chat] ${speakerResolution.error}`, 65);
+  }
+
   // Collision check.
   const existing = findLivePresence(name);
   const sessionKey = currentSessionKey();
@@ -355,6 +369,17 @@ function cmdInit(args: string[]): void {
       try { fs2.unlinkSync(sessionFile(existing.session_key)); } catch {}
     }
     if (isMe || isDead || force) {
+      // Slice-2 refactor: pulsar's pid-reuse stale-speaker poisoning fix —
+      // when we're replacing a dead-pid SessionRecord, the displaced
+      // session's current_speaker.json may still be on disk. Without the
+      // unlink, our auto-write splice (#4 below) sees existsSync→true via
+      // the wx EEXIST branch and preserves the STALE speaker for the new
+      // session. Symmetric with the displaced-session record cleanup at
+      // line ~369. cadence's same-key resume path already covers the
+      // resumable-prompt branch separately at line ~284.
+      if (existing) {
+        try { safeUnlink(currentSpeakerPath(existing.session_key)); } catch {}
+      }
       fs2.unlinkSync(presencePath);
       exclusiveWriteOrFail(presencePath, presenceJson);
     } else if (existing) {
@@ -369,6 +394,45 @@ function cmdInit(args: string[]): void {
       // EEXIST but unparsable — replace and continue.
       fs2.unlinkSync(presencePath);
       exclusiveWriteOrFail(presencePath, presenceJson);
+    }
+  }
+
+  // Slice-2 refactor: auto-write the resolved default speaker. exclusiveWriteOrFail
+  // (wx) on the destination path is a single-syscall CAS (pulsar's load-bearing
+  // recommendation): if a `agent-chat speaker <name>` invocation landed in the
+  // sub-second window between init's resolve check and this write, EEXIST tells
+  // us the explicit choice already won; we leave it alone. "Explicit always
+  // wins" invariant is preserved at the kernel layer with no .lock needed.
+  if (speakerResolution.name) {
+    const speakerJson = JSON.stringify(
+      { name: speakerResolution.name, set_at: utcStamp() },
+      null,
+      2,
+    ) + "\n";
+    const speakerPath = currentSpeakerPath(rec.session_key);
+    try {
+      // mode 0o600 applied at create time (single openSync syscall) — closes
+      // the chmod-race window where a concurrent reader could see the file
+      // at default umask 0o644 between create and chmod (lumeyon Phase-4
+      // review of the multi-user refactor; same threat model as the
+      // 0o600-on-per-session-files invariant).
+      exclusiveWriteOrFail(speakerPath, speakerJson, { mode: 0o600 });
+      console.error(
+        `[agent-chat] speaker auto-resolved to ${speakerResolution.name} ` +
+        `(source: ${speakerResolution.source})`,
+      );
+    } catch (e: any) {
+      if (e?.code !== "EEXIST") throw e;
+      // Explicit `agent-chat speaker <name>` won the wx race. Leave their
+      // value alone; just log the skip so an operator can debug without
+      // needing to grep stderr by hand.
+      const explicit = readCurrentSpeaker(rec.session_key);
+      if (explicit) {
+        console.error(
+          `[agent-chat] speaker already set to ${explicit.name} ` +
+          `(explicit; auto-resolve to ${speakerResolution.name} from ${speakerResolution.source} skipped)`,
+        );
+      }
     }
   }
 
@@ -825,16 +889,20 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
       66,
     );
   }
-  // Defensive: refuse AI-to-AI misroute. Humans have higher topology degree
-  // (in agents.org.yaml: humans 11, AI 5). record-turn handles only the
-  // human→AI direction; AI-to-AI uses turn.ts directly.
-  const sd = neighborsOf(topo, speaker).length;
-  const ad = neighborsOf(topo, id.name).length;
-  if (sd <= ad) {
+  // Defensive: refuse AI-to-AI misroute. users.yaml membership IS the human
+  // marker — `record-turn` handles only the human→AI direction; AI-to-AI
+  // uses turn.ts directly. Replaced the degree heuristic from b11db98
+  // (which inverts at N≥AI count under the orthogonal-overlay refactor).
+  // Single source of truth: a name in users.yaml is human; otherwise it's
+  // an AI agent in the active topology.
+  const users = loadUsers();
+  const isHuman = (n: string) => users.some((u) => u.name === n);
+  if (!isHuman(speaker) || isHuman(id.name)) {
     die(
-      `refuse: speaker '${speaker}' (degree ${sd}) is not a higher-degree (human) shape ` +
-      `than agent '${id.name}' (degree ${ad}). record-turn is for human→AI only; ` +
-      `AI-to-AI uses turn.ts directly.`,
+      `refuse: record-turn is human→AI only. ` +
+      `speaker '${speaker}' ${isHuman(speaker) ? "is human ✓" : "is NOT in users.yaml"}; ` +
+      `agent '${id.name}' ${isHuman(id.name) ? "is in users.yaml (NOT an AI)" : "is AI ✓"}. ` +
+      `AI-to-AI uses turn.ts directly; human-to-human is not supported in v1.`,
       66,
     );
   }

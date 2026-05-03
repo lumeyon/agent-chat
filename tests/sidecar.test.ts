@@ -161,7 +161,8 @@ describe("sidecar.ts — slice 1: UDS skeleton + dispatcher", () => {
     const resp = await rawRequest(socketPath, { id: 1, method: "health" });
     expect(resp.ok).toBe(true);
     expect(resp.result.ok).toBe(true);
-    expect(resp.result.edges).toBe(3);
+    // Post-users-overlay: orion's petersen neighbors are 3 AI + 2 humans = 5.
+    expect(resp.result.edges).toBe(5);
     // Slice 1 has no fs.watch, so no inotify events have fired yet.
     expect(resp.result.last_inotify_event_age_ms).toBe(null);
     expect(Array.isArray(resp.result.errors)).toBe(true);
@@ -914,6 +915,7 @@ describe("sidecar.ts — slice 1: UDS skeleton + dispatcher", () => {
     expect(responses[2].id).toBe(3);
     expect(responses[0].result.agent).toBe("orion");
     expect(typeof responses[1].result.utc).toBe("string");
-    expect(responses[2].result.edges).toBe(3);
+    // Post-users-overlay: orion has 3 petersen AI + 2 user neighbors = 5.
+    expect(responses[2].result.edges).toBe(5);
   }, 8000);
 });

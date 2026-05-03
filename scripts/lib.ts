@@ -13,6 +13,16 @@ export type Topology = {
   edges: [string, string][];
 };
 
+// agents.users.yaml — orthogonal user registry overlaid onto any topology
+// at loadTopology time. Slice 1 of the multi-user transparency refactor:
+// users.yaml membership IS the human marker (no `kind: ai|human` schema
+// field needed). record-turn checks `users.includes(speaker) && !users.includes(agent)`
+// to gate human→AI flow; AI-to-AI flow uses turn.ts directly.
+export type User = {
+  name: string;
+  default?: boolean;
+};
+
 export type Identity = {
   name: string;
   topology: string;
@@ -95,23 +105,170 @@ export function parseTopologyYaml(text: string): Topology {
   return out as Topology;
 }
 
+// Tiny parser for agents.users.yaml. Mirrors parseTopologyYaml's strictness:
+// allowlist top-level keys (kills prototype-pollution shapes), validate the
+// name regex, Object.create(null) for the output. Schema is a list of
+// `- name: <id>` entries with an optional `default: true` flag (at most one
+// per file; load-time validation in loadUsers enforces).
+const ALLOWED_USERS_TOP_KEYS = new Set(["description", "users"]);
+
+export function parseUsersYaml(text: string): User[] {
+  const lines = text.split(/\r?\n/);
+  const out: any = Object.create(null);
+  out.users = [];
+  let section: "users" | null = null;
+  let pending: User | null = null;
+  for (const raw of lines) {
+    const line = raw.replace(/#.*$/, "");
+    if (!line.trim()) continue;
+    const top = line.match(/^([a-z_]+):\s*(.*)$/i);
+    if (top && !line.startsWith(" ") && !line.startsWith("\t")) {
+      if (pending) { out.users.push(pending); pending = null; }
+      const [, key, val] = top;
+      if (!ALLOWED_USERS_TOP_KEYS.has(key)) {
+        throw new Error(`unknown top-level yaml key "${key}" in users.yaml — allowed: ${[...ALLOWED_USERS_TOP_KEYS].join(", ")}`);
+      }
+      if (key === "users") { section = "users"; continue; }
+      section = null;
+      out[key] = val.trim();
+      continue;
+    }
+    if (section !== "users") continue;
+    // List entries open with `- name: <id>`; subsequent indented `default: ...`
+    // lines belong to the most recent entry. Greedy `.+` capture matches the
+    // full post-colon value (including any quoted/spaced content), then we
+    // validate via isValidAgentName so the rejection error mirrors topology
+    // yaml's strictness — `"eyon;rm -rf /"` throws rather than silently failing.
+    const dashName = line.match(/^\s*-\s*name:\s*(.+)$/);
+    if (dashName) {
+      if (pending) { out.users.push(pending); }
+      const name = dashName[1].trim();
+      if (!isValidAgentName(name)) {
+        throw new Error(`invalid user name "${name}" — must match ${AGENT_NAME_RE} (used in filesystem paths)`);
+      }
+      pending = { name };
+      continue;
+    }
+    const indentedKv = line.match(/^\s+([a-z_]+):\s*(\S+)\s*$/i);
+    if (indentedKv && pending) {
+      const [, key, val] = indentedKv;
+      if (key === "default") {
+        pending.default = val.trim() === "true";
+      } else {
+        throw new Error(`unknown user attribute "${key}" — allowed: default`);
+      }
+      continue;
+    }
+    // Allow the dash-only-no-fields shorthand `- name` (without indented attrs).
+    const dashOnly = line.match(/^\s*-\s*(.+)$/);
+    if (dashOnly) {
+      if (pending) { out.users.push(pending); }
+      const name = dashOnly[1].trim();
+      if (!isValidAgentName(name)) {
+        throw new Error(`invalid user name "${name}" — must match ${AGENT_NAME_RE}`);
+      }
+      pending = { name };
+      continue;
+    }
+  }
+  if (pending) out.users.push(pending);
+  if (!Array.isArray(out.users)) out.users = [];
+  return out.users as User[];
+}
+
+// Read the orthogonal user registry. Returns [] if the file is missing
+// (graceful degrade — pre-overlay sessions on petersen/ring/star/pair stay
+// identical bit-for-bit). Re-reads on every call (matches loadTopology's
+// no-cache pattern; the file is tiny). Validates at most one `default: true`
+// and rejects duplicate names — both are load-time correctness invariants.
+export function loadUsers(): User[] {
+  const file = path.join(SKILL_ROOT, "agents.users.yaml");
+  if (!fs.existsSync(file)) return [];
+  const users = parseUsersYaml(fs.readFileSync(file, "utf8"));
+  // No duplicate user names within the file.
+  const seen = new Set<string>();
+  for (const u of users) {
+    if (seen.has(u.name)) {
+      throw new Error(`duplicate user "${u.name}" in agents.users.yaml`);
+    }
+    seen.add(u.name);
+  }
+  // At most one default user. Multiple defaults would make
+  // resolveDefaultSpeaker non-deterministic — refuse loudly.
+  const defaults = users.filter((u) => u.default === true);
+  if (defaults.length > 1) {
+    throw new Error(`multiple default users in agents.users.yaml: ${defaults.map((u) => u.name).join(", ")}; expected at most one`);
+  }
+  return users;
+}
+
 export function loadTopology(topologyName: string): Topology {
   const file = path.join(SKILL_ROOT, `agents.${topologyName}.yaml`);
   if (!fs.existsSync(file)) {
     const choices = fs.readdirSync(SKILL_ROOT)
-      .filter((f) => f.startsWith("agents.") && f.endsWith(".yaml"))
+      .filter((f) => f.startsWith("agents.") && f.endsWith(".yaml") && f !== "agents.users.yaml")
       .map((f) => f.replace(/^agents\.|\.yaml$/g, ""))
       .join(", ");
     throw new Error(`no topology "${topologyName}" — available: ${choices}`);
   }
   const t = parseTopologyYaml(fs.readFileSync(file, "utf8"));
-  // Validate every edge endpoint is a known agent.
-  const known = new Set(t.agents);
+  // Validate every edge endpoint is a known agent (pre-merge, so AI-only edges
+  // resolve against the AI agent set declared in the topology yaml).
+  const aiKnown = new Set(t.agents);
   for (const [a, b] of t.edges) {
-    if (!known.has(a) || !known.has(b)) {
+    if (!aiKnown.has(a) || !aiKnown.has(b)) {
       throw new Error(`edge [${a}, ${b}] references unknown agent`);
     }
     if (a === b) throw new Error(`self-loop edge [${a}, ${b}] not allowed`);
+  }
+  // Overlay agents.users.yaml. Lyra's design lever: merge users into t.agents
+  // and derive user-AI + user-user edges into t.edges so every existing call
+  // site (`topo.agents.includes(name)`, edge canonicalization, edgesOf,
+  // neighborsOf) keeps working with zero per-site edits. Set-based dedup
+  // makes the merge idempotent against topologies that already declare users
+  // (e.g. agents.org.yaml).
+  const users = loadUsers();
+  if (users.length > 0) {
+    // The AI-only set is t.agents minus anyone users.yaml claims as a human.
+    // User-AI edges derive against this set so a topology that pre-declares
+    // humans alongside AI in its own agents list (e.g. agents.org.yaml) gets
+    // idempotent overlay: dedup-merging users back in is a no-op for both
+    // agents and edges. record-turn's misroute defense uses
+    // `users.includes(name)` as the human marker, so a name that appears in
+    // both lists IS treated as a human (users.yaml wins).
+    const userSet = new Set(users.map((u) => u.name));
+    const aiNames = t.agents.filter((a) => !userSet.has(a));
+    const userNames = users.map((u) => u.name);
+    // Merge user names into the agent list (Set dedup; org's pre-declared
+    // eyon/john don't duplicate).
+    const agentSet = new Set(t.agents);
+    for (const u of userNames) {
+      if (!agentSet.has(u)) {
+        t.agents.push(u);
+        agentSet.add(u);
+      }
+    }
+    // Derive edges. Canonical-id Set dedup against pre-existing edges so org's
+    // already-declared eyon-orion / eyon-john pairs don't duplicate.
+    const edgeIdSet = new Set(t.edges.map(([a, b]) => edgeId(a, b)));
+    for (const u of userNames) {
+      for (const a of aiNames) {
+        const id = edgeId(u, a);
+        if (!edgeIdSet.has(id)) {
+          t.edges.push([u, a]);
+          edgeIdSet.add(id);
+        }
+      }
+    }
+    for (let i = 0; i < userNames.length; i++) {
+      for (let j = i + 1; j < userNames.length; j++) {
+        const id = edgeId(userNames[i], userNames[j]);
+        if (!edgeIdSet.has(id)) {
+          t.edges.push([userNames[i], userNames[j]]);
+          edgeIdSet.add(id);
+        }
+      }
+    }
   }
   return t;
 }
@@ -292,6 +449,75 @@ export function safeUnlink(p: string): boolean {
   catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
 }
 
+// ---------------------------------------------------------------------------
+// resolveDefaultSpeaker — slice 2 refactor (orthogonal user overlay).
+//
+// Pure function; testable in isolation. Returns the human user that init
+// should auto-write to current_speaker.json on a fresh session, OR an
+// error if explicit env asserts a name not in users.yaml.
+//
+// Resolution order (cadence/pulsar/orion Phase-2 resolved):
+//   1. $AGENT_CHAT_USER — explicit per-session user assertion. SET +
+//      registered → return name. SET + NOT registered → return error
+//      (cadence: never silently fall through; explicit env masks config
+//      typos otherwise).
+//   2. $USER — system-level login. Set + registered → return name. Set +
+//      NOT registered → silent fall-through (system $USER is not an
+//      agent-chat-specific assertion the way $AGENT_CHAT_USER is).
+//   3. users.yaml `default: true` entry → return that name. loadUsers'
+//      load-time validation guarantees at most one default.
+//   4. None of the above → {name: null, source: null, error: null}: no
+//      auto-resolve fires; init proceeds without writing current_speaker.
+//
+// `source` is purely diagnostic (for stderr logging); never load-bearing.
+// ---------------------------------------------------------------------------
+
+export type DefaultSpeakerResolution = {
+  name: string | null;
+  source: "$AGENT_CHAT_USER" | "$USER" | "users.yaml default" | null;
+  error: string | null;
+};
+
+export function resolveDefaultSpeaker(): DefaultSpeakerResolution {
+  // Tolerate malformed yaml as "no users known" rather than crashing init.
+  // loadUsers() ships in this same file (multi-user refactor); the prior
+  // self-require dance was dead code and removed at lumeyon's Phase-4
+  // review nit.
+  let users: User[] = [];
+  try { users = loadUsers(); } catch { users = []; }
+
+  const userNames = new Set(users.map((u) => u.name));
+
+  // 1. $AGENT_CHAT_USER — strict.
+  const explicit = process.env.AGENT_CHAT_USER;
+  if (explicit && explicit.trim()) {
+    const name = explicit.trim();
+    if (userNames.has(name)) {
+      return { name, source: "$AGENT_CHAT_USER", error: null };
+    }
+    return {
+      name: null,
+      source: null,
+      error: `$AGENT_CHAT_USER='${name}' but no user named '${name}' in agents.users.yaml; add an entry or run 'agent-chat speaker <name>' explicitly`,
+    };
+  }
+
+  // 2. $USER — silent fall-through if unregistered.
+  const sys = process.env.USER;
+  if (sys && sys.trim() && userNames.has(sys.trim())) {
+    return { name: sys.trim(), source: "$USER", error: null };
+  }
+
+  // 3. users.yaml default: true.
+  const defaultUser = users.find((u) => u.default === true);
+  if (defaultUser) {
+    return { name: defaultUser.name, source: "users.yaml default", error: null };
+  }
+
+  // 4. None resolved — let init proceed without an auto-write.
+  return { name: null, source: null, error: null };
+}
+
 // Returns the session key for the *current* process. Must be:
 //   - stable across every bun invocation within ONE agent session
 //   - different between two agent sessions on the same host (no collisions)
@@ -450,9 +676,16 @@ export function findLivePresence(agent: string): SessionRecord | null {
 // All current users of this skill are on local filesystems, so the simple
 // implementation suffices. If multi-host filesystem use ever ships,
 // switch to a link()-based fallback for NFSv2/v3.
-export function exclusiveWriteOrFail(p: string, content: string): void {
+export function exclusiveWriteOrFail(p: string, content: string, opts: { mode?: number } = {}): void {
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  const fd = fs.openSync(p, "wx");
+  // Apply mode at openSync time (third arg) rather than chmod-after-create:
+  // openSync sets the file's permissions atomically with the create, closing
+  // a race where a concurrent reader could see the file at default-umask
+  // 0o644 between the open and a chmod follow-up. Same identity-leak threat
+  // model that justified 0o600 on per-session files in the first place; this
+  // is the defense-in-depth answer (lumeyon Phase-4 review of the multi-user
+  // refactor).
+  const fd = opts.mode != null ? fs.openSync(p, "wx", opts.mode) : fs.openSync(p, "wx");
   let wrote = false;
   try {
     fs.writeFileSync(fd, content);

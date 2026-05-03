@@ -1,0 +1,22 @@
+# Authorized human users registry. Orthogonal overlay onto AI topologies:
+# at loadTopology time, every entry here is added to the topology's agents
+# list, and edges are derived from each user to every AI agent + to every
+# other user. Edges all live under the AI's current topology directory
+# (e.g. petersen/eyon-orion/), matching the org-topology semantic users
+# already see today.
+#
+# Schema:
+#   description: <optional text>
+#   users:
+#     - name: <agent-safe identifier>
+#       default: <true | false>   # at most one default: true entry
+#
+# Membership in this file IS the human-marker for the AI-to-AI misroute
+# defense — no `kind: human|ai` schema field. record-turn checks
+# `users.includes(speaker) && !users.includes(agent)` to assert the
+# human→AI flow.
+description: Authorized human users — orthogonal overlay onto any AI topology.
+users:
+  - name: eyon
+    default: true
+  - name: john

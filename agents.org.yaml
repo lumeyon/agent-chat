@@ -1,8 +1,6 @@
 topology: org
-description: Multi-user organization topology. 2 humans (eyon, john) + 10 AI agents (the petersen subgraph). Every human has an edge to every AI; the two humans share an edge; AI-to-AI edges preserve the petersen graph verbatim. Total 36 edges (1 human-human + 20 human-AI + 15 petersen). Humans and AI are first-class agents — uniform treatment, no privacy controls; the audit trail is the only access mechanism. The human-set is implicit (derivable from edge-degree distribution: humans have degree 11, AI have degree 5), no schema marker.
+description: AI subgraph for the org cohort — 10 AI agents arranged in the petersen graph, identical to agents.petersen.yaml's structure. Humans are no longer declared here; they live in agents.users.yaml and overlay onto every topology automatically via loadTopology's merge (multi-user transparency refactor). After the overlay, loadTopology("org") yields 12 agents and 36 edges identical to the pre-refactor "humans-as-agents" shape — backward compatible. The org topology now exists primarily for the comment-block and as a sentinel name; pragmatically, agents.petersen.yaml + agents.users.yaml produce the same merged graph.
 agents:
-  - eyon
-  - john
   - orion
   - lumeyon
   - lyra
@@ -14,31 +12,10 @@ agents:
   - cadence
   - rhino
 edges:
-  # human × human (1)
-  - [eyon, john]
-  # eyon × AI (10)
-  - [eyon, orion]
-  - [eyon, lumeyon]
-  - [eyon, lyra]
-  - [eyon, keystone]
-  - [eyon, sentinel]
-  - [eyon, vanguard]
-  - [eyon, carina]
-  - [eyon, pulsar]
-  - [eyon, cadence]
-  - [eyon, rhino]
-  # john × AI (10)
-  - [john, orion]
-  - [john, lumeyon]
-  - [john, lyra]
-  - [john, keystone]
-  - [john, sentinel]
-  - [john, vanguard]
-  - [john, carina]
-  - [john, pulsar]
-  - [john, cadence]
-  - [john, rhino]
-  # AI × AI petersen (15) — verbatim from agents.petersen.yaml
+  # AI × AI petersen (15) — verbatim from agents.petersen.yaml.
+  # Human × AI and human × human edges are derived at runtime via
+  # loadTopology's overlay against agents.users.yaml — no longer
+  # duplicated here.
   - [orion, lumeyon]
   - [lumeyon, sentinel]
   - [sentinel, vanguard]

@@ -39,7 +39,10 @@ describe("agent-chat init", () => {
     const r = runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     // orion's Petersen neighbors are carina, keystone, lumeyon (sorted)
-    expect(r.stdout).toContain("neighbors (3): carina, keystone, lumeyon");
+    // Post-users-overlay (slice 1): orion's petersen neighbors are 3 AI
+    // (carina, keystone, lumeyon) + 2 humans (eyon, john) = 5, sorted
+    // alphabetically. Pre-overlay this was 3.
+    expect(r.stdout).toContain("neighbors (5): carina, eyon, john, keystone, lumeyon");
   });
 
   test("init refuses an unknown agent name", () => {
@@ -109,6 +112,32 @@ describe("agent-chat init", () => {
       envWith({ CLAUDE_SESSION_ID: sid }));
     expect(w.stdout).toContain("eyon@org");
     expect(w.stdout).toContain(`session_key=${sid}`);
+  });
+
+  // Load-bearing test for the orthogonal users-overlay refactor (slice 1):
+  // init a HUMAN as id.name on a PURE-AI topology (petersen). Pre-overlay
+  // this would refuse — eyon isn't in agents.petersen.yaml. With overlay,
+  // loadTopology("petersen") merges users.yaml into t.agents and edge
+  // canonicalization works transparently, so init succeeds and the user's
+  // 11 neighbors (10 petersen AI + 1 other user) are enumerated. This
+  // exercises the cross-cut every other slice depends on: lumeyon's merge
+  // preserving symmetry (users-as-id.name) without per-call-site edits.
+  test("init eyon petersen succeeds via users overlay (no agents.petersen.yaml change required)", () => {
+    const sid = fakeSessionId("eyon");
+    const r = runScript("agent-chat.ts", ["init", "eyon", "petersen", "--no-monitor"],
+      envWith({ CLAUDE_SESSION_ID: sid }));
+    expect(r.stdout).toContain("✓ this session is eyon@petersen");
+    // 10 petersen AI + 1 other user (john) = 11 neighbors.
+    expect(r.stdout).toMatch(/neighbors \(11\):/);
+    // Edge enumeration includes every petersen AI plus john.
+    expect(r.stdout).toContain("orion");
+    expect(r.stdout).toContain("john");
+    // Session/presence land at the sanitized path same as any other agent.
+    const sess = readSession(CONVO_DIR, sid);
+    expect(sess).not.toBeNull();
+    expect(sess.agent).toBe("eyon");
+    expect(sess.topology).toBe("petersen");
+    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "eyon.json"))).toBe(true);
   });
 });
 

@@ -6,9 +6,9 @@ a living artifact — when a future change reverses one of these
 decisions, edit the relevant section in place rather than appending a
 revisions log, so the file always describes the *current* state.
 
-The skill went through ten design rounds, each surfacing a problem the
-previous round couldn't anticipate. Reading this top-to-bottom is the
-fastest way to understand why the code looks the way it does.
+The skill went through eleven design rounds, each surfacing a problem
+the previous round couldn't anticipate. Reading this top-to-bottom is
+the fastest way to understand why the code looks the way it does.
 
 ---
 
@@ -898,7 +898,206 @@ budget the user expected.
 
 ---
 
-## Round 11 — Document the architecture (this file)
+## Round 11 — Orthogonal user overlay (refactor of round 10)
+
+### Problem surfaced
+
+Round 10 shipped multi-user support but with two friction points the user
+identified the moment we tried to use it: **multi-user required ceremony,
+not automatic capture**, and **users were coupled to a specific topology**.
+
+Concretely:
+
+1. **Topology coupling.** Round 10's `agents.org.yaml` declared humans
+   alongside AI in one yaml. Adding a user meant editing the topology
+   yaml; using a user with a different topology required a NEW topology
+   yaml. Petersen, ring, star, pair couldn't pick up users at all.
+2. **Explicit `agent-chat speaker`.** Every session had to run
+   `speaker <name>` before `record-turn` would accept anything. The
+   user expected automatic capture by default — typing in their own
+   Claude Code instance shouldn't require ceremony to be recorded.
+
+The user's framing: *"It's strange, I actually thought this was what we
+had just built. So if this is not what we did, we need to refactor it."*
+
+### Decision
+
+Refactor to an **orthogonal user overlay**: topology stays AI-only;
+humans live in a separate `agents.users.yaml` registry; user-edges are
+derived at runtime by `loadTopology`'s merge step. `init` auto-resolves
+the speaker from the OS environment so capture is automatic. Backward
+compatible: round-10's `agents.org.yaml` keeps working; explicit
+`agent-chat speaker <name>` remains as override.
+
+The architectural shift is one of **factoring**, not feature addition.
+Round 10 conflated two orthogonal concerns:
+
+- **AI peer-coordination topology** (petersen, ring, star, pair) — graph
+  shape is mathematically meaningful for AI-AI peer review.
+- **User-AI conversation channels** — bilateral, one per (user, AI) pair,
+  no graph shape needed.
+
+Round 10 forced both into one topology yaml. Round 11 separates them.
+
+### What ships
+
+1. **`agents.users.yaml`** — single source of truth for the user
+   registry. Schema: `users: [{name, default?: bool}]`. At-most-one
+   `default: true` (load-time enforced). Initial content: eyon
+   (default: true), john.
+
+2. **`parseUsersYaml` + `loadUsers()` + `User` type** — strict parser
+   mirroring `parseTopologyYaml`'s hardening (allowlist top keys,
+   `Object.create(null)`, `AGENT_NAME_RE`). `loadUsers` returns `[]`
+   on missing yaml — graceful degrade for pre-overlay sessions.
+
+3. **`loadTopology(name)` overlay merge** — the structural lever that
+   makes the rest of the slice trivial. After parsing the AI topology
+   yaml, calls `loadUsers()` and merges users into `t.agents` and
+   user-AI/user-user edges into `t.edges`, with Set-based dedup so
+   pre-existing `agents.org.yaml` declarations don't duplicate.
+   `edgesOf`, `neighborsOf`, edge canonicalization — all unchanged.
+   ONE function modification, ZERO call-site edits across the codebase.
+
+4. **`resolveDefaultSpeaker()`** — pure function, `$AGENT_CHAT_USER` →
+   `$USER` (if registered) → `users.yaml default` → null. `cmdInit`
+   calls it BEFORE writeSessionRecord; on `error` (e.g., explicit
+   `$AGENT_CHAT_USER=alice` but alice not in users.yaml), hard-fail
+   exit 65 with no state writes. After spawn, `exclusiveWriteOrFail`
+   the auto-resolved value with `mode: 0o600` at create time.
+
+5. **`record-turn` membership check rewrite** — replaces round-10's
+   degree heuristic (`deg(speaker) > deg(agent)`) with explicit
+   `users.includes(speaker) && !users.includes(agent)`. The degree
+   heuristic worked under round-10's bipartite-by-construction org
+   topology but inverts at smaller AI topologies with many users
+   (e.g., petersen + 10 users → AI degree 13, human degree 12 → defense
+   refuses legitimate human turns). Membership check is correct at any
+   topology size.
+
+### Why "users.yaml membership IS the human marker" instead of `kind: human|ai`
+
+Lumeyon's framing in Phase-1: if `users.yaml` only contains humans,
+then `users.includes(name)` IS the marker. No schema field needed.
+
+Two paths considered:
+
+- **B1**: only `kind: human` on users.yaml entries; topology agents
+  implicitly `kind: ai`. Defense via `kindOf` helper.
+- **Membership-as-marker**: no kind field. `loadUsers()` is the source
+  of truth; `users.includes()` is the check. Topology agents are
+  implicitly AI by being absent from users.yaml.
+
+The membership-as-marker design wins on simplicity (no schema
+duplication, single source of truth) and survives the lumeyon
+collision-tolerance choice (below) cleanly: even when a name appears in
+both lists, `loadUsers()` is unambiguously checked.
+
+### Lumeyon's spec deviation (accepted explicitly)
+
+Phase-2 directive said `loadUsers` should throw on user-name == AI-name
+collision. Lumeyon's slice-1 implementation softened this to **Set-based
+dedup with an inline comment** because strict throw broke
+`loadTopology("org")` (which already pre-declares eyon/john alongside
+the AI agents). Same name, same human, no semantic conflict — dedup is
+the right policy.
+
+Strict throw was wrong because:
+
+1. It conflates "same identifier, same person" (legitimate dedup) with
+   "same identifier, different role" (genuine conflict).
+2. The membership check (`users.includes`) is the source of truth, not
+   topology.agents — collision in topo.agents doesn't break the misroute
+   defense.
+3. Pre-existing org.yaml declarations would all break, requiring
+   migration that the user explicitly said wasn't desired.
+
+The deviation is **strictly better UX, doesn't compromise correctness,
+and is documented inline at the merge site**. Accepted explicitly here:
+the round-11 design rule is "users.yaml is the human-set; topology
+agents lists are AI-set; collisions are dedup'd silently because they're
+non-conflicts under uniform-treatment."
+
+### What we cleaned up in agents.org.yaml
+
+Round-10's `agents.org.yaml` declared `eyon` and `john` as topology
+agents AND declared 21 cross-edges (1 human-human + 20 human-AI).
+Round 11 removes them: org becomes a pure 10-agent AI topology with the
+15 petersen edges. The user-edges and human-human edge come from the
+overlay automatically.
+
+This is purely cosmetic — lumeyon's dedup made the duplicate
+declarations a no-op at runtime — but it cleans intent. The shape rule
+"topology yaml = AI peer graph; users.yaml = human registry" is now
+visible in the file structure, not just in the protocol.
+
+### Two real bugs caught at Phase-4 cross-review
+
+The four-phase orchestration ran end-to-end through the petersen graph
+without escalation. Cross-review surfaced:
+
+1. **chmod-race in `exclusiveWriteOrFail`** (lumeyon → carina). The
+   auto-write splice did `exclusiveWriteOrFail(...)` followed by
+   `chmodSync(0o600)`. Between the openSync(O_CREAT|O_EXCL) syscall
+   and the chmod, the file existed at default umask 0o644 — the same
+   identity-leak window the 0o600 invariant was meant to prevent.
+   Fix: extend `exclusiveWriteOrFail` to accept `mode?` option,
+   applied at openSync time as the third arg, eliminating the gap.
+   ~3 LoC; same pattern `writeFileAtomic` already used.
+2. **self-require dead code** (lumeyon → carina, nit). The
+   `resolveDefaultSpeaker` helper used a `require("./lib.ts")`
+   self-require to access `loadUsers()` defensively, with a comment
+   "tolerate loadUsers being absent from older lib.ts builds." Dead
+   code: `loadUsers` ships in the same file. Simplified to direct
+   call.
+
+Both fixed at Phase-5 integration. Same shape as round 10's two cross-
+review catches (listSessions contamination + fetchSpeaker dead-code
+field path) — the load-bearing-test rule applied to code review
+continues to catch one or two real bugs per round that pure unit tests
+miss.
+
+### What we explicitly didn't do (anti-creep)
+
+- **Did NOT delete `agents.org.yaml`.** Backward compat preserved;
+  cleaned up but kept.
+- **Did NOT remove explicit `agent-chat speaker <name>`.** Override
+  remains for the rare multi-user-on-one-session case.
+- **Did NOT add per-user `default_topology`.** Keystone proposed it for
+  resolving rhino's edge-dir collision concern; lumeyon's load-time
+  merge resolved that without per-user fields.
+- **Did NOT add `users.yaml` editing CLI.** Manual yaml edits are fine
+  for v1.
+- **Did NOT wire the `PostResponse` Claude Code hook.** Still v-next
+  via `docs/HOOK_REQUEST.md`. SKILL.md prompt discipline remains the
+  v1 mechanism.
+
+### Process observations
+
+This was the third heavyweight integration the team has run
+autonomously (round 9 sidecar rollout, round 10 multi-user, round 11
+this refactor). Wall-clock from kickoff (00:03:54Z) to commit-ready
+(~00:50Z) was ~45 min for ~250 LoC of new code + 100 LoC of test
+modifications, including two real bugs caught and fixed in review.
+
+The compound win across rounds: each round's structural changes made
+the next round's coordination dramatically faster. Round 9's sidecar +
+`since-last-spoke` made round-10's multi-agent orchestration possible
+at the wall-clock budget the user expected. Round 10's multi-user
+groundwork made round-11's refactor a focused 4-artifact change with
+zero from-scratch architectural work. The team understood the codebase
+deeply enough by round 11 to surface lyra's "merge inside loadTopology"
+design lever in Phase-1 — reducing the slice from 5+ call-site edits
+to ONE function modification.
+
+The user's framing — *"every topology to naturally and automatically
+record the user's interaction"* — is now structurally satisfied:
+**any topology, plus `agents.users.yaml`, captures user-AI conversations
+automatically without any explicit setup beyond `agent-chat init`**.
+
+---
+
+## Round 12 — Document the architecture (this file)
 
 ### Decision
 
