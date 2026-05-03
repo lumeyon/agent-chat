@@ -27,7 +27,7 @@ import {
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
   utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
-  writeTurnAtomic, resolveIdentity, loadUsers,
+  readTurn, writeTurnAtomic, resolveIdentity, loadUsers,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
@@ -471,12 +471,70 @@ function cmdInit(args: string[]): void {
   }
 }
 
-async function cmdExit(_args: string[]): Promise<void> {
+// Auto-archive every parked edge in this session whose CONVO.md has grown
+// past the line threshold. Shells out to `archive.ts auto <peer>` per
+// edge. Per-edge spawn cost is ~50ms; total cost for a typical session
+// (3-15 edges) is sub-second. The shell-out is intentional: it gives us
+// the same lock acquisition + validator path as a manual `archive.ts auto`
+// invocation without duplicating the seal/commit logic.
+//
+// Returns the count of edges archived. Caller logs the summary so the
+// behavior is visible in `agent-chat exit` / `gc --auto-archive` stdout.
+function autoArchiveSessionEdges(rec: SessionRecord, threshold: number): number {
+  const topo = (() => { try { return loadTopology(rec.topology); } catch { return null; } })();
+  if (!topo) return 0;
+  const edges = edgesOf(topo, rec.agent);
+  let archived = 0;
+  for (const edge of edges) {
+    if (!fs.existsSync(edge.convo)) continue;
+    if (readTurn(edge.turn) !== "parked") continue;
+    let lines = 0;
+    try { lines = fs.readFileSync(edge.convo, "utf8").split("\n").length; } catch { continue; }
+    if (lines < threshold) continue;
+    // Inherit the session's identity via env (CLAUDE_SESSION_ID + topology
+    // override) so the spawned `archive.ts auto` resolveIdentity hits the
+    // same record this session is operating under.
+    const env = {
+      ...process.env,
+      CLAUDE_SESSION_ID: rec.claude_session_id ?? rec.session_key,
+    };
+    const r = child_process.spawnSync(
+      process.execPath,
+      [path.join(SKILL_ROOT, "scripts", "archive.ts"), "auto", edge.peer],
+      { env, cwd: SKILL_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" },
+    );
+    if (r.status === 0) {
+      archived++;
+      const m = (r.stdout ?? "").match(/auto-archived (\S+)/);
+      console.error(`[agent-chat] auto-archived ${edge.peer} edge (${lines} lines) → ${m ? m[1] : "(id?)"}`);
+    } else {
+      // Non-fatal — log and continue. Common benign cases: nothing-to-archive
+      // (CONVO is already at fresh-tail), uncommitted-pending blocking auto.
+      const reason = (r.stderr ?? "").trim().split("\n")[0] || `exit ${r.status}`;
+      console.error(`[agent-chat] auto-archive of ${edge.peer} skipped: ${reason}`);
+    }
+  }
+  return archived;
+}
+
+async function cmdExit(args: string[]): Promise<void> {
+  const noAutoArchive = args.includes("--no-auto-archive");
+  const thresholdArg = args.find((a) => a.startsWith("--archive-threshold="));
+  const threshold = thresholdArg ? parseInt(thresholdArg.split("=")[1], 10) : 200;
+
   const key = currentSessionKey();
   const rec = readSessionRecord(key);
   if (!rec) {
     console.log(`no active session for key ${key} — nothing to do.`);
     return;
+  }
+  // Auto-archive parked-and-bloated edges BEFORE tearing down daemons so
+  // any sealed leaf is durable on disk before the sidecar/monitor stop.
+  // Default-on; --no-auto-archive opts out for sessions that prefer to
+  // archive manually.
+  if (!noAutoArchive) {
+    const n = autoArchiveSessionEdges(rec, threshold);
+    if (n > 0) console.log(`✓ auto-archived ${n} parked edge(s) before exit`);
   }
   // Stop sidecar BEFORE monitor so the sidecar's graceful shutdown can land
   // before anything else changes state. The sidecar self-cleans its socket +
@@ -528,6 +586,25 @@ function cmdWho(_args: string[]): void {
 
 function cmdGc(args: string[]): void {
   const pruneLogs = args.includes("--prune-logs");
+  const autoArchive = args.includes("--auto-archive");
+  const thresholdArg = args.find((a) => a.startsWith("--archive-threshold="));
+  const threshold = thresholdArg ? parseInt(thresholdArg.split("=")[1], 10) : 200;
+  // --auto-archive runs the same per-edge auto-archive sweep as
+  // `agent-chat exit` but for the CURRENT live session (so a long-running
+  // session can periodically seal old parked edges without exiting). Uses
+  // the current session's identity; org-wide cleanup means running gc
+  // from each session in turn.
+  if (autoArchive) {
+    const key = currentSessionKey();
+    const rec = readSessionRecord(key);
+    if (rec) {
+      const n = autoArchiveSessionEdges(rec, threshold);
+      if (n > 0) console.log(`gc: auto-archived ${n} parked edge(s) for ${rec.agent}@${rec.topology}`);
+      else console.log(`gc: no parked edges over ${threshold} lines for ${rec.agent}@${rec.topology}`);
+    } else {
+      console.error(`gc: --auto-archive requires an active session record (run \`agent-chat init\` first); skipping the archive sweep.`);
+    }
+  }
   let removed = 0;
   const myHost = os.hostname();
   for (const rec of listSessions()) {
@@ -1031,13 +1108,18 @@ switch (cmd) {
       `      Pass --no-monitor to disable the chat-notification poller.\n\n` +
       `  exit\n` +
       `      Sign out: stop this session's monitor and remove its session +\n` +
-      `      presence files. Safe to skip — \`gc\` cleans up dead sessions.\n\n` +
+      `      presence files. Safe to skip — \`gc\` cleans up dead sessions.\n` +
+      `      Auto-archives parked edges past --archive-threshold (default 200)\n` +
+      `      before teardown; pass --no-auto-archive to opt out.\n\n` +
       `  who\n` +
       `      List live (and stale) sessions on this host.\n\n` +
-      `  gc [--prune-logs]\n` +
+      `  gc [--prune-logs] [--auto-archive] [--archive-threshold=N]\n` +
       `      Sweep stale session/presence files (pid no longer alive).\n` +
       `      With --prune-logs, also remove monitor log files for agents\n` +
-      `      that aren't live on this host.\n\n` +
+      `      that aren't live on this host.\n` +
+      `      With --auto-archive, run \`archive.ts auto\` against every\n` +
+      `      parked edge of the CURRENT session whose CONVO.md is past the\n` +
+      `      line threshold (default 200). Use --archive-threshold=N to override.\n\n` +
       `  whoami\n` +
       `      Print this session's identity in one line.\n\n` +
       `  speaker [<name> | --clear]\n` +

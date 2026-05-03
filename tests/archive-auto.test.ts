@@ -274,3 +274,109 @@ describe("archive auto — long-term-memory pipeline (mechanical)", () => {
     expect(idx).toHaveLength(2);
   }, 10000);
 });
+
+describe("agent-chat exit / gc — auto-archive integration", () => {
+
+  test("agent-chat exit auto-archives parked-and-bloated edges before teardown", () => {
+    // Plant the synthetic conversation as parked + bloated.
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(50));
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
+
+    // Run exit (auto-archive default-on, --no-monitor avoids spawning a real monitor).
+    // Note: cmdExit's auto-archive shells out to archive.ts auto which calls
+    // resolveIdentity — which needs the session record on disk. Pre-staged
+    // by beforeEach.
+    const r = runScript("agent-chat.ts", ["exit"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/auto-archived 1 parked edge\(s\) before exit/);
+    expect(r.stderr).toMatch(/auto-archived lumeyon edge \(\d+ lines\)/);
+
+    // Archive directory exists (a leaf was sealed).
+    const archiveDirs = fs.readdirSync(path.join(EDGE_DIR, "archives", "leaf"));
+    expect(archiveDirs.length).toBe(1);
+    expect(archiveDirs[0]).toMatch(/^arch_L_/);
+    // Index has the entry.
+    const idx = fs.readFileSync(path.join(EDGE_DIR, "index.jsonl"), "utf8")
+      .split("\n").filter(Boolean);
+    expect(idx).toHaveLength(1);
+  }, 12000);
+
+  test("agent-chat exit --no-auto-archive skips the auto-archive sweep", () => {
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(50));
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
+
+    const r = runScript("agent-chat.ts", ["exit", "--no-auto-archive"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).not.toMatch(/auto-archived/);
+
+    // No archive directory created.
+    const leafDir = path.join(EDGE_DIR, "archives", "leaf");
+    expect(fs.existsSync(leafDir)).toBe(false);
+  }, 12000);
+
+  test("agent-chat exit skips short edges (under threshold)", () => {
+    // Only 5 sections — well under the 200-line threshold.
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(5));
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
+
+    const r = runScript("agent-chat.ts", ["exit"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    // No "auto-archived N parked edge(s)" line because none were over threshold.
+    expect(r.stdout).not.toMatch(/auto-archived \d+ parked edge/);
+
+    const leafDir = path.join(EDGE_DIR, "archives", "leaf");
+    expect(fs.existsSync(leafDir)).toBe(false);
+  }, 12000);
+
+  test("agent-chat exit skips non-parked edges", () => {
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(50));
+    // turn=orion, NOT parked — auto-archive should skip.
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "orion");
+
+    const r = runScript("agent-chat.ts", ["exit"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).not.toMatch(/auto-archived \d+ parked edge/);
+
+    const leafDir = path.join(EDGE_DIR, "archives", "leaf");
+    expect(fs.existsSync(leafDir)).toBe(false);
+  }, 12000);
+
+  test("agent-chat gc --auto-archive archives parked-and-bloated edges in the current session", () => {
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(50));
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
+
+    const r = runScript("agent-chat.ts", ["gc", "--auto-archive"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/gc: auto-archived 1 parked edge\(s\) for orion@petersen/);
+
+    // Confirm the leaf was sealed AND the index entry exists, just like exit.
+    const archiveDirs = fs.readdirSync(path.join(EDGE_DIR, "archives", "leaf"));
+    expect(archiveDirs.length).toBe(1);
+    const idx = fs.readFileSync(path.join(EDGE_DIR, "index.jsonl"), "utf8")
+      .split("\n").filter(Boolean);
+    expect(idx).toHaveLength(1);
+
+    // Key property: this is the SAME session — gc didn't tear down the
+    // session record (that's what `exit` does).
+    const sessionPath = path.join(CONVO_DIR, ".sessions", `${SESSION_KEY}.json`);
+    expect(fs.existsSync(sessionPath)).toBe(true);
+  }, 12000);
+
+  test("agent-chat gc --auto-archive --archive-threshold=N respects the override", () => {
+    // 10 sections. Default threshold (200 lines) would NOT archive; explicit
+    // threshold of 1 line guarantees the edge qualifies.
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(10));
+    fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
+
+    // First: confirm default threshold leaves it alone.
+    const r1 = runScript("agent-chat.ts", ["gc", "--auto-archive"], ORION_ENV);
+    expect(r1.exitCode).toBe(0);
+    expect(r1.stdout).toMatch(/no parked edges over 200/);
+    expect(fs.existsSync(path.join(EDGE_DIR, "archives", "leaf"))).toBe(false);
+
+    // Now: with low threshold, it archives.
+    const r2 = runScript("agent-chat.ts", ["gc", "--auto-archive", "--archive-threshold=1"], ORION_ENV);
+    expect(r2.exitCode).toBe(0);
+    expect(r2.stdout).toMatch(/auto-archived 1 parked edge/);
+  }, 12000);
+});
