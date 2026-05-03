@@ -23,6 +23,15 @@ export function rmTmp(dir: string): void {
 
 // Build a clean env for a test run. Strips any host AGENT_* / CLAUDE_SESSION_*
 // vars so resolution behaves the same regardless of who runs the suite.
+//
+// Round 12 slice 1 ships an LLM summarizer in `archive.ts auto` that probes
+// for `claude` on PATH at module load. On dev machines where `claude` IS on
+// PATH, mechanical archive tests would silently shell out to the live LLM,
+// producing `synthesis: "llm"` (instead of the expected `auto`) and timing
+// out (~15-30s per archive). To keep the suite hermetic and deterministic,
+// freshEnv injects `AGENT_CHAT_NO_LLM=1` by default. The dedicated
+// `tests/llm.test.ts` opt-in suite that exercises the LLM path uses
+// `process.env` overrides directly and is gated by `RUN_LLM_TESTS=1`.
 export function freshEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const base: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -31,7 +40,7 @@ export function freshEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv 
     if (k.startsWith("CLAUDE_SESSION_") || k.startsWith("CLAUDE_CODE_SESSION_")) continue;
     base[k] = v;
   }
-  return { ...base, ...extra };
+  return { AGENT_CHAT_NO_LLM: "1", ...base, ...extra };
 }
 
 export type RunResult = {

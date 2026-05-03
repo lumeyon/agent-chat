@@ -1083,7 +1083,7 @@ describe("archiveId", () => {
     expect(b).toMatch(/^arch_C_/);
   });
 
-  test("two consecutive ids differ (random suffix)", () => {
+  test("two consecutive ids differ when no body provided (random suffix)", () => {
     const a = archiveId("leaf", "2026-05-01T00:00:00Z");
     const b = archiveId("leaf", "2026-05-01T00:00:00Z");
     expect(a).not.toBe(b);
@@ -1093,12 +1093,46 @@ describe("archiveId", () => {
     const a = archiveId("leaf", "2026-05-01T00:00:00Z");
     expect(a).toMatch(/20260501000000/);
   });
+
+  // Round 12 slice 2: content-addressed IDs (lossless-claw backport).
+  describe("content-addressed (Round 12)", () => {
+    test("identical body produces identical id (idempotent re-seal)", () => {
+      const body = "## one\n\ndata\n";
+      const a = archiveId("leaf", "2026-05-01T00:00:00Z", body);
+      const b = archiveId("leaf", "2026-05-01T00:00:00Z", body);
+      expect(a).toBe(b);
+    });
+
+    test("different bodies produce different ids", () => {
+      const a = archiveId("leaf", "2026-05-01T00:00:00Z", "alpha");
+      const b = archiveId("leaf", "2026-05-01T00:00:00Z", "beta");
+      expect(a).not.toBe(b);
+    });
+
+    test("8-hex content-addressed tail (orion-recommended length)", () => {
+      const a = archiveId("leaf", "2026-05-01T00:00:00Z", "x");
+      // arch_L_<14-digit-stamp>_<8-hex>
+      expect(a).toMatch(/^arch_L_\d{14}_[a-f0-9]{8}$/);
+    });
+
+    test("backward compat: legacy random tail format coexists with new format", () => {
+      const legacy = archiveId("leaf", "2026-05-01T00:00:00Z");      // no body
+      const newFmt = archiveId("leaf", "2026-05-01T00:00:00Z", "x"); // body
+      // Legacy is 16 hex (8 bytes random); new is 8 hex (sha prefix). Both
+      // start with arch_L_<stamp>_; lookup-by-string-equality is unaffected
+      // because no caller parses the tail structure (lyra Phase-1 grep).
+      expect(legacy).toMatch(/^arch_L_\d{14}_[a-f0-9]{16}$/);
+      expect(newFmt).toMatch(/^arch_L_\d{14}_[a-f0-9]{8}$/);
+    });
+  });
 });
 
 describe("depthPolicy", () => {
-  test("d0 leaf has 'Normal leaf policy'", () => {
+  // Round 12 update: prompts adapted from lossless-claw spec; assertions
+  // updated to match the new general-purpose prompt text.
+  test("d0 leaf describes summarizing raw conversation", () => {
     const p = depthPolicy(0, "leaf");
-    expect(p.policy).toContain("Normal leaf policy");
+    expect(p.policy.toLowerCase()).toContain("summarizing a chunk");
     expect(p.targetTokens).toBeGreaterThan(0);
   });
 
@@ -1107,9 +1141,9 @@ describe("depthPolicy", () => {
     expect(p.policy.toLowerCase()).toContain("session");
   });
 
-  test("d3+ condensed says durable", () => {
+  test("d3+ condensed says persist (durable persistence)", () => {
     const p = depthPolicy(4, "condensed");
-    expect(p.policy.toLowerCase()).toContain("durable");
+    expect(p.policy.toLowerCase()).toContain("persist");
   });
 });
 
@@ -1131,7 +1165,9 @@ describe("renderSummaryStub", () => {
     expect(stub).toContain("BODY GOES HERE");
     expect(stub).toContain("## TL;DR");
     expect(stub).toContain("## Expand for details about:");
-    expect(stub).toContain("Normal leaf policy");
+    // Round 12: depthPolicy text updated to lossless-claw-adapted prompt; the
+    // stub embeds the new policy verbatim.
+    expect(stub.toLowerCase()).toContain("summarizing a chunk");
   });
 });
 

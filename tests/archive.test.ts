@@ -365,7 +365,11 @@ describe("archive.ts new commands — abort, verify, doctor (P1, keystone drift-
     commitOne(aid);
     const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV);
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("no drift");
+    // Round 12 slice 2: 8-point integrity check format. Clean run reports
+    // pass-level for every check + summary line "0 warning(s), 0 failure(s)".
+    expect(r.stdout).toContain("0 failure(s)");
+    expect(r.stdout).toContain("archives_present");
+    expect(r.stdout).toContain("leaf_body_sha256_matches");
   });
 
   test("doctor reports drift when an archive's path goes missing", () => {
@@ -374,7 +378,9 @@ describe("archive.ts new commands — abort, verify, doctor (P1, keystone drift-
     fs.rmSync(path.join(EDGE_DIR, "archives", "leaf", aid), { recursive: true, force: true });
     const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV, { allowFail: true });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stdout).toContain("archive directory missing");
+    // archives_present check fails with "directory missing at <path>"; the
+    // 8-point format reports it on the corresponding line.
+    expect(r.stdout).toMatch(/fail.*archives_present.*directory missing/);
   });
 
   test("doctor catches BODY.md sha256 drift", () => {
@@ -384,7 +390,8 @@ describe("archive.ts new commands — abort, verify, doctor (P1, keystone drift-
     fs.writeFileSync(bodyPath, fs.readFileSync(bodyPath, "utf8") + "\n<TAMPERED>");
     const r = runScript("archive.ts", ["doctor", "lumeyon"], ORION_ENV, { allowFail: true });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stdout).toContain("BODY.md sha256 mismatch");
+    // 8-point format: leaf_body_sha256_matches reports sha mismatch.
+    expect(r.stdout).toMatch(/fail.*leaf_body_sha256_matches.*sha mismatch/);
   });
 });
 

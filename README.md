@@ -577,9 +577,30 @@ gets a one-line wire-up; the protocol above is unchanged.
 ## The archive layer, in more depth
 
 Inspired by the [lossless-claw][lcm] OpenClaw plugin's DAG-based
-context-compaction architecture. The skill borrows the design ideas
-without inheriting the SQLite/daemon dependencies — everything is
-filesystem-only.
+context-compaction architecture. Round 12 backports the substantive
+quality-affecting parts of LCM's design (LLM-summarized archives,
+ranked search, expansion-policy delegation). Two narrowly-scoped
+deviations from "filesystem-only" buy enough quality and performance to
+justify themselves; both are documented in `ARCHITECTURE.md` and stay
+filesystem-authoritative under the hood.
+
+- `archive.ts auto` shells out to `claude -p` to synthesize a
+  `SUMMARY.md` from raw `BODY.md`, gated by an availability probe and
+  an `AGENT_CHAT_NO_LLM=1` opt-out for hermetic CI. The deterministic
+  synthesizer remains the fallback when `claude` is missing or the LLM
+  call fails validation.
+- `search.ts grep` queries a per-edge `fts.db` (bun:sqlite FTS5
+  virtual table) ranked by bm25 weights tuned for the four indexed
+  text columns of every summary: `tldr=2.0`, `summary_body=1.0`,
+  `keywords=1.5`, `expand_topics=2.5`. The db is fully derived from
+  `index.jsonl` + per-archive `SUMMARY.md` and rebuildable via
+  `archive.ts doctor --rebuild-fts`; loss of `fts.db` reverts grep to
+  unranked regex over JSONL.
+- `search.ts expand` over multiple candidates delegates to a
+  citation-bound subagent (constrained `claude -p` shell-out) so the
+  parent agent doesn't pay the full body-read cost. Citation invariants
+  reject orphan citations and require non-empty intersection between
+  requested archive IDs and cited IDs.
 
 **Leaf archives** (depth 0) come from sealing a prefix of `CONVO.md`. The
 fresh tail (the last 4 sections by default) stays verbatim in

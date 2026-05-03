@@ -107,17 +107,47 @@ switch (op) {
     const earliest = group[0].earliest_at;
     const latest = group[group.length - 1].latest_at;
     const targetDepth = opts.depth + 1;
-    const aid = archiveId("condensed", latest);
+
+    // Round 12 slice 2: content-addressed ID body for condensed archives is
+    // the UTF-8 concatenation of parent SUMMARY.md text in parent-id-SORTED
+    // order (orion Phase-2 resolution: deterministic given parents — same
+    // parents, same content, same id, regardless of which session's
+    // earliest_at order produced the eligible group). Computed separately
+    // from sourceText (rendering order) so the rendered SUMMARY stays in
+    // the user-friendly time-order while the hash stays deterministic.
+    const sortedById = [...group].sort((a, b) => a.id.localeCompare(b.id));
+    const idHashBody = sortedById.map((e) => {
+      const summaryPath = path.join(e.path, "SUMMARY.md");
+      return fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, "utf8") : "";
+    }).join("\n");
+    const aid = archiveId("condensed", latest, idHashBody);
+
+    // Round 12 slice 2: idempotency guard. If a re-seal of the SAME parent
+    // group lands (same parents, same content → same aid), branch to a
+    // no-op. Without this, content-addressed re-seal would crash on
+    // EEXIST during dir create or duplicate the index.jsonl entry. Old
+    // random-tail archives never spuriously match (their tails are
+    // random) so backward compat is free. Lyra Phase-1 nuance.
+    {
+      const existing = readIndex(edge.dir).find((e) => e.id === aid);
+      if (existing) {
+        console.error(`already sealed as ${aid}; no-op`);
+        process.exit(0);
+      }
+    }
+
     const adir = condensedArchiveDir(edge.dir, targetDepth, aid);
     fs.mkdirSync(adir, { recursive: true });
 
     // Build the source text: the SUMMARY.md of each parent, concatenated with
-    // a header so the agent can see the time range and id of each child.
+    // a [earliest – latest] time-range header so the LLM (or agent) can see
+    // the time range and id of each child. Lossless-claw spec
+    // (depth-aware-prompts-and-rewrite.md §1, condensedPass) — Round 12.
     const blocks: string[] = [];
     for (const e of group) {
       const summaryPath = path.join(e.path, "SUMMARY.md");
       const txt = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, "utf8") : "(missing SUMMARY.md)";
-      blocks.push(`<!-- parent: ${e.id} (${e.earliest_at} → ${e.latest_at}) -->\n${txt}`);
+      blocks.push(`[${e.earliest_at} – ${e.latest_at}]\n<!-- parent: ${e.id} -->\n${txt}`);
     }
     const sourceText = blocks.join("\n\n----\n\n");
 
@@ -228,6 +258,13 @@ switch (op) {
     const cleanSummary = summary.replace(/<!--[\s\S]*?-->\s*\n?/g, "");
     fs.writeFileSync(summaryPath, cleanSummary);
 
+    // Round 12 feature 12 (keystone): descendant_token_count is the SUM of
+    // descendant_token_count over all parents. Walks index for each parent;
+    // missing parents (which `missing.length` already refused) would yield 0,
+    // but the refuse above means we have all parents at this point.
+    const parentEntries = parents.map((p) => idx.find((e) => e.id === p)).filter(Boolean) as IndexEntry[];
+    const tokenSum = parentEntries.reduce((acc, p) => acc + ((p as any).descendant_token_count ?? 0), 0);
+
     const entry: IndexEntry = {
       id: aid,
       edge_id: edge.id,
@@ -239,11 +276,30 @@ switch (op) {
       participants,
       parents,
       descendant_count: descendantSum,
+      descendant_token_count: tokenSum,
       keywords,
       tldr,
       path: adir,
     };
     appendIndexEntry(edge.dir, entry, { fsync: true });
+
+    // Round 12 slice 2: upsert the FTS5 row alongside the index entry.
+    // Wrapped in try/catch — FTS write failure does NOT block the index
+    // commit (filesystem authoritative; FTS derived). Errors flow to a
+    // <edge>/.fts-corrupt sentinel via fts.ts; monitor.ts surfaces a
+    // notification so degraded search isn't silent.
+    try {
+      const { upsertEntry } = await import("./fts.ts");
+      const { extractExpandTopics, extractSummaryBody } = await import("./lib.ts");
+      await upsertEntry(edge.dir, entry, {
+        tldr,
+        summary_body: extractSummaryBody(cleanSummary),
+        keywords: keywords.join(" "),
+        expand_topics: extractExpandTopics(cleanSummary),
+      });
+    } catch (err: any) {
+      console.error(`[condense] FTS upsert failed (non-blocking): ${err?.message ?? err}`);
+    }
 
     console.log(`committed condensed ${aid} (depth ${depth}, folds ${parents.length} parent(s), ${descendantSum} leaf descendants)`);
     break;

@@ -98,6 +98,15 @@ switch (op) {
     break;
   }
   case "lock": {
+    // Round 12 reentrancy guard — refuse to lock if we're inside an LLM call.
+    // Pulsar Round-12 P1 load-bearing add: an LLM-summoned descendant must
+    // not write the parent's locks. See scripts/llm.ts runClaude.
+    if (process.env.AGENT_CHAT_INSIDE_LLM_CALL === "1") {
+      die(
+        `[agent-chat] lock refused — running inside an LLM call (AGENT_CHAT_INSIDE_LLM_CALL=1). ` +
+        `An LLM descendant must not take agent-chat locks; that would corrupt the parent's state.`,
+      );
+    }
     // Protocol invariant: only the current floor-holder may take the lock.
     // Without this, a non-holding peer could squat the lock and freeze the
     // floor — flip would then refuse "lock held by other agent" and the

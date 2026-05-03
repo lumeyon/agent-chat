@@ -1074,17 +1074,35 @@ export type IndexEntry = {
   tldr: string;                // first 240 chars of TL;DR for cheap grep
   body_sha256?: string;        // present only for leaves
   path: string;                // absolute path to the archive directory
+  // Round 12 slice 2: estimated token cost of all descendant content.
+  // Leaves: text.length / 4 of BODY.md content. Condensed: sum of parents'
+  // descendant_token_count. Populated by keystone's auto-compaction trigger
+  // and verified by lumeyon's doctor descendant_count_consistency check.
+  // Optional on read so legacy index entries (no field) treat as 0.
+  descendant_token_count?: number;
 };
 
-export function archiveId(kind: ArchiveKind, latestAt: string): string {
-  // arch_<kind-prefix>_<UTC compact>_<short hash>
-  // Keeps archive ids sortable by time and visibly typed. Suffix bumped from
-  // 4 bytes → 8 bytes (16 hex chars) to make collision impossible in
-  // practice even if someone scripts seal in a tight loop (keystone #8).
+export function archiveId(kind: ArchiveKind, latestAt: string, body?: string): string {
+  // arch_<kind-prefix>_<UTC compact>_<8-hex content-addressed sha prefix>
+  //
+  // Round 12 slice 2: content-addressed IDs (lossless-claw backport).
+  // - body present → sha256(body) prefix 8 hex. Re-sealing identical body
+  //   yields identical id, which the seal/commit path treats as idempotent
+  //   no-op (lyra round-12 nuance: without the guard at the seal site, a
+  //   re-seal would EEXIST on dir create or duplicate the index entry).
+  // - body absent (legacy path) → 8 random hex bytes. Old archives sealed
+  //   before this round keep their random tails forever; the new format
+  //   coexists with them. `findById` / `readIndex` are string-equal
+  //   lookups so backward compat is free (lyra confirmed at Phase 1).
+  // For condensed archives the convention is: body = UTF-8 concatenation
+  // of parent SUMMARY.md content in parent-id-sorted order (orion Phase-2
+  // resolution; semantic stability — same parents, same content, same id).
   const stamp = latestAt.replace(/[-:T]/g, "").replace(/Z$/, "");
-  const rand = crypto.randomBytes(8).toString("hex");
+  const tail = body !== undefined
+    ? crypto.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 8)
+    : crypto.randomBytes(8).toString("hex");
   const prefix = kind === "leaf" ? "L" : "C";
-  return `arch_${prefix}_${stamp}_${rand}`;
+  return `arch_${prefix}_${stamp}_${tail}`;
 }
 
 export function archivesRoot(edgeDir: string): string {
@@ -1308,27 +1326,60 @@ export type SummaryRenderInput = {
   sourceText: string;         // body to summarize, embedded in HTML comment
 };
 
+// Round 12 update: depth-aware prompts adapted from lossless-claw's
+// depth-aware-prompts-and-rewrite.md spec. General-purpose (NOT
+// software-development-specific) per the spec's own discipline note.
+// `buildSummaryPrompt` (below) wraps the policy text with our SUMMARY.md
+// schema requirements + the source text and feeds it to runClaude.
 export function depthPolicy(depth: number, kind: ArchiveKind): { policy: string; targetTokens: number } {
   if (kind === "leaf") {
     return {
       policy: [
-        "Normal leaf policy (depth 0):",
-        "- Preserve key decisions, rationale, constraints, and active tasks.",
-        "- Keep essential technical details needed to continue work safely.",
-        "- Remove obvious repetition and conversational filler.",
-        "- Track artifact references (paths, commits, nodes) explicitly.",
+        "You are summarizing a chunk of raw conversation between two participants.",
+        "A future model instance will read this summary to understand what happened",
+        "and decide whether to expand to the full transcript. Preserve enough detail",
+        "that an expand step is unnecessary for downstream work.",
+        "",
+        "Preserve:",
+        "- Key decisions made and their rationale (when rationale matters going forward)",
+        "- Direct quotes for the most consequential exchanges (1-2 quotes max)",
+        "- Specific references (paths, ids, commit shas, archive ids, URLs) future turns will need",
+        "- Active constraints, blockers, and unresolved questions",
+        "- Tasks completed (with outcomes, not just \"done\") and tasks still in flight",
+        "",
+        "Drop:",
+        "- Conversational filler (greetings, acknowledgements, hedging)",
+        "- Intermediate dead ends when the conclusion is known (keep the conclusion)",
+        "- Process scaffolding (lock/flip/turn-protocol mechanics — not relevant to content)",
+        "- Verbose references when shorter forms suffice",
       ].join("\n"),
       targetTokens: 1000,
     };
   }
-  if (depth === 1) {
+  if (depth <= 1) {
     return {
       policy: [
-        "Depth-1 (session) policy:",
-        "- Compact several leaf summaries into one session-level memory.",
-        "- Preserve decisions and outcomes; drop intermediate dead ends.",
-        "- Mark superseded decisions and what replaced them.",
-        "- Include a brief timeline (hour/half-hour granularity).",
+        "You are condensing several leaf summaries into a session-level memory node.",
+        "A future model instance will read this to understand what was decided and",
+        "what state the work is in — without re-reading the per-section detail.",
+        "",
+        "Focus on what matters for continuation:",
+        "- Decisions made and their rationale (when rationale matters going forward)",
+        "- Decisions altered or superseded, and what replaced them",
+        "- Topics completed, with outcomes (not just \"done\" — what was the result?)",
+        "- Things still in progress: current state, what remains",
+        "- Blockers, open questions, and unresolved tensions",
+        "- Specific references (names, paths, URLs, identifiers) future turns will need",
+        "",
+        "Drop:",
+        "- Intermediate exploration or dead ends (keep the conclusion)",
+        "- Transient states already resolved",
+        "- Tool-internal mechanics and process scaffolding",
+        "- Verbose references when shorter forms would suffice",
+        "",
+        "Include a brief timeline with timestamps (to the hour or half-hour) for",
+        "significant events. Present in chronological order. Mark decisions that",
+        "supersede earlier ones.",
       ].join("\n"),
       targetTokens: 1500,
     };
@@ -1336,27 +1387,170 @@ export function depthPolicy(depth: number, kind: ArchiveKind): { policy: string;
   if (depth === 2) {
     return {
       policy: [
-        "Depth-2 (phase) policy:",
-        "- A future model should understand trajectory, not per-session minutiae.",
-        "- Preserve decisions still in effect, completed work and outcomes,",
-        "  active constraints, and current state of in-progress work.",
-        "- Drop session-local operational detail and identifiers no longer relevant.",
-        "- Include a timeline with dates + approximate time-of-day.",
+        "You are condensing multiple session-level summaries into a higher-level",
+        "memory node. Each input summary covers a significant block of conversation.",
+        "Your job is to extract the arc: what was the goal, what happened, what",
+        "carries forward.",
+        "",
+        "A future model will read this to understand the trajectory — not the",
+        "details of each session, but the overall shape of what occurred and where",
+        "things stand.",
+        "",
+        "Preserve:",
+        "- Decisions still in effect and their rationale",
+        "- Decisions that evolved: what changed and why",
+        "- Completed work with outcomes (not process)",
+        "- Active constraints, limitations, and known issues",
+        "- Current state of anything still in progress",
+        "- Key references only if they're still relevant",
+        "",
+        "Drop:",
+        "- Per-session operational minutiae (internal IDs, tool mechanics, process)",
+        "- Specific identifiers and references only relevant within a session",
+        "- Anything \"planned\" earlier and \"completed\" later — record only the completion",
+        "- Intermediate states a later summary supersedes",
+        "- How things were done (unless the method itself was the decision)",
+        "",
+        "Include a timeline with timestamps (date and approximate time of day) for",
+        "key milestones — decisions, completions, phase transitions.",
       ].join("\n"),
       targetTokens: 1800,
     };
   }
   return {
     policy: [
-      "Depth-3+ (durable) policy:",
-      "- This summary may persist for the rest of the conversation.",
-      "- Keep only durable context: key decisions and rationale, what was",
-      "  accomplished, active constraints, important relationships, durable lessons.",
-      "- Drop method details unless the method itself was the decision.",
-      "- Be concise. Brief headers acceptable.",
+      "You are creating a high-level memory node from multiple phase-level summaries.",
+      "This node may persist for the entire remaining conversation. Only include",
+      "what a fresh model instance would need to pick up this conversation cold —",
+      "possibly days or weeks from now.",
+      "",
+      "Think: \"what would I need to know?\" not \"what happened?\"",
+      "",
+      "Preserve:",
+      "- Key decisions and their rationale",
+      "- What was accomplished and its current state",
+      "- Active constraints and hard limitations",
+      "- Important relationships between people, systems, or concepts",
+      "- Lessons learned (\"don't do X because Y\")",
+      "",
+      "Drop:",
+      "- All operational and process detail",
+      "- How things were done (only what was decided and the outcome)",
+      "- Specific references unless essential for continuation",
+      "- Progress narratives (everything is either done or captured as current state)",
+      "",
+      "Be ruthlessly concise. Include a brief timeline with dates (or date ranges)",
+      "for major milestones and decisions.",
     ].join("\n"),
     targetTokens: 2000,
   };
+}
+
+// Round 12: full LLM prompt body for runClaude. Wraps depth-aware policy +
+// the SUMMARY.md schema the validator requires + the source text. The LLM's
+// stdout is the SUMMARY.md content directly (no preamble, no fences).
+export function buildSummaryPrompt(inp: SummaryRenderInput): string {
+  const { policy, targetTokens } = depthPolicy(inp.depth, inp.kind);
+  return [
+    policy,
+    "",
+    "Output format — Markdown with EXACTLY these section headers, in this order.",
+    "The validator will reject your output if any header is missing, renamed,",
+    "or appears twice.",
+    "",
+    "  # SUMMARY — <edge id> · <kind> · depth <n> · <earliest> → <latest>",
+    "",
+    "  <archive-id: ...>",
+    "  <participants: a, b>",
+    "  <source: ...>",
+    "",
+    "  ## TL;DR",
+    "  3 lines max. Lead with: what was decided, what is blocked, what is next.",
+    "  Do NOT write \"(none)\" here.",
+    "",
+    "  ## Decisions",
+    "  One bullet per decision. \"(none) — explanation\" is acceptable.",
+    "",
+    "  ## Blockers",
+    "  Bulleted; \"(none)\" acceptable.",
+    "",
+    "  ## Follow-ups",
+    "  Bulleted; \"(none)\" acceptable.",
+    "",
+    "  ## Artifacts referenced",
+    "  Bulleted list of paths, commits, archive ids; \"(none)\" acceptable.",
+    "",
+    "  ## Keywords",
+    "  ≥3 distinct alphanumeric tokens of length ≥3, comma-separated.",
+    "",
+    "  ## Expand for details about:",
+    "  Comma-separated list of what was DROPPED or COMPRESSED. Required —",
+    "  this is the signal that lets a future agent decide whether to read",
+    "  BODY.md. Do NOT write \"(none)\" here.",
+    "",
+    `Target length: about ${targetTokens} tokens or less.`,
+    "Output the SUMMARY.md content directly (no preamble, no markdown fences).",
+    "",
+    `Edge id: ${inp.edgeId}`,
+    `Archive id: ${inp.archiveId}`,
+    `Participants: ${inp.participants.join(", ")}`,
+    `Time range: ${inp.earliestAt} → ${inp.latestAt}`,
+    `Source label: ${inp.sourceLabel}`,
+    "",
+    "==== source begins ====",
+    inp.sourceText,
+    "==== source ends ====",
+    "",
+  ].join("\n");
+}
+
+// Round 12 post-process: backfill the `## Keywords` section if the LLM omitted
+// it OR emitted fewer than 3 tokens. Preserves the LLM's structure and content;
+// only adds/replaces the missing/short Keywords section so validateSummary
+// passes without bouncing back to the synthesizer fallback.
+export function injectKeywordsIfMissing(summary: string): string {
+  const kwRe = /^## Keywords\s*\n([\s\S]*?)(?=\n## |\n*$)/m;
+  const m = summary.match(kwRe);
+  if (m) {
+    // Keywords section exists. Count valid tokens.
+    const body = m[1];
+    const tokens = body.split(/[,\s\n]+/).filter((t) => /^[a-z0-9-]{3,24}$/i.test(t));
+    if (tokens.length >= 3) return summary;
+    // Too few — replace the body with backfilled keywords.
+    const replacement = backfillKeywordsFromBody(summary);
+    return summary.replace(kwRe, `## Keywords\n${replacement}\n`);
+  }
+  // No Keywords section — inject before "## Expand for details about:".
+  const replacement = backfillKeywordsFromBody(summary);
+  const expandIdx = summary.search(/^## Expand for details about:/m);
+  if (expandIdx < 0) {
+    return summary.replace(/\n+$/, "") + `\n\n## Keywords\n${replacement}\n`;
+  }
+  return summary.slice(0, expandIdx) + `## Keywords\n${replacement}\n\n` + summary.slice(expandIdx);
+}
+
+function backfillKeywordsFromBody(body: string): string {
+  // Cheap stop-word + length filter. Standalone (not importing from
+  // synthesizeAutoSummary) to avoid an import cycle.
+  const STOP = new Set([
+    "the", "and", "for", "with", "that", "this", "from", "into", "have", "been",
+    "will", "could", "should", "would", "about", "their", "there", "which",
+    "what", "when", "were", "are", "any", "all", "but", "not", "you", "your",
+    "section", "summary", "decision", "decisions", "blocker", "blockers",
+    "followup", "followups", "artifact", "artifacts",
+    "keyword", "keywords", "expand", "details", "depth", "leaf",
+    "condensed", "tldr",
+  ]);
+  const counts = new Map<string, number>();
+  for (const tok of body.toLowerCase().split(/[^a-z0-9-]+/)) {
+    if (tok.length < 4 || tok.length > 24) continue;
+    if (STOP.has(tok)) continue;
+    if (/^\d+$/.test(tok)) continue;
+    counts.set(tok, (counts.get(tok) ?? 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  if (top.length < 3) return "summary, archive, conversation";
+  return top.join(", ");
 }
 
 export function renderSummaryStub(inp: SummaryRenderInput): string {
@@ -1691,6 +1885,48 @@ export function extractKeywords(text: string): string[] {
   const m = stripped.match(/^##\s+Keywords\s*\n([\s\S]*?)(?=^##\s|\s*$)/m);
   if (!m) return [];
   return m[1].split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+}
+
+// Round 12 slice 2: extract the body of "Expand for details about:" line(s)
+// for FTS5 indexing. The Expand-for-details footer is the strongest
+// expansion signal — a query that hits there means search.ts expand on
+// this archive is highly likely to surface relevant content. Indexed in
+// fts.db with bm25 weight 2.5 (highest of the 4 indexed columns).
+//
+// The codebase consistently writes the header as `## Expand for details about:`
+// WITH the trailing colon (validator, stub, LLM prompt all agree). The
+// optional `:?` makes the matcher tolerant of either form — a regression
+// here means LLM-produced summaries get empty expand_topics indexed,
+// silently defeating the bm25-weight-2.5 cross-slice contract.
+export function extractExpandTopics(text: string): string {
+  const stripped = text.replace(/<!--[\s\S]*?-->/g, "");
+  const m = stripped.match(/^##\s+Expand for details about:?\s*\n([\s\S]*?)(?=^##\s|\s*$)/im);
+  if (!m) return "";
+  return m[1].trim();
+}
+
+// Round 12 slice 2: extract the body of all sections OTHER than TL;DR /
+// Keywords / Expand-for-details, joined with single newlines. This is
+// the "summary_body" indexed column in fts.db — the bulk of the curated
+// summary. Used by FTS5 for the broadest term match across the SUMMARY.
+export function extractSummaryBody(text: string): string {
+  const stripped = text.replace(/<!--[\s\S]*?-->/g, "");
+  const headers = stripped.match(/^##\s+[^\n]+/gm) ?? [];
+  const skipHeaders = new Set([
+    "TL;DR", "Keywords", "Expand for details about",
+  ]);
+  const parts: string[] = [];
+  for (const header of headers) {
+    const headerName = header.replace(/^##\s+/, "").trim();
+    if (skipHeaders.has(headerName)) continue;
+    const re = new RegExp(
+      `^##\\s+${headerName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*\\n([\\s\\S]*?)(?=^##\\s|\\s*$)`,
+      "m",
+    );
+    const m = stripped.match(re);
+    if (m) parts.push(m[1].trim());
+  }
+  return parts.join("\n").trim();
 }
 
 // Minimal YAML emitter for our limited META schema. Strings are quoted.

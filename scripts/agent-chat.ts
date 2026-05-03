@@ -29,7 +29,7 @@ import {
   utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
   readTurn, writeTurnAtomic, resolveIdentity, loadUsers,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
-  SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR,
+  SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker,
@@ -211,6 +211,17 @@ async function stopSidecar(rec: SessionRecord): Promise<void> {
 // ----- subcommands ---------------------------------------------------------
 
 function cmdInit(args: string[]): void {
+  // Round 12 reentrancy guard — refuse to claim a session if we're a child
+  // process of an in-flight LLM call. Without this, an LLM-summoned descendant
+  // that loads the agent-chat skill would corrupt the parent's lock/turn state.
+  // Pulsar Round-12 P1 load-bearing add. See scripts/llm.ts runClaude.
+  if (process.env.AGENT_CHAT_INSIDE_LLM_CALL === "1") {
+    die(
+      "[agent-chat] init refused — running inside an LLM call (AGENT_CHAT_INSIDE_LLM_CALL=1). " +
+      "An LLM descendant must not claim its own agent-chat session; that would corrupt the parent's state.",
+      75,
+    );
+  }
   nfsv3ProbeWarn();
   const positional: string[] = [];
   let force = false;
@@ -738,6 +749,55 @@ function cmdGc(args: string[]): void {
       }
     }
   }
+  // Round 12 (cadence Phase-1): reap orphan tmp files from crashed archive
+  // writes. writeFileAtomic uses {path}.tmp.{pid}.{ts} naming; if the writer
+  // crashes mid-write, the tmp persists indefinitely. Walk every conversations
+  // edge's archives subtree and unlink any `*.tmp.*` files older than 5 min.
+  // Folded into normal gc (NOT gated behind a flag — small files, infrequent
+  // creation, cheap to walk). The 5-min age threshold avoids racing an
+  // in-flight LLM call that hasn't finished writing yet.
+  const TMP_AGE_THRESHOLD_MS = 5 * 60 * 1000;
+  const TMP_RE = /\.tmp\.\d+\.\d+$/;
+  const reapDir = (dir: string) => {
+    if (!fs.existsSync(dir)) return;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        reapDir(p);
+        continue;
+      }
+      if (!TMP_RE.test(e.name)) continue;
+      try {
+        const st = fs.statSync(p);
+        if (Date.now() - st.mtimeMs < TMP_AGE_THRESHOLD_MS) continue;
+        if (safeUnlink(p)) { console.log(`gc: reaped orphan tmp ${p}`); removed++; }
+      } catch { /* ENOENT race; skip */ }
+    }
+  };
+  // CONVERSATIONS_DIR/<topology>/<edge>/archives/{leaf,condensed}/<aid>/...
+  // Walking from CONVERSATIONS_DIR is the simplest correct scope.
+  if (fs.existsSync(CONVERSATIONS_DIR)) {
+    for (const topo of (() => {
+      try { return fs.readdirSync(CONVERSATIONS_DIR); } catch { return [] as string[]; }
+    })()) {
+      const tdir = path.join(CONVERSATIONS_DIR, topo);
+      // Skip control dirs (.sessions, .presence, .sockets, .logs).
+      if (topo.startsWith(".")) continue;
+      try {
+        const st = fs.statSync(tdir);
+        if (!st.isDirectory()) continue;
+      } catch { continue; }
+      // Each edge under topology has an archives/ dir at most.
+      for (const edgeName of (() => {
+        try { return fs.readdirSync(tdir); } catch { return [] as string[]; }
+      })()) {
+        const archDir = path.join(tdir, edgeName, "archives");
+        reapDir(archDir);
+      }
+    }
+  }
   if (!removed) console.log("gc: nothing to remove.");
 }
 
@@ -916,6 +976,15 @@ function authorityTakeFloor(turnFile: string, agent: string): boolean {
 }
 
 async function cmdRecordTurn(args: string[]): Promise<void> {
+  // Round 12 reentrancy guard — same shape as cmdInit and turn.ts:lock.
+  // Refuse to write CONVO.md / locks if we're inside an LLM call.
+  if (process.env.AGENT_CHAT_INSIDE_LLM_CALL === "1") {
+    die(
+      "[agent-chat] record-turn refused — running inside an LLM call (AGENT_CHAT_INSIDE_LLM_CALL=1). " +
+      "An LLM descendant must not write to CONVO.md; that would corrupt the parent's audit trail.",
+      75,
+    );
+  }
   let userText: string | undefined;
   let assistantText: string | undefined;
   let useStdin = false;

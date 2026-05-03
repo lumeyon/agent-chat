@@ -103,8 +103,39 @@ cheap grep over the index, drilling to body text only when needed.
 The design is directly inspired by the [lossless-claw][lcm] OpenClaw
 plugin, which uses the same DAG-with-fresh-tail architecture to give
 Claude effectively unlimited context-window memory. We adopted the
-pattern; we did **not** adopt the SQLite/daemon dependencies, because
-filesystem-only is a load-bearing skill invariant (Round 1).
+pattern; through Round 11 we did **not** adopt the SQLite/daemon
+dependencies, because filesystem-only was the original load-bearing
+skill invariant (Round 1).
+
+**Round 12 deviation from invariant #1 (filesystem-only).** Slice 2 of
+the Round-12 lossless-claw backport adds a per-edge `fts.db` file using
+`bun:sqlite` (Bun's built-in SQLite binding; no external deps) backing
+an FTS5 virtual table for ranked summary search. This deviates from
+"filesystem-only, no SQLite" — a knowing exception, scoped as follows:
+
+- **Filesystem files remain authoritative.** `index.jsonl`, `META.yaml`,
+  `BODY.md`, `SUMMARY.md`, and the `large-files/<sha>.txt` sidecars are
+  the source of truth. Loss of `fts.db` reverts `search.ts grep` to its
+  existing regex/JSONL fallback (functional, just unranked).
+- **`fts.db` is rebuildable.** `archive.ts doctor --rebuild-fts <peer>`
+  drops the database and replays `index.jsonl` + each archive's
+  `SUMMARY.md` to repopulate it. SQLITE_CORRUPT during a write writes
+  `<edge.dir>/.fts-corrupt`; monitor.ts surfaces a one-shot notification
+  so degraded search isn't silent (sentinel's silence-≠-success rule).
+- **Per-edge scope.** One `fts.db` per edge directory matches the
+  per-edge `index.jsonl` scoping; edges remain independently-recoverable;
+  serialization contention is bounded to the rare archive+condense
+  on-same-edge case (handled by 5×200ms exponential backoff with ±25%
+  jitter on SQLITE_BUSY, sentinel-specced).
+- **v-next**: if cross-archive code-identifier search becomes a use case
+  (e.g. lookup by exact `archive_id` substring), escalate the FTS5
+  tokenizer from `porter unicode61` to `trigram`. Today's `porter
+  unicode61` is the right default for prose summaries.
+
+The deviation is scoped to slice-2 storage. The cross-cutting "no LLM in
+scripts" invariant is also broken this round (slice 1, summarization
+via `claude -p`); both are documented at the kickoff site for Round 12
+and gated by env-var opt-outs (`AGENT_CHAT_NO_LLM=1`).
 
 [lcm]: https://losslesscontext.ai
 
@@ -1130,10 +1161,28 @@ valuable when someone is considering a redesign.
 These are the rules that survived every round. Don't break them
 without a careful redesign and a corresponding update to this file.
 
-### 1. Filesystem-only
+### 1. Filesystem-only (with two Round-12 carve-outs)
 
 No SQLite, no daemon, no MCP server, no external service. The skill
 runs on plain files. (Round 1.)
+
+Round 12 introduced two narrowly-scoped, defensible deviations:
+
+- **Per-edge `fts.db` (bun:sqlite FTS5)** is a derived index, fully
+  rebuildable from `index.jsonl` + `SUMMARY.md`. Loss of the file
+  reverts `search.ts grep` to its existing unranked regex/JSONL
+  fallback. (Round 12 slice 2.)
+- **`scripts/llm.ts` shells out to `claude -p`** to synthesize archive
+  summaries when available. Gated by an availability probe and the
+  `AGENT_CHAT_NO_LLM=1` opt-out. The deterministic synthesizer
+  remains the fallback. (Round 12 slice 1.)
+
+Both deviations stay filesystem-authoritative under the hood:
+`BODY.md`, `SUMMARY.md`, `META.yaml`, `index.jsonl` are still the
+ground truth, and disabling either accelerator returns the skill to
+its filesystem-only operating mode. The full justification, including
+empirical perf data and bug receipts, lives in the Round 12 deviation
+sections below.
 
 ### 2. Never silently guess identity
 
@@ -1341,3 +1390,308 @@ separate project; the skill stays standalone.
 [voltropy]: https://x.com/Voltropy
 [lcm-paper]: https://papers.voltropy.com/LCM
 [cc]: https://github.com/lumeyon
+
+---
+
+## Round 12 deviation: LLM in scripts (slice 1)
+
+Round 1 established "filesystem-only, no SQLite" and Round 2 implicitly added
+"no LLM in scripts" to keep the archive layer hermetic and reproducible.
+Round 12 knowingly breaks the second rule.
+
+### What changed
+
+`scripts/llm.ts` (new) shells out to `claude -p --output-format=text` to
+synthesize archive `SUMMARY.md` content from raw `BODY.md` source. Used by
+`archive.ts auto` (and the parallel path in `condense.ts`) when:
+
+- the `claude` binary is on `$PATH` and `--version` succeeds (probed once at
+  module load with a 2s timeout), AND
+- `AGENT_CHAT_NO_LLM=1` is unset, AND
+- the CLI did not pass `--no-llm`.
+
+Otherwise the deterministic synthesizer (`synthesizeAutoSummary`) runs as
+before. The synthesizer is also the fallback when the LLM call fails for any
+reason — non-zero exit, timeout (60s), validator-fail on LLM output.
+
+### Why the deviation
+
+User directive (Round 12 kickoff): *"we absolutely must be using the LLM to
+archive. We need a quality way of archiving information just like
+[lossless-claw] do."* The deterministic synthesizer is structurally correct
+but produces shallow summaries that don't capture decisions, rationale, or
+trajectory the way LCM's depth-aware prompts do.
+
+### Invariants the deviation respects
+
+- **Filesystem files remain authoritative.** `BODY.md` is verbatim ground
+  truth; the LLM never touches it. `SUMMARY.md` is regenerable; `expand`
+  always returns the full body.
+- **Validator runs on LLM output.** The same `validateSummary` schema that
+  catches synthesizer regressions catches LLM hallucination of the wrong
+  shape. If LLM output fails validation, fallback fires.
+- **Tests stay hermetic.** CI sets `AGENT_CHAT_NO_LLM=1`. Real `claude`
+  shell-outs are gated behind `RUN_LLM_TESTS=1` so the suite stays <60s
+  without billing API calls.
+
+### Reentrancy guard
+
+If the LLM is invoked from a process that itself loads the agent-chat skill
+(an LLM-summoned descendant calling `archive.ts auto`), nested locks/turn-flips
+corrupt shared state. To prevent this:
+
+- `runClaude` sets `AGENT_CHAT_INSIDE_LLM_CALL=1` in the child env.
+- `cmdInit`, `cmdRecordTurn`, and `turn.ts:lock` refuse with a stderr WARN
+  and exit 75 if that env var is set.
+
+This is one env var + three refusal lines. The cost of skipping it is silent
+mid-archive deadlocks that look identical to peer hangs.
+
+### Concurrent LLM cap
+
+`scripts/llm.ts` enforces an in-process semaphore (default cap=2) on
+concurrent `runClaude` calls so a single CLI invocation that triggers
+multi-edge auto-archive doesn't fan out to N simultaneous LLM calls.
+Configurable via `AGENT_CHAT_LLM_CAP=N`. Cross-process budgeting (a
+filesystem semaphore) is deferred to v-next.
+
+### Validator semantic gap
+
+The validator catches schema (TL;DR, Decisions, Blockers, Follow-ups,
+Artifacts referenced, Keywords, Expand for details about). It does NOT
+catch hallucinated TL;DR content or invented decisions. **`BODY.md` is the
+ground truth and `expand` always works** — operators who need the
+authoritative record should expand to the body, not trust the summary.
+
+### What did NOT change
+
+- `archive.ts seal` (interactive seal where the agent fills the SUMMARY.md
+  stub themselves) is untouched. The LLM path is auto-only.
+- `archive.ts commit` validator unchanged.
+- `synthesizeAutoSummary` unchanged (still the fallback path).
+- Existing archives keep working; the META.yaml `synthesis` field
+  distinguishes `auto` (synthesizer) from `llm` (Round 12 path).
+
+### Env-var inventory (Round 12 slice-1 additions)
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `AGENT_CHAT_NO_LLM` | unset | Set to `1` to disable LLM summarizer; CI sets this for hermetic test runs. |
+| `AGENT_CHAT_LLM_CAP` | `2` | In-process semaphore cap on concurrent `runClaude` calls. |
+| `AGENT_CHAT_CLAUDE_BIN` | unset | Override absolute path to `claude` binary (tests + custom installs). Strict — missing path returns null, no PATH fallback. |
+| `AGENT_CHAT_INSIDE_LLM_CALL` | unset (set by helper) | Reentrancy sentinel set by `runClaude` in child env; refusal guard at init/lock/record-turn. |
+| `RUN_LLM_TESTS` | unset | Set to `1` to enable real `claude -p` shell-out tests (skipped by default). |
+
+---
+
+## Round 12 deviation: FTS5 / bun:sqlite (slice 2)
+
+Round 1 invariant #1 ("filesystem-only, no SQLite") gets a bounded
+exception in Round 12 slice 2. The deviation pays for ranked archive
+search at constant latency as archive count grows.
+
+### What changed
+
+`scripts/fts.ts` (new) maintains a per-edge `<edge.dir>/fts.db` SQLite
+file with an FTS5 virtual table indexing the four text columns of every
+archive's `SUMMARY.md`: `tldr`, `summary_body`, `keywords`,
+`expand_topics`. `archive.ts commit` and `condense.ts commit` upsert
+into the index after the filesystem write succeeds; `search.ts grep`
+queries the index first and falls back to JSONL+regex when the db is
+missing or marked corrupt.
+
+### Why the deviation
+
+Cross-slice perf data measured at Round 12 Phase-3: ranked search over
+100 archives via FTS5 is sub-millisecond; the equivalent linear scan
+over `index.jsonl` plus per-archive `SUMMARY.md` regex is ~30ms and
+grows linearly. At the 1000-archive scale the agent-chat skill is
+designed for, the linear path becomes the dominant cost of every
+`search.ts grep` call. bm25-ranked output also surfaces the right
+archive first, which matters at depth — `expand` is expensive, and
+`grep`-ranked-first means most lookups stop at the index.
+
+### Invariants the deviation respects
+
+- **Filesystem files remain authoritative.** `index.jsonl`, `META.yaml`,
+  `BODY.md`, `SUMMARY.md` are never derived from `fts.db`. The db is
+  fully rebuildable from filesystem state via
+  `archive.ts doctor --rebuild-fts`. Loss of `fts.db` reverts
+  `search.ts grep` to its existing regex/JSONL fallback (search remains
+  functional, just unranked).
+- **Per-edge scoping.** `fts.db` lives in the edge directory. Two edges
+  never contend on the same db file, so SQLITE_BUSY contention is
+  bounded to the rare two-on-same-edge case (e.g. `archive.ts auto` +
+  `condense.ts commit` racing). `withWriter` retries up to 5x with
+  exponential 200ms × 2ⁿ + ±25% jitter to break lockstep retries.
+- **Corruption is observable.** SQLITE_CORRUPT during write triggers a
+  `<edge.dir>/.fts-corrupt` sentinel. `monitor.ts` emits a one-shot
+  "fts-corrupt" notification; the sentinel clears on successful
+  `--rebuild-fts`. Silence ≠ success — the corruption signal is
+  additive.
+
+### Schema and bm25 weights
+
+```
+CREATE VIRTUAL TABLE archives USING fts5(
+  archive_id UNINDEXED, edge_id UNINDEXED, kind UNINDEXED, depth UNINDEXED,
+  earliest_at UNINDEXED, latest_at UNINDEXED,
+  tldr, summary_body, keywords, expand_topics,
+  tokenize='porter unicode61'
+);
+```
+
+Six UNINDEXED metadata columns precede four indexed text columns. bm25
+weights for the indexed columns: `tldr=2.0`, `summary_body=1.0`,
+`keywords=1.5`, `expand_topics=2.5`. **`expand_topics` ranks highest**
+because it explicitly lists what's NOT in the summary — a hit there is
+the strongest signal that calling `search.ts expand` would surface
+relevant content.
+
+### bm25 column-alignment bug (caught at Phase-4 cross-review)
+
+Initial slice-2 implementation called `bm25(archives, 2.0, 1.0, 1.5,
+2.5)` — only four weights for a ten-column schema. SQLite's bm25
+expects ONE weight per declared column INCLUDING UNINDEXED, so the
+four weights aligned to the UNINDEXED prefix (cols 0-3, no scoring
+contribution) and the indexed columns ran unweighted. keystone caught
+the bug empirically: inverting the four weights produced identical
+ranking. The Phase-5 fix uses ten weights —
+`bm25(archives, 1, 1, 1, 1, 1, 1, 2.0, 1.0, 1.5, 2.5)` — six
+placeholder 1.0s for the UNINDEXED prefix plus the four real weights
+for indexed cols 6-9. Regression test `tests/fts.test.ts` now requires
+a non-trivial rank gap (>5%) and a specific ordering for
+keywords-vs-summary_body so the failure mode can't recur silently.
+
+### Tokenizer choice
+
+`porter unicode61` is the standard FTS5 stem+casefold combo: case-fold,
+Unicode-aware, English-stemmed. The agent-chat archive vocabulary is
+mostly natural-language summaries, so stemming pays off ("decided",
+"decision", "deciding" all hit the same query). `trigram` was rejected
+as the default — too noisy for the summary-text use case — but flagged
+as the v-next escalation if cross-archive code-identifier search
+becomes a use case (where `porter` would mangle camelCase tokens).
+
+### `extractExpandTopics` colon-tolerance fix
+
+The codebase consistently writes `## Expand for details about:` WITH
+trailing colon. The slice-2 regex initially required NO colon, so every
+LLM-produced summary had its `expand_topics` column indexed empty —
+silently defeating the bm25 weight 2.5 contract. lumeyon self-caught
+in Phase-4 review and patched: `/^##\s+Expand for details about:?\s*\n/`.
+Regression test added.
+
+---
+
+## Round 12 deviation: subagent delegation + expansion policy (slice 3)
+
+Slice 3 backports two coupled lossless-claw primitives: a *decision
+matrix* that gates expansion-vs-summary based on query characteristics,
+and a *subagent delegation* framework that lets `search.ts expand` fan
+out a query across multiple archives in parallel without the parent
+agent paying their token cost.
+
+### What changed
+
+- `scripts/expansion-policy.ts` (new): adapts LCM's decision matrix to
+  agent-chat vocabulary. Takes a query plus candidate archive metadata,
+  returns a recommendation: `direct-grep` (cheap regex), `summaries-only`
+  (read SUMMARY.md), or `expand` (read BODY.md). Adds regex extensions
+  for agent-chat terms (rounds, phases, audits, decisions) on top of
+  LCM's general-purpose patterns. `directMaxCandidates: 2` (LCM's
+  original was 3 — agent-chat archives are smaller and the 2-candidate
+  cap empirically gives better precision).
+- `scripts/subagent.ts` (new): `spawnExpansionSubagent({...})` shells
+  out via `runClaude` (slice-1 dependency) with a constrained prompt:
+  "expand these N archive bodies, cite only what you read, return JSON
+  with {findings, citations}." Citation invariants: non-empty
+  intersection between requested IDs and cited IDs, no orphan citations
+  to IDs not in the input. Reason discriminator covers `timeout`,
+  `exit_nonzero`, `no_citations`, `token_cap`, `not_found`,
+  `spawn_error`.
+- `scripts/search.ts expand`: adopts the expansion-policy gate; when
+  policy says `expand` and candidate count > 1, delegates to
+  `spawnExpansionSubagent`. The parent agent gets the consolidated
+  citation-bound result; the subagent's per-archive read budget is
+  isolated.
+
+### Why the deviation
+
+Without delegation, `search.ts expand` over multiple candidates forces
+the parent to read every BODY.md sequentially, paying their full token
+cost. At depth this is the dominant context-budget consumer of any
+"go look up what we decided about X" question. LCM solves it with the
+same shape — a decision matrix gate plus a subagent expansion path —
+and the cost is one new TS file and one shell-out.
+
+### Invariants the deviation respects
+
+- **Citation-bound output.** Subagent prompts demand citations; result
+  parser rejects non-empty findings without citations and citations to
+  IDs the subagent wasn't asked about. Hallucinated archives can't
+  pollute the parent's context.
+- **Token budget cap.** Subagent prompt enforces a per-archive read
+  budget. Truncated bodies are explicitly noted in the response so the
+  parent knows when to spawn a deeper subagent rather than trust the
+  partial read.
+- **Falls back to `summaries-only` on subagent failure.** If the
+  subagent times out, exits nonzero, or fails the citation invariant,
+  the gate downgrades to summary-only reading — slower but sound.
+
+### Footer-rank fallback (interaction with slice-2)
+
+When `search.ts grep` returns zero hits but the query matches text in
+an archive's "Expand for details about:" footer, the legacy
+footer-rank path still fires. Slice-2 fts5 + slice-3 footer-rank
+coordinate without double-counting because the policy gate runs after
+both ranks merge. expansion-policy treats the footer as
+metadata-grade: it boosts the candidate's rank but doesn't bypass the
+direct-grep / summaries-only / expand decision tree.
+
+### Idempotency, content-addressed IDs, and doctor
+
+- `archive.ts seal` and `archive.ts auto` both check for an existing
+  archive with the same `body_sha256` content prefix at top-of-flow:
+  hit → "already sealed as <aid>; no-op", exit 0. Re-running the same
+  command on the same input is now safe.
+- `archiveId(kind, latestAt, body?)` is content-addressed when `body`
+  is supplied: 8-hex `sha256(body)` prefix appended. Backward-compat:
+  legacy calls without `body` keep the original 16-hex random id.
+- `archive.ts doctor` runs a 9-point integrity suite:
+  fts_in_sync, body_sha256_matches, parent_chain_valid,
+  index_jsonl_well_formed, no_orphan_BODY, no_orphan_SUMMARY,
+  fresh_tail_protected, dag_no_cycles, sealed_lock_consistent. The
+  drift-loop 4-check that shipped with Round 2 is replaced; the new
+  suite covers the cases the older one missed (orphan BODY/SUMMARY,
+  fts drift, sealed-lock-without-flip).
+
+### Auto-archive trigger (sidecar coordination)
+
+`scripts/sidecar.ts` adds `startAutoCompactionPoll()` running alongside
+the existing reconcile poll. 60s tick (`AGENT_CHAT_AUTO_ARCHIVE_INTERVAL`)
+with a 50,000-token threshold (`AGENT_CHAT_AUTO_ARCHIVE_TOKENS`,
+bumped from 30k at Phase-2 consolidation per cross-slice agreement).
+Spawns `archive.ts auto <peer> --no-llm` when *both*
+`token_count > threshold` AND `turn=parked` — never racing an active
+turn-flip. The `--no-llm` flag is critical: auto-archive is a
+background task, so it must not block on the LLM semaphore or pay the
+LLM latency. Manual `archive.ts auto` (without `--no-llm`) still uses
+the LLM path.
+
+### Lock-strategy (b) — DEFERRED to Round 13
+
+`archive.ts auto` currently holds the edge lock throughout the LLM
+call (~30s). cadence and pulsar both flagged this as a future
+release-during-LLM target now that lumeyon's doctor orphan-BODY reaper
+is verified live. Deferred to Round 13 to keep slice-3 scope bounded.
+
+### What did NOT change
+
+- The protocol surface: `peek`/`init`/`take`/`flip`/`park`/`lock`/
+  `unlock` are unchanged.
+- Existing archive layout: leaf at depth 0, condensed at d1+, METADATA
+  yaml, SUMMARY.md, BODY.md — all the same.
+- The sentinel-ratified silence-≠-success rule: every deferral and
+  fallback in slices 1-3 emits an observable signal (sentinel files,
+  monitor notifications, structured Reason discriminators).

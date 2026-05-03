@@ -70,9 +70,15 @@ type EdgeState = {
   // their lock would otherwise sit silently forever (sentinel S-HIGH-2).
   lockSince: number;
   lockStaleEmitted: boolean;
+  // Round 12 slice 2: track whether we've emitted the fts-corrupt
+  // notification for this edge's current sentinel-file presence. One-shot
+  // per detect; clears when the sentinel disappears (post `doctor
+  // --rebuild-fts`). Sentinel's silence-≠-success additive — degraded
+  // search is no longer indistinguishable from a clean search with no hits.
+  ftsCorruptEmitted: boolean;
 };
 const state = new Map<string, EdgeState>();
-for (const e of edges) state.set(e.id, { turn: null, turnMtime: 0, convoMtime: 0, archiveHinted: false, lockSince: 0, lockStaleEmitted: false });
+for (const e of edges) state.set(e.id, { turn: null, turnMtime: 0, convoMtime: 0, archiveHinted: false, lockSince: 0, lockStaleEmitted: false, ftsCorruptEmitted: false });
 
 function convoLineCount(p: string): number {
   try { return fs.readFileSync(p, "utf8").split(/\n/).length; } catch { return 0; }
@@ -126,6 +132,7 @@ function tick() {
       archiveHinted: prev.archiveHinted,
       lockSince: prev.lockSince,
       lockStaleEmitted: prev.lockStaleEmitted,
+      ftsCorruptEmitted: prev.ftsCorruptEmitted,
     };
     const lockHeld = fs.existsSync(e.lock);
     // Track lock lifetime for stale detection (sentinel S-HIGH-2).
@@ -178,6 +185,21 @@ function tick() {
       }
     }
 
+    // Round 12 slice 2: `.fts-corrupt` sentinel detection. fts.ts writes
+    // the sentinel file to `<edge.dir>/.fts-corrupt` when SQLITE_CORRUPT
+    // surfaces during a write or integrity_check. Emit a one-shot
+    // notification so degraded search is visible (sentinel's
+    // silence-≠-success additive). Auto-clears when the sentinel
+    // disappears post `archive.ts doctor --rebuild-fts`.
+    const ftsCorruptPath = path.join(e.dir, ".fts-corrupt");
+    const ftsCorruptNow = fs.existsSync(ftsCorruptPath);
+    if (ftsCorruptNow && !cur.ftsCorruptEmitted) {
+      console.log(`${now} edge=${e.id} peer=${e.peer} fts-corrupt — search degraded for this edge until \`bun scripts/archive.ts doctor --rebuild-fts ${e.peer}\``);
+      cur.ftsCorruptEmitted = true;
+    } else if (!ftsCorruptNow && cur.ftsCorruptEmitted) {
+      cur.ftsCorruptEmitted = false; // re-arm after recovery
+    }
+
     // Optional archive hint. Fires once per edge (resets when CONVO.md shrinks
     // back under the threshold, e.g. after archive). The hint is a separate
     // notification line and never blocks the .turn flip notifications above.
@@ -203,7 +225,7 @@ function tick() {
     // every tick because they describe the lock state, not the .turn diff.
     if (!lockHeld) state.set(e.id, cur);
     else {
-      const merged = { ...prev, lockSince: cur.lockSince, lockStaleEmitted: cur.lockStaleEmitted };
+      const merged = { ...prev, lockSince: cur.lockSince, lockStaleEmitted: cur.lockStaleEmitted, ftsCorruptEmitted: cur.ftsCorruptEmitted };
       state.set(e.id, merged);
     }
   }

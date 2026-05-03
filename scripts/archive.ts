@@ -30,8 +30,10 @@ import {
   synthesizeAutoSummary,
   validateSummary, extractTldr, extractKeywords,
   writeFileAtomic, exclusiveWriteOrFail, lockTag,
+  buildSummaryPrompt, injectKeywordsIfMissing,
   type IndexEntry,
 } from "./lib.ts";
+import { runClaude, isLlmEnabled } from "./llm.ts";
 
 const DEFAULT_FRESH_TAIL = 4;
 
@@ -39,16 +41,95 @@ function die(msg: string): never { console.error(msg); process.exit(2); }
 
 function parseArgs(argv: string[]) {
   const [op, peer, ...rest] = argv;
-  const opts: { freshTail: number; force: boolean; archiveId: string | null } = {
-    freshTail: DEFAULT_FRESH_TAIL, force: false, archiveId: null,
+  const opts: {
+    freshTail: number;
+    force: boolean;
+    archiveId: string | null;
+    noLlm: boolean;
+    llm: boolean;
+  } = {
+    freshTail: DEFAULT_FRESH_TAIL, force: false, archiveId: null, noLlm: false, llm: false,
   };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--fresh-tail") opts.freshTail = parseInt(rest[++i] ?? "", 10);
     else if (rest[i] === "--force") opts.force = true;
+    else if (rest[i] === "--no-llm") opts.noLlm = true;
+    else if (rest[i] === "--llm") opts.llm = true;
     else if (!opts.archiveId && rest[i].startsWith("arch_")) opts.archiveId = rest[i];
   }
   if (!Number.isFinite(opts.freshTail) || opts.freshTail < 0) die("--fresh-tail must be >= 0");
+  if (opts.llm && opts.noLlm) {
+    die("--llm and --no-llm cannot be combined (configuration error). Pick one.");
+  }
   return { op, peer, opts };
+}
+
+// Round 12: timestamp-injected source body. Each section gets `[<UTC ts>]`
+// prepended so the LLM (or synthesizer) sees temporal context. Sections
+// without a parseable timestamp fall back to `[unknown]`. The bare body
+// (without timestamps) was the original input shape; this is the wrapping.
+function bodyWithTimestamps(rawBody: string): string {
+  const { sections } = parseSections(rawBody);
+  if (sections.length === 0) return rawBody;
+  return sections.map((s) => {
+    const meta = sectionMeta(s);
+    const tag = meta.ts ? `[${meta.ts}]` : "[unknown]";
+    return `${tag}\n${s}`;
+  }).join("\n\n");
+}
+
+// Round 12: try the LLM path first; fall back to the deterministic synthesizer
+// on any failure (probe-fail, timeout, non-zero exit, validator-fail). Returns
+// the SUMMARY.md text + a `source` discriminator for the META.yaml `synthesis`
+// field. NEVER throws — auto must never block exit.
+type SynthesizeResult = { summary: string; source: "llm" | "synth"; reason: string };
+
+async function tryLlmThenSynth(args: {
+  edgeId: string;
+  archiveId: string;
+  participants: [string, string];
+  earliestAt: string;
+  latestAt: string;
+  archivedSections: string[];
+  rawBody: string;
+  llmEnabled: boolean;
+}): Promise<SynthesizeResult> {
+  const { edgeId, archiveId, participants, earliestAt, latestAt, archivedSections, rawBody, llmEnabled } = args;
+  const synthFallback = (): SynthesizeResult => {
+    const summary = synthesizeAutoSummary({
+      edgeId, archiveId, participants, earliestAt, latestAt, sections: archivedSections,
+    });
+    return { summary, source: "synth", reason: "synthesizer" };
+  };
+  if (!llmEnabled) return synthFallback();
+  // Strictly sequential per cadence: LLM → validator → either use it or synth.
+  // Never parallel (round-9 first-hit-wins corruption surface).
+  const prompt = buildSummaryPrompt({
+    edgeId, archiveId, kind: "leaf", depth: 0, participants, earliestAt, latestAt,
+    sourceLabel: `${archivedSections.length} raw section(s) from CONVO.md (timestamps injected)`,
+    sourceText: bodyWithTimestamps(rawBody),
+  });
+  let result;
+  try {
+    result = await runClaude({ prompt });
+  } catch (err: any) {
+    console.error(`[agent-chat] LLM call threw unexpectedly: ${err?.message ?? err}; falling back to synthesizer.`);
+    return synthFallback();
+  }
+  if (result.reason !== "ok" || !result.stdout) {
+    console.error(`[agent-chat] LLM ${result.reason} (${result.code ?? "no-code"}); falling back to synthesizer.`);
+    return synthFallback();
+  }
+  // Apply keyword backfill BEFORE validator so a missing/short Keywords
+  // section doesn't immediately fall back to synth.
+  const llmSummary = injectKeywordsIfMissing(result.stdout);
+  const v = validateSummary(llmSummary);
+  if (!v.ok) {
+    console.error(`[agent-chat] LLM output failed validator (${v.issues.length} issue${v.issues.length === 1 ? "" : "s"}); falling back to synthesizer.`);
+    for (const issue of v.issues.slice(0, 3)) console.error(`  - ${issue}`);
+    return synthFallback();
+  }
+  return { summary: llmSummary, source: "llm", reason: "llm" };
 }
 
 const { op, peer, opts } = parseArgs(process.argv.slice(2));
@@ -120,14 +201,28 @@ switch (op) {
 
       const archivedSections = parseSections(convo).sections.slice(0, split.archivableSectionCount);
       const tr = timeRangeOf(archivedSections);
-      const aid = archiveId("leaf", tr.latest);
+      const body = split.archivable;
+      const aid = archiveId("leaf", tr.latest, body);
+
+      // Round 12 slice 2: idempotency guard. If a re-seal of the SAME body
+      // lands (same content → same content-addressed aid), branch to no-op.
+      // Without this, content-addressed re-seal would EEXIST on dir create
+      // or duplicate the index entry. Old random-tail archives never match
+      // (their tails are random); backward compat is free. Lyra Phase-1.
+      {
+        const existing = readIndex(edge.dir).find((e) => e.id === aid);
+        if (existing) {
+          console.error(`already sealed as ${aid}; no-op`);
+          process.exit(0);
+        }
+      }
+
       const adir = leafArchiveDir(edge.dir, aid);
       fs.mkdirSync(adir, { recursive: true });
 
       // Write BODY.md verbatim (the sealed source of truth). fsync before
       // the destructive CONVO.md truncation so a power loss between the
       // BODY write and the truncation cannot lose the archive content.
-      const body = split.archivable;
       const bodyPath = path.join(adir, "BODY.md");
       const bfd = fs.openSync(bodyPath, "w");
       try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
@@ -210,32 +305,53 @@ switch (op) {
 
       const archivedSections = parseSections(convo).sections.slice(0, split.archivableSectionCount);
       const tr = timeRangeOf(archivedSections);
-      const aid = archiveId("leaf", tr.latest);
+      const body = split.archivable;
+      const aid = archiveId("leaf", tr.latest, body);
+
+      // Round 12 slice 2: idempotency guard (auto path). Same shape as the
+      // manual seal site — content-addressed re-auto on identical body
+      // returns no-op rather than EEXIST'ing or duplicating the index.
+      {
+        const existing = readIndex(edge.dir).find((e) => e.id === aid);
+        if (existing) {
+          console.error(`already sealed as ${aid}; no-op`);
+          process.exit(0);
+        }
+      }
+
       const adir = leafArchiveDir(edge.dir, aid);
       fs.mkdirSync(adir, { recursive: true });
 
       // BODY.md — verbatim, fsync'd before any destructive op.
-      const body = split.archivable;
       const bodyPath = path.join(adir, "BODY.md");
       const bfd = fs.openSync(bodyPath, "w");
       try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
       finally { fs.closeSync(bfd); }
 
-      // SUMMARY.md — synthesized deterministically from section metadata.
-      // Validator-passing by construction (real-body sections + ≥3 keywords +
-      // non-placeholder Expand-for-details + no TODO/FIXME/etc tokens).
-      const summary = synthesizeAutoSummary({
+      // Round 12: try the LLM path first; fall back to deterministic
+      // synthesizer on any failure (probe-fail, timeout, non-zero exit,
+      // validator-fail). Strictly sequential per cadence (NEVER parallel —
+      // round-9 first-hit-wins corruption surface). The synthesizer fallback
+      // is validator-passing by construction (real-body sections + ≥3
+      // keywords + non-placeholder Expand-for-details).
+      const llmCheck = isLlmEnabled({ noLlmFlag: opts.noLlm, llmFlag: opts.llm });
+      const synthesisResult = await tryLlmThenSynth({
         edgeId: edge.id,
         archiveId: aid,
         participants,
         earliestAt: tr.earliest,
         latestAt: tr.latest,
-        sections: archivedSections,
+        archivedSections,
+        rawBody: body,
+        llmEnabled: llmCheck.enabled,
       });
+      const summary = synthesisResult.summary;
       const v = validateSummary(summary);
       if (!v.ok) {
-        // Synthesis bug — should never trigger; surface loud and bail before
-        // touching CONVO.md so the edge isn't mid-state.
+        // Both LLM and synth failed — surface loud and bail before touching
+        // CONVO.md so the edge isn't mid-state. Synth shouldn't fail validation
+        // (it's validator-passing by construction); if it does, that's a
+        // synthesis bug worth surfacing, not a fallback case.
         try { fs.rmSync(adir, { recursive: true, force: true }); } catch {}
         console.error(`auto-summary failed validation (synthesis bug):`);
         for (const issue of v.issues) console.error(`  - ${issue}`);
@@ -265,7 +381,7 @@ switch (op) {
         tldr,
         created_at: utcStamp(),
         committed_at: utcStamp(),
-        synthesis: "auto",
+        synthesis: synthesisResult.source === "llm" ? "llm" : "auto",
       });
 
       // Truncate CONVO.md to header + breadcrumb + fresh tail (atomic).
@@ -274,6 +390,8 @@ switch (op) {
       writeFileAtomic(edge.convo, newConvo, { fsync: true });
 
       // Index entry — fsync'd so the validated archive is durable.
+      // Round 12 feature 12 (keystone): descendant_token_count for leaves
+      // is text.length / 4 of BODY.md content (rhino-confirmed convention).
       const entry: IndexEntry = {
         id: aid,
         edge_id: edge.id,
@@ -285,12 +403,29 @@ switch (op) {
         participants,
         parents: [],
         descendant_count: 0,
+        descendant_token_count: Math.ceil(body.length / 4),
         keywords,
         tldr,
         body_sha256: bodySha,
         path: adir,
       };
       appendIndexEntry(edge.dir, entry, { fsync: true });
+
+      // Round 12 slice 2: FTS5 upsert alongside the index. Try/catch so a
+      // FTS write failure does not block the index commit (filesystem
+      // authoritative; FTS derived). Errors flow to <edge>/.fts-corrupt.
+      try {
+        const { upsertEntry } = await import("./fts.ts");
+        const { extractExpandTopics, extractSummaryBody } = await import("./lib.ts");
+        await upsertEntry(edge.dir, entry, {
+          tldr,
+          summary_body: extractSummaryBody(summary),
+          keywords: keywords.join(" "),
+          expand_topics: extractExpandTopics(summary),
+        });
+      } catch (err: any) {
+        console.error(`[archive auto] FTS upsert failed (non-blocking): ${err?.message ?? err}`);
+      }
 
       console.log(`auto-archived ${aid}`);
       console.log(`  sections:  ${archivedSections.length}`);
@@ -348,6 +483,13 @@ switch (op) {
     const cleanSummary = summary.replace(/<!--[\s\S]*?-->\s*\n?/g, "");
     fs.writeFileSync(summaryPath, cleanSummary);
 
+    // Re-read BODY.md to compute descendant_token_count (Round 12 feature 12).
+    // BODY.md was written earlier in seal; we need its size now for the
+    // text.length / 4 heuristic.
+    const bodyPath = path.join(adir, "BODY.md");
+    const bodyTokens = fs.existsSync(bodyPath)
+      ? Math.ceil(fs.statSync(bodyPath).size / 4)
+      : 0;
     const entry: IndexEntry = {
       id: aid,
       edge_id: edge.id,
@@ -359,6 +501,7 @@ switch (op) {
       participants,
       parents: [],
       descendant_count: 0,
+      descendant_token_count: bodyTokens,
       keywords,
       tldr,
       body_sha256: bodySha,
@@ -367,6 +510,21 @@ switch (op) {
     // fsync the index append so the just-validated archive is durable on
     // disk before we return success to the caller.
     appendIndexEntry(edge.dir, entry, { fsync: true });
+
+    // Round 12 slice 2: FTS5 upsert alongside the index. Non-blocking;
+    // see auto-archive site comment.
+    try {
+      const { upsertEntry } = await import("./fts.ts");
+      const { extractExpandTopics, extractSummaryBody } = await import("./lib.ts");
+      await upsertEntry(edge.dir, entry, {
+        tldr,
+        summary_body: extractSummaryBody(cleanSummary),
+        keywords: keywords.join(" "),
+        expand_topics: extractExpandTopics(cleanSummary),
+      });
+    } catch (err: any) {
+      console.error(`[archive commit] FTS upsert failed (non-blocking): ${err?.message ?? err}`);
+    }
 
     console.log(`committed ${aid} into ${edge.id} index`);
     console.log(`  keywords: ${keywords.join(", ")}`);
@@ -445,30 +603,141 @@ switch (op) {
   }
 
   case "doctor": {
-    // Drift detection across the edge's index. Reports (does NOT auto-fix):
-    //   - paths that don't exist on disk
-    //   - parents listed by condensed entries that aren't in the index
-    //   - descendant_count that doesn't match the reachable leaf set
-    //   - leaf BODY.md whose sha256 doesn't match META.yaml
-    // Keystone P1 drift-prevention.
+    // Round 12 slice 2: 8-point integrity check suite (lossless-claw
+    // backport, expanded from the prior 4-check drift loop). Reports
+    // pass|warn|fail per check; doctor exits non-zero only on fail-level
+    // findings. Adapted from /data/eyon/git/lossless-claw/src/integrity.ts.
+    //
+    // Plus a 9th check `orphan_body_without_meta` (orion Phase-2
+    // cross-slice resolution) covering carina's lock-strategy-(b)
+    // intermediate state where BODY.md exists but META.yaml has not been
+    // written yet — invisible to all read paths but worth surfacing as
+    // a gc hint.
+    //
+    // New flag: --rebuild-fts invokes fts.rebuildFromIndex(edge.dir) to
+    // rebuild the FTS5 index from index.jsonl + per-archive SUMMARY.md.
+    // Recovery primitive for SQLITE_CORRUPT or any drift between fts.db
+    // and index.jsonl.
+    if (process.argv.includes("--rebuild-fts")) {
+      const fts = await import("./fts.ts");
+      const lib = await import("./lib.ts");
+      const { rebuilt, skipped } = await fts.rebuildFromIndex(edge.dir, (entry) => {
+        const sp = path.join(entry.path, "SUMMARY.md");
+        if (!fs.existsSync(sp)) return null;
+        const txt = fs.readFileSync(sp, "utf8");
+        return {
+          tldr: lib.extractTldr(txt),
+          summary_body: lib.extractSummaryBody(txt),
+          keywords: lib.extractKeywords(txt).join(" "),
+          expand_topics: lib.extractExpandTopics(txt),
+        };
+      });
+      console.log(`rebuilt fts.db for ${edge.id}: ${rebuilt} entries indexed, ${skipped} skipped (no SUMMARY.md)`);
+      break;
+    }
+
     const idx = readIndex(edge.dir);
     if (!idx.length) { console.log(`no archives for ${edge.id} — clean`); break; }
     const ids = new Set(idx.map((e) => e.id));
-    let drift = 0;
-    for (const e of idx) {
-      if (!fs.existsSync(e.path)) {
-        console.log(`drift ${e.id}: archive directory missing at ${e.path}`);
-        drift++;
-        continue;
+    let warns = 0;
+    let fails = 0;
+    const report = (level: "pass" | "warn" | "fail", check: string, msg: string) => {
+      console.log(`${level.padEnd(4)} ${check.padEnd(34)} ${msg}`);
+      if (level === "warn") warns++;
+      if (level === "fail") fails++;
+    };
+
+    // 1. archives_present — every IndexEntry's path exists.
+    {
+      const missing = idx.filter((e) => !fs.existsSync(e.path));
+      if (missing.length === 0) report("pass", "archives_present", `all ${idx.length} archive directories exist`);
+      else for (const m of missing) report("fail", "archives_present", `${m.id}: directory missing at ${m.path}`);
+    }
+
+    // 2. archive_ordinals_contiguous — index sorted by earliest_at has no
+    //    suspicious >7d gaps suggesting an orphaned mid-archive deletion.
+    {
+      const sorted = [...idx].sort((a, b) => a.earliest_at.localeCompare(b.earliest_at));
+      const gaps: string[] = [];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = Date.parse(sorted[i - 1].latest_at);
+        const next = Date.parse(sorted[i].earliest_at);
+        if (Number.isFinite(prev) && Number.isFinite(next) && next - prev > 7 * 24 * 3600 * 1000) {
+          gaps.push(`${sorted[i - 1].id} → ${sorted[i].id}: ${Math.round((next - prev) / (24 * 3600 * 1000))}d gap`);
+        }
       }
-      if (e.kind === "condensed") {
+      if (gaps.length === 0) report("pass", "archive_ordinals_contiguous", `no >7d gaps across ${sorted.length} archives`);
+      else for (const g of gaps) report("warn", "archive_ordinals_contiguous", g);
+    }
+
+    // 3. leaf_body_sha256_matches — per-leaf BODY.md sha check.
+    {
+      let leafChecked = 0, leafFail = 0;
+      for (const e of idx) {
+        if (e.kind !== "leaf" || !e.body_sha256) continue;
+        leafChecked++;
+        const bodyPath = path.join(e.path, "BODY.md");
+        if (!fs.existsSync(bodyPath)) {
+          report("fail", "leaf_body_sha256_matches", `${e.id}: BODY.md missing`);
+          leafFail++;
+          continue;
+        }
+        const actual = sha256(fs.readFileSync(bodyPath, "utf8"));
+        if (actual !== e.body_sha256) {
+          report("fail", "leaf_body_sha256_matches", `${e.id}: sha mismatch (recorded=${e.body_sha256.slice(0, 16)}..., actual=${actual.slice(0, 16)}...)`);
+          leafFail++;
+        }
+      }
+      if (leafFail === 0) report("pass", "leaf_body_sha256_matches", `all ${leafChecked} leaf bodies match`);
+    }
+
+    // 4. condensed_lineage — every condensed has non-empty parents AND
+    //    every parent ID is in the index.
+    {
+      let condensedChecked = 0, lineageFail = 0;
+      for (const e of idx) {
+        if (e.kind !== "condensed") continue;
+        condensedChecked++;
+        if (!e.parents?.length) {
+          report("fail", "condensed_lineage", `${e.id}: no parents (condensed must reference >= 1)`);
+          lineageFail++;
+          continue;
+        }
         for (const p of e.parents) {
           if (!ids.has(p)) {
-            console.log(`drift ${e.id}: condensed parent ${p} not in index`);
-            drift++;
+            report("fail", "condensed_lineage", `${e.id}: parent ${p} not in index`);
+            lineageFail++;
           }
         }
-        // descendant_count check: walk parents transitively, count leaves.
+      }
+      if (lineageFail === 0) report("pass", "condensed_lineage", `all ${condensedChecked} condensed entries have valid lineage`);
+    }
+
+    // 5. no_orphan_archives — every leaf is fresh-tail-protected OR
+    //    referenced by a condensed parent. WARN level.
+    {
+      const referencedByCondensed = new Set<string>();
+      for (const e of idx) if (e.kind === "condensed") for (const p of e.parents ?? []) referencedByCondensed.add(p);
+      const sortedLeaves = idx.filter((e) => e.kind === "leaf")
+        .sort((a, b) => b.earliest_at.localeCompare(a.earliest_at));
+      const freshTailWindow = new Set(sortedLeaves.slice(0, 4).map((e) => e.id));
+      const orphans: string[] = [];
+      for (const e of idx) {
+        if (e.kind !== "leaf") continue;
+        if (freshTailWindow.has(e.id)) continue;
+        if (referencedByCondensed.has(e.id)) continue;
+        orphans.push(e.id);
+      }
+      if (orphans.length === 0) report("pass", "no_orphan_archives", `every leaf is fresh-tail-protected or has a condensed parent`);
+      else for (const o of orphans) report("warn", "no_orphan_archives", `${o}: leaf with no condensed parent`);
+    }
+
+    // 6. descendant_count_consistency — recompute and check drift.
+    {
+      let condensedChecked = 0, countFail = 0;
+      for (const e of idx) {
+        if (e.kind !== "condensed") continue;
+        condensedChecked++;
         const seen = new Set<string>();
         function leafCount(aid: string): number {
           if (seen.has(aid)) return 0;
@@ -480,23 +749,63 @@ switch (op) {
         }
         const reachable = e.parents.reduce((acc, p) => acc + leafCount(p), 0);
         if (reachable !== e.descendant_count) {
-          console.log(`drift ${e.id}: descendant_count=${e.descendant_count} but reachable leaves=${reachable}`);
-          drift++;
+          report("fail", "descendant_count_consistency", `${e.id}: descendant_count=${e.descendant_count} but reachable=${reachable}`);
+          countFail++;
         }
       }
-      if (e.kind === "leaf" && e.body_sha256) {
-        const bodyPath = path.join(e.path, "BODY.md");
-        if (fs.existsSync(bodyPath)) {
-          const actual = sha256(fs.readFileSync(bodyPath, "utf8"));
-          if (actual !== e.body_sha256) {
-            console.log(`drift ${e.id}: BODY.md sha256 mismatch (recorded=${e.body_sha256.slice(0, 16)}..., actual=${actual.slice(0, 16)}...)`);
-            drift++;
+      if (countFail === 0) report("pass", "descendant_count_consistency", `all ${condensedChecked} condensed counts match reachable leaf set`);
+    }
+
+    // 7. no_duplicate_ids — catastrophic if true.
+    {
+      const seen = new Map<string, number>();
+      for (const e of idx) seen.set(e.id, (seen.get(e.id) ?? 0) + 1);
+      const dups = [...seen.entries()].filter(([, n]) => n > 1);
+      if (dups.length === 0) report("pass", "no_duplicate_ids", `all ${idx.length} ids unique`);
+      else for (const [id, n] of dups) report("fail", "no_duplicate_ids", `${id}: appears ${n}× in index.jsonl`);
+    }
+
+    // 8. fts_in_sync — every IndexEntry has a row in fts.db. WARN with
+    //    --rebuild-fts hint. Skipped silently if fts.db absent.
+    {
+      const fts = await import("./fts.ts");
+      const ftsDbExists = fs.existsSync(fts.ftsDbPath(edge.dir));
+      if (!ftsDbExists) {
+        report("pass", "fts_in_sync", "fts.db absent (lazy-create); skipping check");
+      } else {
+        let ftsChecked = 0, ftsMissing = 0;
+        for (const e of idx) {
+          ftsChecked++;
+          if (!fts.hasEntry(edge.dir, e.id)) {
+            report("warn", "fts_in_sync", `${e.id}: not in fts.db — run \`bun scripts/archive.ts doctor ${peer} --rebuild-fts\``);
+            ftsMissing++;
           }
         }
+        if (ftsMissing === 0) report("pass", "fts_in_sync", `all ${ftsChecked} archives indexed in fts.db`);
       }
     }
-    if (drift === 0) console.log(`${edge.id}: ${idx.length} archives, no drift`);
-    else { console.log(`${edge.id}: ${drift} drift item(s) reported`); process.exit(5); }
+
+    // 9. orphan_body_without_meta — carina lock-strategy-(b) intermediate
+    //    state. WARN level; gc would reap.
+    {
+      const leafDir = path.join(archivesRoot(edge.dir), "leaf");
+      const orphans: string[] = [];
+      if (fs.existsSync(leafDir)) {
+        for (const aid of fs.readdirSync(leafDir)) {
+          const adir = path.join(leafDir, aid);
+          if (!fs.statSync(adir).isDirectory()) continue;
+          const bodyExists = fs.existsSync(path.join(adir, "BODY.md"));
+          const metaExists = fs.existsSync(path.join(adir, "META.yaml"));
+          if (bodyExists && !metaExists) orphans.push(aid);
+        }
+      }
+      if (orphans.length === 0) report("pass", "orphan_body_without_meta", `no BODY.md files without META.yaml`);
+      else for (const o of orphans) report("warn", "orphan_body_without_meta", `${o}: BODY.md present, META.yaml missing — run \`gc\` to reap`);
+    }
+
+    console.log("");
+    console.log(`${edge.id}: ${idx.length} archives, ${warns} warning(s), ${fails} failure(s)`);
+    if (fails > 0) process.exit(5);
     break;
   }
 

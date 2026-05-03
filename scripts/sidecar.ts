@@ -518,6 +518,86 @@ function startReconcilePoll(): void {
   }, argsRef.reconcilePollMs);
 }
 
+// Round 12 feature 13 (keystone): incremental auto-compaction.
+// Every N seconds (default 60), check each edge: if CONVO.md is over the
+// token threshold AND turn=parked AND no lock, spawn `archive.ts auto`
+// in the background. The threshold + interval are env-overridable so
+// tests can short-circuit (`AGENT_CHAT_AUTO_ARCHIVE_INTERVAL=0.1` +
+// `AGENT_CHAT_AUTO_ARCHIVE_TOKENS=1`).
+//
+// This is the ONE sidecar.ts change in Round 12 — orion's spec explicitly
+// designated sidecar.ts as "unchanged" elsewhere. Any future feature
+// touching sidecar should call this out the same way.
+let autoCompactTimer: NodeJS.Timeout | null = null;
+const autoCompactingEdges = new Set<string>();  // edges with an in-flight auto archive
+
+function startAutoCompactionPoll(): void {
+  const interval = parseFloat(process.env.AGENT_CHAT_AUTO_ARCHIVE_INTERVAL ?? "60");
+  if (!Number.isFinite(interval) || interval <= 0) return;
+  const intervalMs = Math.max(50, Math.round(interval * 1000));
+  const tokenThreshold = parseInt(process.env.AGENT_CHAT_AUTO_ARCHIVE_TOKENS ?? "50000", 10);
+  autoCompactTimer = setInterval(() => {
+    for (const ec of cache.values()) {
+      try { maybeAutoCompact(ec, tokenThreshold); }
+      catch (e) { recordError(`auto-compact tick failed for ${ec.edgeId}: ${(e as Error).message}`); }
+    }
+  }, intervalMs);
+  log(`auto-compaction poll started: every ${intervalMs}ms, threshold ${tokenThreshold} tokens`);
+}
+
+function maybeAutoCompact(ec: EdgeCache, tokenThreshold: number): void {
+  // Three preconditions before spawning archive.ts:
+  //   1. We're not already running an auto-compact for this edge.
+  //   2. .turn is "parked" — neither side has the floor; safe to mutate CONVO.
+  //   3. No active lock — another writer may be in-flight.
+  //   4. CONVO.md size / 4 > tokenThreshold.
+  if (autoCompactingEdges.has(ec.edgeId)) return;
+  const turn = ec.turn;
+  if (turn !== "parked") return;
+  // Lock probe — direct stat (cache may be slightly stale; protocol authority
+  // is filesystem, not cache).
+  const edge = edges.find((e) => e.id === ec.edgeId);
+  if (!edge) return;
+  if (fs.existsSync(edge.lock)) return;
+  let convoSize = 0;
+  try { convoSize = fs.statSync(edge.convo).size; } catch { return; }
+  const estimatedTokens = Math.ceil(convoSize / 4);
+  if (estimatedTokens < tokenThreshold) return;
+
+  // Spawn archive.ts auto in the background. The skill's archive.ts
+  // already handles atomic CONVO.md truncate, lock acquisition, fresh-tail
+  // protection, and index.jsonl/fts5 sync — sidecar's job is only to
+  // trigger it at the right moment, not to re-implement.
+  autoCompactingEdges.add(ec.edgeId);
+  const archiveScript = path.resolve(import.meta.dirname, "archive.ts");
+  const cp = require("node:child_process");
+  // Pass --no-llm by default so a missing claude binary doesn't break the
+  // compaction. Carina's slice 1 LLM gating still runs the LLM path when
+  // claude is available AND --no-llm isn't set.
+  const peer = ec.edgeId.split("-").find((p) => p !== id.name) ?? "";
+  const child = cp.spawn(process.execPath, [archiveScript, "auto", peer, "--no-llm"], {
+    detached: true,
+    stdio: ["ignore", "ignore", "pipe"],
+    env: { ...process.env, CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID ?? "" },
+    cwd: SKILL_ROOT,
+  });
+  let stderr = "";
+  child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+  child.on("exit", (code: number | null) => {
+    autoCompactingEdges.delete(ec.edgeId);
+    if (code === 0) {
+      log(`auto-compact ${ec.edgeId}: ok (~${estimatedTokens} → archive)`);
+    } else {
+      recordError(`auto-compact ${ec.edgeId} exited ${code}: ${stderr.slice(0, 200)}`);
+    }
+  });
+  child.on("error", (e: Error) => {
+    autoCompactingEdges.delete(ec.edgeId);
+    recordError(`auto-compact spawn failed ${ec.edgeId}: ${e.message}`);
+  });
+  child.unref();
+}
+
 function primeCache(): void {
   for (const e of edges) {
     const turn = readTurn(e.turn);
@@ -919,6 +999,7 @@ async function main() {
   emitStartupPending();
   for (const ec of cache.values()) attachWatcher(ec);
   startReconcilePoll();
+  startAutoCompactionPoll();
   if (args.once) {
     // Smoke-test mode: exit cleanly after announcing readiness.
     gracefulExit(0, "--once");
