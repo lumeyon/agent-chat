@@ -339,7 +339,7 @@ describe("neighborsOf / edgesOf", () => {
   });
 });
 
-// org topology: 2 humans (eyon, john) + 10 AI agents = 12 agents,
+// org topology: 2 humans (boss, john) + 10 AI agents = 12 agents,
 // 36 edges (1 human-human + 20 human-AI + 15 petersen-AI-AI). The
 // existing parseTopologyYaml + loadTopology + neighborsOf accept it
 // without code changes — humans-as-agents is a pure naming convention
@@ -351,7 +351,7 @@ describe("loadTopology — org topology (multi-user, slice 1)", () => {
     const t = loadTopology("org");
     expect(t.topology).toBe("org");
     expect(t.agents).toHaveLength(12);
-    expect(t.agents).toContain("eyon");
+    expect(t.agents).toContain("boss");
     expect(t.agents).toContain("john");
     expect(t.agents).toContain("orion");
     expect(t.edges).toHaveLength(36);
@@ -359,40 +359,41 @@ describe("loadTopology — org topology (multi-user, slice 1)", () => {
 
   test("human degree is 11, AI degree is 5", () => {
     const t = loadTopology("org");
-    expect(neighborsOf(t, "eyon")).toHaveLength(11);
+    expect(neighborsOf(t, "boss")).toHaveLength(11);
     expect(neighborsOf(t, "john")).toHaveLength(11);
     expect(neighborsOf(t, "orion")).toHaveLength(5);
     expect(neighborsOf(t, "rhino")).toHaveLength(5);
     // Every human neighbors every AI plus the other human.
-    expect(neighborsOf(t, "eyon")).toContain("john");
-    expect(neighborsOf(t, "eyon")).toContain("orion");
+    expect(neighborsOf(t, "boss")).toContain("john");
+    expect(neighborsOf(t, "boss")).toContain("orion");
     // AI sees both humans plus their petersen peers.
-    expect(neighborsOf(t, "orion")).toContain("eyon");
+    expect(neighborsOf(t, "orion")).toContain("boss");
     expect(neighborsOf(t, "orion")).toContain("john");
     expect(neighborsOf(t, "orion")).toContain("lumeyon");
   });
 
   test("edge canonicalization is order-independent for human-AI edges", () => {
-    expect(edgeId("eyon", "orion")).toBe("eyon-orion");
-    expect(edgeId("orion", "eyon")).toBe("eyon-orion");
-    expect(edgeId("eyon", "john")).toBe("eyon-john");
-    expect(edgeId("john", "eyon")).toBe("eyon-john");
+    expect(edgeId("boss", "orion")).toBe("boss-orion");
+    expect(edgeId("orion", "boss")).toBe("boss-orion");
+    expect(edgeId("boss", "john")).toBe("boss-john");
+    expect(edgeId("john", "boss")).toBe("boss-john");
   });
 
   test("edgesOf for a human enumerates all 11 edges with canonical ids", () => {
     const t = loadTopology("org");
-    const edges = edgesOf(t, "eyon");
+    const edges = edgesOf(t, "boss");
     expect(edges).toHaveLength(11);
-    // Each edge id matches the alphabetical canonicalization. "eyon" sorts
-    // AFTER "cadence" and "carina" but BEFORE all other peers, so 9 edges
-    // start with "eyon-" and 2 start with the peer name.
+    // Each edge id matches the alphabetical canonicalization. "boss" sorts
+    // BEFORE every other agent in the org (cadence, carina, john, keystone,
+    // lumeyon, lyra, orion, pulsar, rhino, sentinel, vanguard), so all 11
+    // edges start with "boss-".
     for (const e of edges) {
-      expect(e.id).toBe(edgeId("eyon", e.peer));
+      expect(e.id).toBe(edgeId("boss", e.peer));
     }
-    expect(edges.find((e) => e.peer === "carina")!.id).toBe("carina-eyon");
-    expect(edges.find((e) => e.peer === "cadence")!.id).toBe("cadence-eyon");
-    expect(edges.find((e) => e.peer === "orion")!.id).toBe("eyon-orion");
-    expect(edges.find((e) => e.peer === "john")!.id).toBe("eyon-john");
+    expect(edges.find((e) => e.peer === "carina")!.id).toBe("boss-carina");
+    expect(edges.find((e) => e.peer === "cadence")!.id).toBe("boss-cadence");
+    expect(edges.find((e) => e.peer === "orion")!.id).toBe("boss-orion");
+    expect(edges.find((e) => e.peer === "john")!.id).toBe("boss-john");
   });
 });
 
@@ -403,27 +404,27 @@ describe("loadTopology — org topology (multi-user, slice 1)", () => {
 // neighborsOf) keep working without per-call-site edits.
 describe("parseUsersYaml — schema parser hardening (slice 1)", () => {
   test("parses minimal valid users.yaml", () => {
-    const u = parseUsersYaml(`users:\n  - name: eyon\n    default: true\n  - name: john\n`);
+    const u = parseUsersYaml(`users:\n  - name: boss\n    default: true\n  - name: john\n`);
     expect(u).toHaveLength(2);
-    expect(u[0]).toEqual({ name: "eyon", default: true });
+    expect(u[0]).toEqual({ name: "boss", default: true });
     expect(u[1]).toEqual({ name: "john" });
   });
 
   test("strips inline comments", () => {
-    const u = parseUsersYaml(`# top comment\nusers:\n  - name: eyon # default user\n    default: true\n`);
+    const u = parseUsersYaml(`# top comment\nusers:\n  - name: boss # default user\n    default: true\n`);
     expect(u).toHaveLength(1);
-    expect(u[0].name).toBe("eyon");
+    expect(u[0].name).toBe("boss");
     expect(u[0].default).toBe(true);
   });
 
   test("rejects unknown top-level keys (kills __proto__/constructor pollution)", () => {
-    expect(() => parseUsersYaml(`__proto__: bad\nusers:\n  - name: eyon\n`)).toThrow(/unknown top-level/);
-    expect(() => parseUsersYaml(`constructor: bad\nusers:\n  - name: eyon\n`)).toThrow(/unknown top-level/);
-    expect(() => parseUsersYaml(`agents:\n  - eyon\n`)).toThrow(/unknown top-level/);
+    expect(() => parseUsersYaml(`__proto__: bad\nusers:\n  - name: boss\n`)).toThrow(/unknown top-level/);
+    expect(() => parseUsersYaml(`constructor: bad\nusers:\n  - name: boss\n`)).toThrow(/unknown top-level/);
+    expect(() => parseUsersYaml(`agents:\n  - boss\n`)).toThrow(/unknown top-level/);
   });
 
   test("rejects invalid user name (shell metacharacters / path traversal)", () => {
-    expect(() => parseUsersYaml(`users:\n  - name: "eyon;rm -rf /"\n`)).toThrow(/invalid user name/);
+    expect(() => parseUsersYaml(`users:\n  - name: "boss;rm -rf /"\n`)).toThrow(/invalid user name/);
     expect(() => parseUsersYaml(`users:\n  - name: ../etc/passwd\n`)).toThrow(/invalid user name/);
   });
 
@@ -441,13 +442,13 @@ describe("parseUsersYaml — schema parser hardening (slice 1)", () => {
 describe("loadUsers — load-time invariants (slice 1)", () => {
   test("returns the shipped agents.users.yaml content", () => {
     const u = loadUsers();
-    // Test pins the shipped file: eyon + john, eyon is the default. Future
+    // Test pins the shipped file: boss + john, boss is the default. Future
     // edits to agents.users.yaml that break this expectation should update
     // the test deliberately.
     expect(u.length).toBeGreaterThanOrEqual(2);
-    const eyon = u.find((x) => x.name === "eyon");
-    expect(eyon).toBeDefined();
-    expect(eyon!.default).toBe(true);
+    const boss = u.find((x) => x.name === "boss");
+    expect(boss).toBeDefined();
+    expect(boss!.default).toBe(true);
     expect(u.find((x) => x.name === "john")).toBeDefined();
   });
 
@@ -456,7 +457,7 @@ describe("loadUsers — load-time invariants (slice 1)", () => {
     // permissive about field combinations (it just collects). loadUsers is
     // the load-time correctness gate. Test by feeding crafted yaml through
     // parseUsersYaml then running the same dedup logic loadUsers does.
-    const u = parseUsersYaml(`users:\n  - name: eyon\n    default: true\n  - name: john\n    default: true\n`);
+    const u = parseUsersYaml(`users:\n  - name: boss\n    default: true\n  - name: john\n    default: true\n`);
     const defaults = u.filter((x) => x.default === true);
     expect(defaults).toHaveLength(2);
     // loadUsers itself would throw — this regression test pins the
@@ -469,14 +470,14 @@ describe("loadTopology overlay — users merge (slice 1)", () => {
     const p = loadTopology("petersen");
     // 10 petersen AI + 2 users.yaml humans = 12 agents
     expect(p.agents.length).toBe(12);
-    expect(p.agents).toContain("eyon");
+    expect(p.agents).toContain("boss");
     expect(p.agents).toContain("john");
     // 15 petersen edges + 20 user-AI (2 humans × 10 AI) + 1 user-user = 36
     expect(p.edges.length).toBe(36);
   });
 
   test("org topology overlay is idempotent (no duplicate agents or edges)", () => {
-    // org.yaml pre-declares eyon/john as agents AND eyon-orion / eyon-john
+    // org.yaml pre-declares boss/john as agents AND boss-orion / boss-john
     // edges. The overlay merge dedups by Set so org.agents.length stays 12
     // and org.edges.length stays 36.
     const o = loadTopology("org");
@@ -492,8 +493,8 @@ describe("loadTopology overlay — users merge (slice 1)", () => {
 
   test("user neighbors include all AI in the topology + every other user", () => {
     const p = loadTopology("petersen");
-    // eyon should neighbor every petersen AI (10) plus john (1) = 11
-    const eyonNeighbors = neighborsOf(p, "eyon");
+    // boss should neighbor every petersen AI (10) plus john (1) = 11
+    const eyonNeighbors = neighborsOf(p, "boss");
     expect(eyonNeighbors).toHaveLength(11);
     expect(eyonNeighbors).toContain("john");
     expect(eyonNeighbors).toContain("orion");
@@ -501,13 +502,13 @@ describe("loadTopology overlay — users merge (slice 1)", () => {
     // orion (an AI) gets 3 petersen neighbors + 2 humans = 5
     const orionNeighbors = neighborsOf(p, "orion");
     expect(orionNeighbors).toHaveLength(5);
-    expect(orionNeighbors).toContain("eyon");
+    expect(orionNeighbors).toContain("boss");
     expect(orionNeighbors).toContain("john");
   });
 
   test("user-edges live under the AI's topology directory (topology-rooted)", () => {
     const p = loadTopology("petersen");
-    const edges = edgesOf(p, "eyon");
+    const edges = edgesOf(p, "boss");
     // Each edge's directory should be under conversations/petersen/, not
     // under conversations/users/ — confirms topology-rooted user-edges
     // (orion's Phase-2 resolution: matches existing org-topology semantic).

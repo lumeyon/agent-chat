@@ -2,7 +2,7 @@
 # at loadTopology time, every entry here is added to the topology's agents
 # list, and edges are derived from each user to every AI agent + to every
 # other user. Edges all live under the AI's current topology directory
-# (e.g. petersen/eyon-orion/), matching the org-topology semantic users
+# (e.g. petersen/boss-orion/), matching the org-topology semantic users
 # already see today.
 #
 # Schema:
@@ -17,6 +17,6 @@
 # human→AI flow.
 description: Authorized human users — orthogonal overlay onto any AI topology.
 users:
-  - name: eyon
+  - name: boss
     default: true
   - name: john

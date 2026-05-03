@@ -138,7 +138,7 @@ export function parseUsersYaml(text: string): User[] {
     // lines belong to the most recent entry. Greedy `.+` capture matches the
     // full post-colon value (including any quoted/spaced content), then we
     // validate via isValidAgentName so the rejection error mirrors topology
-    // yaml's strictness — `"eyon;rm -rf /"` throws rather than silently failing.
+    // yaml's strictness — `"boss;rm -rf /"` throws rather than silently failing.
     const dashName = line.match(/^\s*-\s*name:\s*(.+)$/);
     if (dashName) {
       if (pending) { out.users.push(pending); }
@@ -240,7 +240,7 @@ export function loadTopology(topologyName: string): Topology {
     const aiNames = t.agents.filter((a) => !userSet.has(a));
     const userNames = users.map((u) => u.name);
     // Merge user names into the agent list (Set dedup; org's pre-declared
-    // eyon/john don't duplicate).
+    // boss/john don't duplicate).
     const agentSet = new Set(t.agents);
     for (const u of userNames) {
       if (!agentSet.has(u)) {
@@ -249,7 +249,7 @@ export function loadTopology(topologyName: string): Topology {
       }
     }
     // Derive edges. Canonical-id Set dedup against pre-existing edges so org's
-    // already-declared eyon-orion / eyon-john pairs don't duplicate.
+    // already-declared boss-orion / boss-john pairs don't duplicate.
     const edgeIdSet = new Set(t.edges.map(([a, b]) => edgeId(a, b)));
     for (const u of userNames) {
       for (const a of aiNames) {

@@ -396,16 +396,16 @@ human-AI thread.
 > you are orion in the petersen graph
 [Claude runs: agent-chat init orion petersen]
 
-# That's it. `agent-chat init` reads agents.users.yaml, sees `eyon`
+# That's it. `agent-chat init` reads agents.users.yaml, sees `boss`
 # is registered with `default: true`, and auto-writes
 # .sessions/<key>.current_speaker.json. Stderr logs:
-#   [agent-chat] speaker auto-resolved to eyon (source: users.yaml default)
+#   [agent-chat] speaker auto-resolved to boss (source: users.yaml default)
 
 # Type messages normally. After each assistant response, the agent records
 # the turn into the right edge:
 > agent-chat record-turn --user "let's debug the migration" --assistant "..."
-#   → appends two sections to conversations/petersen/eyon-orion/CONVO.md
-#   → flips .turn back to eyon for the next user message
+#   → appends two sections to conversations/petersen/boss-orion/CONVO.md
+#   → flips .turn back to boss for the next user message
 ```
 
 The auto-resolve order is:
@@ -424,8 +424,8 @@ the OS user isn't the human typing right now.
 
 # Subsequent turns route to conversations/org/john-orion/CONVO.md
 # The first record-turn after the switch ALSO writes a handoff section
-# to the OLD edge (eyon-orion):
-#   ## eyon — handoff to john (UTC ...)
+# to the OLD edge (boss-orion):
+#   ## boss — handoff to john (UTC ...)
 #   Heading out; john is taking over this thread.
 #   → parked
 ```

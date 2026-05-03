@@ -13,8 +13,8 @@ import {
 
 // Switched from "org" to "petersen" after the overlay refactor: lumeyon's
 // load-time validation rejects topology+users.yaml name collisions, and
-// agents.org.yaml still bakes in eyon/john from yesterday's commit. Using
-// petersen makes the load-bearing assertion stronger anyway — `eyon-orion`
+// agents.org.yaml still bakes in boss/john from yesterday's commit. Using
+// petersen makes the load-bearing assertion stronger anyway — `boss-orion`
 // exists ONLY because of the users.yaml overlay, not because petersen.yaml
 // declares it. (orion's spec for the auto-resolve load-bearing test.)
 const TOPO = "petersen";
@@ -75,26 +75,26 @@ describe("record-turn — load-bearing", () => {
   test("1. fresh-edge round-trip: creates files, writes both sections, ledger entry", () => {
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");
+    writeCurrentSpeaker(tmp, key, "boss");
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
     const r = runScript("agent-chat.ts", [
-      "record-turn", "--user", "hello orion", "--assistant", "hi eyon",
+      "record-turn", "--user", "hello orion", "--assistant", "hi boss",
     ], env);
     expect(r.exitCode).toBe(0);
 
-    const convo = readConvo(tmp, "eyon-keystone");
-    expect(convo).toMatch(/## eyon — user turn \(UTC \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\)/);
+    const convo = readConvo(tmp, "boss-keystone");
+    expect(convo).toMatch(/## boss — user turn \(UTC \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\)/);
     expect(convo).toMatch(/## keystone — assistant response \(UTC /);
     expect(convo).toContain("hello orion");
-    expect(convo).toContain("hi eyon");
+    expect(convo).toContain("hi boss");
 
-    expect(readTurn(tmp, "eyon-keystone")).toBe("eyon");
-    expect(lockExists(tmp, "eyon-keystone")).toBe(false);
+    expect(readTurn(tmp, "boss-keystone")).toBe("boss");
+    expect(lockExists(tmp, "boss-keystone")).toBe(false);
 
-    const ledger = readLedger(tmp, "eyon-keystone");
+    const ledger = readLedger(tmp, "boss-keystone");
     expect(ledger.length).toBe(1);
-    expect(ledger[0].speaker).toBe("eyon");
+    expect(ledger[0].speaker).toBe("boss");
     expect(ledger[0].agent).toBe("keystone");
     expect(ledger[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -102,7 +102,7 @@ describe("record-turn — load-bearing", () => {
   test("2. idempotent retry: same payload twice → one section pair, one ledger entry", () => {
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");
+    writeCurrentSpeaker(tmp, key, "boss");
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
     runScript("agent-chat.ts", ["record-turn", "--user", "u1", "--assistant", "a1"], env);
@@ -110,10 +110,10 @@ describe("record-turn — load-bearing", () => {
     expect(r2.exitCode).toBe(0);
     expect(r2.stdout).toMatch(/idempotent skip/);
 
-    const convo = readConvo(tmp, "eyon-keystone");
-    const userTurnCount = (convo.match(/## eyon — user turn/g) ?? []).length;
+    const convo = readConvo(tmp, "boss-keystone");
+    const userTurnCount = (convo.match(/## boss — user turn/g) ?? []).length;
     expect(userTurnCount).toBe(1);
-    const ledger = readLedger(tmp, "eyon-keystone");
+    const ledger = readLedger(tmp, "boss-keystone");
     expect(ledger.length).toBe(1);
   });
 
@@ -122,23 +122,23 @@ describe("record-turn — load-bearing", () => {
     writeSessionRecord(tmp, key, AGENT, TOPO);
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
-    // First turn: eyon
-    writeCurrentSpeaker(tmp, key, "eyon");
-    runScript("agent-chat.ts", ["record-turn", "--user", "from eyon", "--assistant", "to eyon"], env);
+    // First turn: boss
+    writeCurrentSpeaker(tmp, key, "boss");
+    runScript("agent-chat.ts", ["record-turn", "--user", "from boss", "--assistant", "to boss"], env);
 
     // Switch speaker to john
     writeCurrentSpeaker(tmp, key, "john");
     runScript("agent-chat.ts", ["record-turn", "--user", "from john", "--assistant", "to john"], env);
 
     // OLD edge has handoff section + .turn=parked
-    const oldConvo = readConvo(tmp, "eyon-keystone");
-    expect(oldConvo).toMatch(/## eyon — handoff to john \(UTC /);
+    const oldConvo = readConvo(tmp, "boss-keystone");
+    expect(oldConvo).toMatch(/## boss — handoff to john \(UTC /);
     expect(oldConvo).toContain("Heading out; john is taking over");
     // The handoff section ends with "→ parked" (verify the LAST occurrence is the handoff arrow)
-    const handoffIdx = oldConvo.lastIndexOf("## eyon — handoff to john");
+    const handoffIdx = oldConvo.lastIndexOf("## boss — handoff to john");
     expect(handoffIdx).toBeGreaterThan(-1);
     expect(oldConvo.slice(handoffIdx)).toMatch(/→ parked/);
-    expect(readTurn(tmp, "eyon-keystone")).toBe("parked");
+    expect(readTurn(tmp, "boss-keystone")).toBe("parked");
 
     // NEW edge has the john user+assistant pair
     const newConvo = readConvo(tmp, "john-keystone");
@@ -155,16 +155,16 @@ describe("record-turn — load-bearing", () => {
     const key2 = fakeSessionId("rh");
     writeSessionRecord(tmp, key1, "keystone", TOPO);
     writeSessionRecord(tmp, key2, "rhino", TOPO);
-    writeCurrentSpeaker(tmp, key1, "eyon");
-    writeCurrentSpeaker(tmp, key2, "eyon");
+    writeCurrentSpeaker(tmp, key1, "boss");
+    writeCurrentSpeaker(tmp, key2, "boss");
     const env1 = sessionEnv(tmp, "keystone", TOPO, key1);
     const env2 = sessionEnv(tmp, "rhino", TOPO, key2);
 
     runScript("agent-chat.ts", ["record-turn", "--user", "hi keystone", "--assistant", "hi back"], env1);
     runScript("agent-chat.ts", ["record-turn", "--user", "hi rhino", "--assistant", "hi back too"], env2);
 
-    const ksConvo = readConvo(tmp, "eyon-keystone");
-    const rhConvo = readConvo(tmp, "eyon-rhino");
+    const ksConvo = readConvo(tmp, "boss-keystone");
+    const rhConvo = readConvo(tmp, "boss-rhino");
     expect(ksConvo).toContain("hi keystone");
     expect(ksConvo).not.toContain("hi rhino");
     expect(rhConvo).toContain("hi rhino");
@@ -182,11 +182,11 @@ describe("record-turn — load-bearing", () => {
     // see the right author for both sections.
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");
+    writeCurrentSpeaker(tmp, key, "boss");
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
     runScript("agent-chat.ts", ["record-turn", "--user", "u", "--assistant", "a"], env);
-    const convo = readConvo(tmp, "eyon-keystone");
+    const convo = readConvo(tmp, "boss-keystone");
 
     // Force a re-import of lib.ts under the test env so it picks up the
     // tmpdir's CONVERSATIONS_DIR.
@@ -197,7 +197,7 @@ describe("record-turn — load-bearing", () => {
     const meta = sections.map((s: string) => sectionMeta(s));
     expect(meta.length).toBeGreaterThanOrEqual(2);
     const last2 = meta.slice(-2);
-    expect(last2[0].author).toBe("eyon");
+    expect(last2[0].author).toBe("boss");
     expect(last2[1].author).toBe("keystone");
     expect(last2[0].ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
@@ -234,18 +234,18 @@ describe("record-turn — negative cases (vanguard's design)", () => {
     ], env, { allowFail: true });
     expect(r.exitCode).toBe(65);
     expect(r.stderr).toMatch(/speaker 'alice' is not a member/);
-    expect(r.stderr).toMatch(/eyon/);
+    expect(r.stderr).toMatch(/boss/);
     expect(r.stderr).toMatch(/john/);
   });
 
   test("66: human-to-human refused (catches asymmetric refactor — agent-side check must also fire)", () => {
-    // Speaker=eyon (human ✓), agent=AI session role overridden to john (human).
+    // Speaker=boss (human ✓), agent=AI session role overridden to john (human).
     // The membership check is `users.includes(speaker) && !users.includes(agent)`
     // — both conditions must hold. If a future refactor drops the !users.includes(agent)
     // half, this test catches the regression.
     const key = fakeSessionId("hh");
     writeSessionRecord(tmp, key, "john", TOPO);  // john is in users.yaml = human
-    writeCurrentSpeaker(tmp, key, "eyon");       // also human
+    writeCurrentSpeaker(tmp, key, "boss");       // also human
     const env = sessionEnv(tmp, "john", TOPO, key);
 
     const r = runScript("agent-chat.ts", [
@@ -284,8 +284,8 @@ describe("record-turn — negative cases (vanguard's design)", () => {
 // These exercise the full chain: agents.users.yaml → loadTopology merges
 // users into topo.agents → record-turn lands on an edge that exists ONLY
 // because of the overlay (not because petersen.yaml declares it). The
-// load-bearing assertion is that `eyon-keystone/CONVO.md` is a real file
-// after the test, despite eyon being absent from petersen.yaml.
+// load-bearing assertion is that `boss-keystone/CONVO.md` is a real file
+// after the test, despite boss being absent from petersen.yaml.
 //
 // Note these tests rely on carina's slice 2 having shipped the auto-write
 // of current_speaker.json on init. If carina's slice hasn't landed yet,
@@ -299,26 +299,26 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
   beforeEach(() => { tmp = mkTmpConversations(); });
   afterEach(() => { rmTmp(tmp); });
 
-  test("eyon (in users.yaml, not in petersen.yaml) records on petersen+overlay edge", () => {
-    // The load-bearing test: eyon-keystone exists ONLY because users.yaml
-    // overlays eyon onto petersen at loadTopology time.
+  test("boss (in users.yaml, not in petersen.yaml) records on petersen+overlay edge", () => {
+    // The load-bearing test: boss-keystone exists ONLY because users.yaml
+    // overlays boss onto petersen at loadTopology time.
     const key = fakeSessionId("ovr1");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");
+    writeCurrentSpeaker(tmp, key, "boss");
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
     const r = runScript("agent-chat.ts", [
-      "record-turn", "--user", "from eyon overlay", "--assistant", "hi eyon",
+      "record-turn", "--user", "from boss overlay", "--assistant", "hi boss",
     ], env);
     expect(r.exitCode).toBe(0);
 
     // Edge dir lives under petersen/, NOT under any users-only namespace.
-    const convoPath = path.join(tmp, "petersen", "eyon-keystone", "CONVO.md");
+    const convoPath = path.join(tmp, "petersen", "boss-keystone", "CONVO.md");
     expect(fs.existsSync(convoPath)).toBe(true);
     const convo = fs.readFileSync(convoPath, "utf8");
-    expect(convo).toMatch(/## eyon — user turn/);
+    expect(convo).toMatch(/## boss — user turn/);
     expect(convo).toMatch(/## keystone — assistant response/);
-    expect(convo).toContain("from eyon overlay");
+    expect(convo).toContain("from boss overlay");
   });
 
   test("john (also in users.yaml) records on a different overlay edge cleanly", () => {
@@ -336,8 +336,8 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
     const convoPath = path.join(tmp, "petersen", "john-keystone", "CONVO.md");
     expect(fs.existsSync(convoPath)).toBe(true);
     expect(fs.readFileSync(convoPath, "utf8")).toContain("from john");
-    // eyon-keystone NOT created in this test.
-    expect(fs.existsSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"))).toBe(false);
+    // boss-keystone NOT created in this test.
+    expect(fs.existsSync(path.join(tmp, "petersen", "boss-keystone", "CONVO.md"))).toBe(false);
   });
 
   test("explicit speaker override wins over a previously-set default", () => {
@@ -346,7 +346,7 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
     // override) by writing current_speaker.json twice.
     const key = fakeSessionId("expl");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");  // initial (would be auto-resolved default)
+    writeCurrentSpeaker(tmp, key, "boss");  // initial (would be auto-resolved default)
     writeCurrentSpeaker(tmp, key, "john");  // explicit override
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
@@ -355,15 +355,15 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
     ], env);
     expect(r.exitCode).toBe(0);
     expect(fs.existsSync(path.join(tmp, "petersen", "john-keystone", "CONVO.md"))).toBe(true);
-    expect(fs.existsSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, "petersen", "boss-keystone", "CONVO.md"))).toBe(false);
   });
 
   test("backward-compat: speaker switch from auto-resolved default produces handoff section", () => {
     // Yesterday's slice-3 handoff test, but starting from an auto-resolved
-    // default speaker rather than an explicit `agent-chat speaker eyon`.
+    // default speaker rather than an explicit `agent-chat speaker boss`.
     const key = fakeSessionId("hand");
     writeSessionRecord(tmp, key, AGENT, TOPO);
-    writeCurrentSpeaker(tmp, key, "eyon");
+    writeCurrentSpeaker(tmp, key, "boss");
     const env = sessionEnv(tmp, AGENT, TOPO, key);
 
     runScript("agent-chat.ts", ["record-turn", "--user", "u1", "--assistant", "a1"], env);
@@ -371,9 +371,9 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
     runScript("agent-chat.ts", ["record-turn", "--user", "u2", "--assistant", "a2"], env);
 
     // OLD edge gets handoff section.
-    const oldConvo = fs.readFileSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md"), "utf8");
-    expect(oldConvo).toMatch(/## eyon — handoff to john/);
-    expect(fs.readFileSync(path.join(tmp, "petersen", "eyon-keystone", "CONVO.md.turn"), "utf8").trim()).toBe("parked");
+    const oldConvo = fs.readFileSync(path.join(tmp, "petersen", "boss-keystone", "CONVO.md"), "utf8");
+    expect(oldConvo).toMatch(/## boss — handoff to john/);
+    expect(fs.readFileSync(path.join(tmp, "petersen", "boss-keystone", "CONVO.md.turn"), "utf8").trim()).toBe("parked");
 
     // NEW edge gets the new pair.
     const newConvo = fs.readFileSync(path.join(tmp, "petersen", "john-keystone", "CONVO.md"), "utf8");

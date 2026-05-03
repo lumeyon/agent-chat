@@ -40,9 +40,9 @@ describe("agent-chat init", () => {
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     // orion's Petersen neighbors are carina, keystone, lumeyon (sorted)
     // Post-users-overlay (slice 1): orion's petersen neighbors are 3 AI
-    // (carina, keystone, lumeyon) + 2 humans (eyon, john) = 5, sorted
+    // (carina, keystone, lumeyon) + 2 humans (boss, john) = 5, sorted
     // alphabetically. Pre-overlay this was 3.
-    expect(r.stdout).toContain("neighbors (5): carina, eyon, john, keystone, lumeyon");
+    expect(r.stdout).toContain("neighbors (5): boss, carina, john, keystone, lumeyon");
   });
 
   test("init refuses an unknown agent name", () => {
@@ -87,46 +87,46 @@ describe("agent-chat init", () => {
     expect(r.stderr).toContain("inferring topology");
   });
 
-  // Load-bearing test for slice 1: init a HUMAN agent (eyon) on the org
+  // Load-bearing test for slice 1: init a HUMAN agent (boss) on the org
   // topology and exercise the full init path end-to-end. This is the
   // discipline-rule receipt — would catch any presence-file path-traversal
   // regression (lyra L1), displayTag drift (lyra L2), or AI-only branch
   // sneaking into resolveIdentity. Round-2 found two bugs (monitor_alive
   // placeholder + fractional-seconds regex) that smoke tests missed and
   // only this kind of end-to-end exercise caught.
-  test("init eyon org writes session + presence; whoami enumerates 11 human-degree neighbors", () => {
-    const sid = fakeSessionId("eyon");
-    const r = runScript("agent-chat.ts", ["init", "eyon", "org", "--no-monitor"],
+  test("init boss org writes session + presence; whoami enumerates 11 human-degree neighbors", () => {
+    const sid = fakeSessionId("boss");
+    const r = runScript("agent-chat.ts", ["init", "boss", "org", "--no-monitor"],
       envWith({ CLAUDE_SESSION_ID: sid }));
-    expect(r.stdout).toContain("✓ this session is eyon@org");
+    expect(r.stdout).toContain("✓ this session is boss@org");
     // Human degree under the org topology is 11 (10 AI + 1 other human).
     expect(r.stdout).toMatch(/neighbors \(11\):/);
     // Verify session record + presence file landed at the sanitized path.
     const sess = readSession(CONVO_DIR, sid);
     expect(sess).not.toBeNull();
-    expect(sess.agent).toBe("eyon");
+    expect(sess.agent).toBe("boss");
     expect(sess.topology).toBe("org");
-    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "eyon.json"))).toBe(true);
+    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "boss.json"))).toBe(true);
     // whoami source-attribution pulls from the session record, not env / .agent-name.
     const w = runScript("agent-chat.ts", ["whoami"],
       envWith({ CLAUDE_SESSION_ID: sid }));
-    expect(w.stdout).toContain("eyon@org");
+    expect(w.stdout).toContain("boss@org");
     expect(w.stdout).toContain(`session_key=${sid}`);
   });
 
   // Load-bearing test for the orthogonal users-overlay refactor (slice 1):
   // init a HUMAN as id.name on a PURE-AI topology (petersen). Pre-overlay
-  // this would refuse — eyon isn't in agents.petersen.yaml. With overlay,
+  // this would refuse — boss isn't in agents.petersen.yaml. With overlay,
   // loadTopology("petersen") merges users.yaml into t.agents and edge
   // canonicalization works transparently, so init succeeds and the user's
   // 11 neighbors (10 petersen AI + 1 other user) are enumerated. This
   // exercises the cross-cut every other slice depends on: lumeyon's merge
   // preserving symmetry (users-as-id.name) without per-call-site edits.
-  test("init eyon petersen succeeds via users overlay (no agents.petersen.yaml change required)", () => {
-    const sid = fakeSessionId("eyon");
-    const r = runScript("agent-chat.ts", ["init", "eyon", "petersen", "--no-monitor"],
+  test("init boss petersen succeeds via users overlay (no agents.petersen.yaml change required)", () => {
+    const sid = fakeSessionId("boss");
+    const r = runScript("agent-chat.ts", ["init", "boss", "petersen", "--no-monitor"],
       envWith({ CLAUDE_SESSION_ID: sid }));
-    expect(r.stdout).toContain("✓ this session is eyon@petersen");
+    expect(r.stdout).toContain("✓ this session is boss@petersen");
     // 10 petersen AI + 1 other user (john) = 11 neighbors.
     expect(r.stdout).toMatch(/neighbors \(11\):/);
     // Edge enumeration includes every petersen AI plus john.
@@ -135,9 +135,9 @@ describe("agent-chat init", () => {
     // Session/presence land at the sanitized path same as any other agent.
     const sess = readSession(CONVO_DIR, sid);
     expect(sess).not.toBeNull();
-    expect(sess.agent).toBe("eyon");
+    expect(sess.agent).toBe("boss");
     expect(sess.topology).toBe("petersen");
-    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "eyon.json"))).toBe(true);
+    expect(fs.existsSync(path.join(CONVO_DIR, ".presence", "boss.json"))).toBe(true);
   });
 });
 

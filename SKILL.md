@@ -241,7 +241,7 @@ When `current_speaker` changes between calls, `record-turn` first emits a
 handoff section to the OLD speaker's edge before routing the new turn:
 
 ```markdown
-## eyon — handoff to john (UTC ...)
+## boss — handoff to john (UTC ...)
 Heading out; john is taking over this thread.
 → parked
 ```

@@ -191,7 +191,7 @@ of archiving — the index becomes noise, not signal.
 ### Decision
 
 Move the skill from `~/.claude/skills/agent-chat/` (private installation)
-into `/data/eyon/git/agent-chat/` (an open-source repo with MIT license),
+into `/data/boss/git/agent-chat/` (an open-source repo with MIT license),
 and replace the original location with a symlink. Add a `README.md` that
 sells the value proposition and walks new users through setup.
 
@@ -227,7 +227,7 @@ fine fallback there.
 
 Up through Round 3, identity was tied to the working directory via the
 `.agent-name` file. That assumed one cwd → one agent. Two Claude
-sessions both `cd`'d into `/data/eyon/git/foo` would both read the same
+sessions both `cd`'d into `/data/boss/git/foo` would both read the same
 `.agent-name` and both think they were (say) `orion`.
 
 ### Decision
@@ -710,7 +710,7 @@ to AI agents," with humans as the *driver* of a Claude Code session
 rather than first-class participants. Two questions made that framing
 inadequate:
 
-1. **One Claude Code session, multiple humans typing.** ("I'm eyon
+1. **One Claude Code session, multiple humans typing.** ("I'm boss
    talking; now I'm john talking now.") Each human's conversation
    needs its own thread; switching humans should not corrupt the prior
    thread, leak across threads, or require restarting the session.
@@ -736,7 +736,7 @@ queued closeout-item, totaling ~750 LoC across new code and tests:
 
 1. **`agents.org.yaml`** — new topology declaring 12 agents (2 humans
    + 10 AI) and 36 edges. Bipartite-plus-petersen shape: every human
-   has an edge to every AI (20 edges), eyon-john for human-to-human
+   has an edge to every AI (20 edges), boss-john for human-to-human
    (1 edge), the existing 15 petersen edges among the AI subset
    preserved verbatim. **Zero `lib.ts` changes required** — humans-as-
    agents is a naming convention atop the existing primitives. The
@@ -772,7 +772,7 @@ in the design space. That choice eliminates the only thing that would
 have justified a role distinction in the schema:
 
 - **Edge canonicalization** (`alphabetical-min-max`) works the same
-  for human-AI as for AI-AI. `eyon-orion` and `john-orion` are just
+  for human-AI as for AI-AI. `boss-orion` and `john-orion` are just
   edge ids.
 - **Lock semantics** are agent-name-scoped, not role-scoped. A human
   taking the floor is the same protocol primitive as an AI taking the
@@ -943,7 +943,7 @@ Round 10 forced both into one topology yaml. Round 11 separates them.
 
 1. **`agents.users.yaml`** — single source of truth for the user
    registry. Schema: `users: [{name, default?: bool}]`. At-most-one
-   `default: true` (load-time enforced). Initial content: eyon
+   `default: true` (load-time enforced). Initial content: boss
    (default: true), john.
 
 2. **`parseUsersYaml` + `loadUsers()` + `User` type** — strict parser
@@ -998,7 +998,7 @@ both lists, `loadUsers()` is unambiguously checked.
 Phase-2 directive said `loadUsers` should throw on user-name == AI-name
 collision. Lumeyon's slice-1 implementation softened this to **Set-based
 dedup with an inline comment** because strict throw broke
-`loadTopology("org")` (which already pre-declares eyon/john alongside
+`loadTopology("org")` (which already pre-declares boss/john alongside
 the AI agents). Same name, same human, no semantic conflict — dedup is
 the right policy.
 
@@ -1020,7 +1020,7 @@ non-conflicts under uniform-treatment."
 
 ### What we cleaned up in agents.org.yaml
 
-Round-10's `agents.org.yaml` declared `eyon` and `john` as topology
+Round-10's `agents.org.yaml` declared `boss` and `john` as topology
 agents AND declared 21 cross-edges (1 human-human + 20 human-AI).
 Round 11 removes them: org becomes a pure 10-agent AI topology with the
 15 petersen edges. The user-edges and human-human edge come from the
