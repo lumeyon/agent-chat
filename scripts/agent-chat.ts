@@ -36,6 +36,7 @@ import {
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
+import { HEARTBEATS_DIR, heartbeatPath } from "./liveness.ts";
 
 function die(msg: string, code = 2): never { console.error(msg); process.exit(code); }
 
@@ -557,6 +558,11 @@ async function cmdExit(args: string[]): Promise<void> {
   // exit means no consumer should see a stale speaker. safeUnlink (not
   // unlinkSync) tolerates a peer race per cadence's F4-class concern.
   safeUnlink(currentSpeakerPath(key));
+  // Round-13 slice 1: drop the sidecar's heartbeat sentinel. The sidecar's
+  // own SIGTERM handler should already have unlinked, but this is
+  // defense-in-depth against killed-9 sidecars whose handler never ran.
+  // safeUnlink tolerates the already-gone case.
+  safeUnlink(heartbeatPath(rec.agent));
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
 }
@@ -595,7 +601,7 @@ function cmdWho(_args: string[]): void {
 // to crash here when one peer's unlinkSync hit a file another peer had just
 // removed; ENOENT-tolerance kept the sweep from aborting mid-loop.
 
-function cmdGc(args: string[]): void {
+async function cmdGc(args: string[]): Promise<void> {
   const pruneLogs = args.includes("--prune-logs");
   const autoArchive = args.includes("--auto-archive");
   const thresholdArg = args.find((a) => a.startsWith("--archive-threshold="));
@@ -639,6 +645,11 @@ function cmdGc(args: string[]): void {
       // inherits Major #1 (safeUnlink ENOENT-tolerant) and Major #2
       // (multi-host skip via the foreign-host continue above) for free.
       try { safeUnlink(currentSpeakerPath(rec.session_key)); } catch {}
+      // Round-13 slice 1: drop the stale heartbeat sentinel for the same
+      // reasons. Heartbeat is per-agent (not per-session_key), so this
+      // unlink is keyed on rec.agent. Defense-in-depth against killed-9
+      // sidecars whose own SIGTERM unlink never ran.
+      try { safeUnlink(heartbeatPath(rec.agent)); } catch {}
       deleteSessionRecord(rec);
       const sideAnnotation = rec.sidecar_pid
         ? `; sidecar pid ${rec.sidecar_pid} ${sideStillThere ? "killed" : "already gone"}`
@@ -798,7 +809,214 @@ function cmdGc(args: string[]): void {
       }
     }
   }
+  // Round 13 slice 3 (keystone): --aggressive sweeps cross-session orphans
+  // that the per-session passes above don't catch. Bound by hostname so we
+  // never delete state recorded against a different host on shared FS.
+  // Default `gc` (no flag) stays scoped to my own session; --aggressive is
+  // the explicit cross-session opt-in (orion's Phase-1.5 answer).
+  const aggressive = args.includes("--aggressive");
+  if (aggressive) {
+    // Reap stale heartbeats: agent has no live session record on this host.
+    if (fs.existsSync(HEARTBEATS_DIR)) {
+      const liveAgents = new Set(
+        listSessions()
+          .filter((r) => r.host === myHost && processIsOriginal(r.pid, r.pid_starttime))
+          .map((r) => r.agent),
+      );
+      for (const f of fs.readdirSync(HEARTBEATS_DIR)) {
+        if (!f.endsWith(".heartbeat")) continue;
+        const agent = f.replace(/\.heartbeat$/, "");
+        if (liveAgents.has(agent)) continue;
+        // Defensive: also classify the heartbeat itself — if its recorded
+        // host differs from mine, leave it alone (foreign-host owner).
+        const hbPath = path.join(HEARTBEATS_DIR, f);
+        try {
+          const text = fs.readFileSync(hbPath, "utf8");
+          const m = text.match(/host=(\S+)/);
+          if (m && m[1] !== myHost) continue;
+        } catch { /* unparseable: treat as ours, reap */ }
+        if (safeUnlink(hbPath)) {
+          console.log(`gc: removed stale heartbeat for ${agent} (no live session)`);
+          removed++;
+        }
+      }
+    }
+    // Reap orphan sockets that have no matching session record on this host.
+    // (The sidecar-pidfile pass above catches the dead-pidfile case; this
+    // pass catches the rarer "socket present, no pidfile" tail.)
+    if (fs.existsSync(SOCKETS_DIR)) {
+      const liveAgents = new Set(
+        listSessions()
+          .filter((r) => r.host === myHost && processIsOriginal(r.pid, r.pid_starttime))
+          .map((r) => r.agent),
+      );
+      for (const f of fs.readdirSync(SOCKETS_DIR)) {
+        const m = f.match(/^([A-Za-z0-9_-]+)\.sock$/);
+        if (!m) continue;
+        const agent = m[1];
+        if (liveAgents.has(agent)) continue;
+        const sp = path.join(SOCKETS_DIR, f);
+        if (safeUnlink(sp)) {
+          console.log(`gc: removed orphan socket for ${agent}`);
+          removed++;
+        }
+      }
+    }
+    // Clear `.fts-corrupt` sentinels for edges whose fts.db is now valid.
+    // We probe by attempting a lightweight fts query; any throw means still
+    // corrupt, leave the sentinel alone. The `fts.ts` module is optional —
+    // if it doesn't import, skip silently (lumeyon's slice not landed).
+    try {
+      const { ftsCorruptSentinelPath, ftsDbPath, query: ftsQuery } = await import("./fts.ts");
+      // Walk topologies → edges
+      for (const topoName of (() => {
+        try {
+          return fs.readdirSync(SKILL_ROOT)
+            .filter((f) => f.startsWith("agents.") && f.endsWith(".yaml") && f !== "agents.users.yaml")
+            .map((f) => f.replace(/^agents\.|\.yaml$/g, ""));
+        } catch { return [] as string[]; }
+      })()) {
+        const tdir = path.join(require("./lib.ts").CONVERSATIONS_DIR, topoName);
+        if (!fs.existsSync(tdir)) continue;
+        for (const edgeName of (() => {
+          try { return fs.readdirSync(tdir); } catch { return [] as string[]; }
+        })()) {
+          const edgeDir = path.join(tdir, edgeName);
+          const sentinel = ftsCorruptSentinelPath(edgeDir);
+          if (!fs.existsSync(sentinel)) continue;
+          if (!fs.existsSync(ftsDbPath(edgeDir))) continue;
+          // Probe with a no-op query — if it throws, fts.db is still corrupt.
+          try {
+            ftsQuery(edgeDir, "agentchatgcprobeneverexists__", 1);
+            // If query returned without throwing, fts is healthy; clear the sentinel.
+            if (safeUnlink(sentinel)) {
+              console.log(`gc: cleared .fts-corrupt sentinel for ${edgeName} (fts.db now healthy)`);
+              removed++;
+            }
+          } catch { /* still corrupt; leave the sentinel */ }
+        }
+      }
+    } catch { /* fts.ts not present or import failed; skip */ }
+  }
+
   if (!removed) console.log("gc: nothing to remove.");
+}
+
+// Round 13 slice 3 (keystone): offline liveness check. Reads the heartbeat
+// files and cross-references with session records, classifies each agent's
+// state, and emits a grep-friendly diagnostic. Used by humans + by CI/cron
+// to debug "why is the live monitor not firing?" — the same diagnostic
+// shape carina's online monitor emits, but without requiring the monitor to
+// be the source.
+async function cmdDoctor(args: string[]): Promise<void> {
+  const sub = args[0];
+  if (sub !== "--liveness") {
+    die("usage: agent-chat.ts doctor --liveness [--json]");
+  }
+  const wantJson = args.includes("--json");
+  const { listHeartbeatRecords, HEARTBEAT_STALE_MS, HEARTBEAT_DEAD_MS } = await import("./liveness.ts");
+  const records = listHeartbeatRecords();
+  // Host-bounded sweep: foreign-host sessions (on shared filesystem) are
+  // intentionally excluded — heartbeats and presence files are per-host
+  // state, and a different machine's records can't be liveness-checked
+  // from this one. Matches the gc / cmdGc invariant.
+  const sessions = listSessions().filter((r) => r.host === os.hostname());
+  // Cross-reference: every session should have a heartbeat; every heartbeat
+  // should have a matching session.
+  const sessionAgents = new Set(sessions.filter((r) => processIsOriginal(r.pid, r.pid_starttime)).map((r) => r.agent));
+  const heartbeatAgents = new Set(records.map((r) => r.agent));
+  const orphanHeartbeats = records.filter((r) => !sessionAgents.has(r.agent));
+  const missingHeartbeats: string[] = [];
+  for (const r of sessions) {
+    if (!processIsOriginal(r.pid, r.pid_starttime)) continue;
+    if (!heartbeatAgents.has(r.agent)) missingHeartbeats.push(r.agent);
+  }
+
+  // Diagnostic emission. Two flavors of diagnostic — different intent,
+  // different grep prefix:
+  //
+  //  1. `stuck-offline=<StuckReason>` — uses carina's shared StuckReason
+  //     vocabulary (peer-sidecar-dead, local-sidecar-dead,
+  //     agent-stuck-on-own-turn) for the SAME conditions her online monitor
+  //     emits as `stuck=<reason>`. Round-13 cross-slice contract: same
+  //     vocabulary across both prefixes so log scrapers can grep either or
+  //     both. Round-13 doctor only computes peer-sidecar-dead from heartbeat
+  //     state — local-sidecar-dead and agent-stuck-on-own-turn need
+  //     edge-walk + turn-mtime checks that carina's slice-2 owns; doctor
+  //     surfaces them via the live monitor when it fires.
+  //  2. `liveness-issue=<kind>` — doctor-only diagnostics for shapes the
+  //     online monitor doesn't emit (orphan-heartbeat, missing-heartbeat,
+  //     unparseable). These are operational hygiene problems that don't
+  //     fit the StuckReason vocabulary; they'd be noise in the chat
+  //     notification stream but matter offline.
+  type DiagnosticLine = { agent: string; status: string; prefix: "stuck-offline" | "liveness-issue"; reason: string; raw: any };
+  const diags: DiagnosticLine[] = [];
+  for (const r of records) {
+    if (r.status === "fresh") continue;
+    if (r.status === "dead") {
+      diags.push({ agent: r.agent, status: r.status, prefix: "stuck-offline", reason: `peer-sidecar-dead ${r.reason}`, raw: r });
+    } else if (r.status === "stale") {
+      // stale heartbeats are sidecar-dead-imminent — surface under the same
+      // peer-sidecar-dead reason since the operational response is the same
+      // (carina's monitor will escalate from stale → dead at the threshold).
+      diags.push({ agent: r.agent, status: r.status, prefix: "stuck-offline", reason: `peer-sidecar-dead ${r.reason}`, raw: r });
+    } else if (r.status === "unparseable") {
+      diags.push({ agent: r.agent, status: r.status, prefix: "liveness-issue", reason: `unparseable-heartbeat ${r.reason}`, raw: r });
+    }
+  }
+  for (const r of orphanHeartbeats) {
+    if (sessionAgents.has(r.agent)) continue;
+    diags.push({
+      agent: r.agent,
+      status: "orphan",
+      prefix: "liveness-issue",
+      reason: "orphan-heartbeat (no matching session record on this host)",
+      raw: r,
+    });
+  }
+  for (const agent of missingHeartbeats) {
+    diags.push({
+      agent,
+      status: "missing-heartbeat",
+      prefix: "liveness-issue",
+      reason: "missing-heartbeat (live session without a heartbeat file)",
+      raw: { agent },
+    });
+  }
+
+  if (wantJson) {
+    console.log(JSON.stringify({
+      heartbeats: records,
+      sessions: sessions.map((r) => ({
+        agent: r.agent, pid: r.pid,
+        live: processIsOriginal(r.pid, r.pid_starttime),
+      })),
+      diagnostics: diags,
+      thresholds: { stale_ms: HEARTBEAT_STALE_MS, dead_ms: HEARTBEAT_DEAD_MS },
+    }, null, 2));
+  } else {
+    if (records.length === 0) {
+      console.log("doctor --liveness: no heartbeat files on this host");
+    } else {
+      console.log(`doctor --liveness: ${records.length} heartbeat(s), ${sessions.length} session(s)`);
+      for (const r of records) {
+        const age = r.ageMs == null ? "?" : `${Math.round(r.ageMs / 1000)}s`;
+        console.log(`  ${r.agent.padEnd(12)} status=${r.status.padEnd(12)} age=${age.padStart(6)}  ${r.reason ?? ""}`);
+      }
+      if (diags.length) {
+        console.log("");
+        const ts = new Date().toISOString();
+        for (const d of diags) {
+          console.log(`${ts} ${d.prefix}=${d.reason} agent=${d.agent} status=${d.status}`);
+        }
+      } else {
+        console.log("");
+        console.log("all agents fresh; no stuck-offline diagnostics");
+      }
+    }
+  }
+  // Exit code 0 only if all heartbeats are fresh AND no orphans/missing.
+  process.exit(diags.length === 0 ? 0 : 1);
 }
 
 async function cmdWhoami(_args: string[]): Promise<void> {
@@ -1158,7 +1376,8 @@ switch (cmd) {
   case "init":         cmdInit(rest); break;
   case "exit":         void cmdExit(rest); break;
   case "who":          cmdWho(rest); break;
-  case "gc":           cmdGc(rest); break;
+  case "gc":           void cmdGc(rest); break;
+  case "doctor":       void cmdDoctor(rest); break;
   case "whoami":       void cmdWhoami(rest); break;
   case "speaker":      cmdSpeaker(rest); break;
   case "record-turn":  void cmdRecordTurn(rest); break;

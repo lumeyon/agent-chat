@@ -351,6 +351,10 @@ export const LOGS_DIR = path.join(CONVERSATIONS_DIR, ".logs");
 // SOCKETS_DIR holds per-agent Unix domain sockets for the sidecar daemon.
 // Same env-var rooting as the other control dirs.
 export const SOCKETS_DIR = path.join(CONVERSATIONS_DIR, ".sockets");
+// HEARTBEATS_DIR moved to scripts/liveness.ts in Round-13 Phase-2 (single
+// source of truth for the heartbeat schema across slice 1/2/3). The
+// directory is created lazily on first write via writeFileAtomic's
+// mkdirSync — no entry needed in ensureControlDirs.
 
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -380,6 +384,13 @@ export function cursorsFilePath(agent: string): string {
 export function logPathFor(agent: string, kind: "sidecar" | "monitor"): string {
   return path.join(LOGS_DIR, `${kind}-${safeAgent(agent)}.log`);
 }
+
+// Round-13 slice 1: heartbeat schema lives in scripts/liveness.ts (single
+// source of truth across slices 1/2/3). Slice-1 contributes the WRITER
+// (formatHeartbeat in liveness.ts; sidecar.ts startHeartbeatEmitter wires
+// it). pid + starttime fingerprint matches lockTag (Round-4) and is
+// verified by processIsOriginal (Round-9): when monitor reports
+// stuck-but-pid-alive, this is the field to grep.
 
 // ---------------------------------------------------------------------------
 // current_speaker.json — slice 2 (multi-user transparency).

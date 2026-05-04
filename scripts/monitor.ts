@@ -28,6 +28,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadTopology, resolveIdentity, edgesOf, readTurn, parseLockFile, processIsOriginal } from "./lib.ts";
+import {
+  readHeartbeatRecord, STUCK_TURN_TIMEOUT_MS, HEARTBEAT_STALE_MS,
+  HEARTBEATS_DIR,
+  type StuckReason,
+} from "./liveness.ts";
 
 function parseArgs(argv: string[]) {
   const a = {
@@ -37,6 +42,11 @@ function parseArgs(argv: string[]) {
     archiveThreshold: 200,
     staleLockSec: 30,           // seconds a lock can be held before we suspect the holder is dead
     noParkedStartup: false,     // suppress parked branch of startup-pending pass (degree-11 noise floor)
+    // Round 13 slice 2 — stuck-turn detector.
+    // Defaults inherit from scripts/liveness.ts so the env-var precedence
+    // chain stays in one place; per-invocation flag overrides the env.
+    stuckTurnTimeoutMs: STUCK_TURN_TIMEOUT_MS,    // default 300_000 (5 min)
+    heartbeatStaleMs: HEARTBEAT_STALE_MS,         // default 90_000 (3 missed 30s ticks)
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--interval") a.interval = Math.max(1, parseInt(argv[++i] ?? "2", 10));
@@ -45,6 +55,8 @@ function parseArgs(argv: string[]) {
     else if (argv[i] === "--archive-threshold") a.archiveThreshold = Math.max(50, parseInt(argv[++i] ?? "200", 10));
     else if (argv[i] === "--stale-lock-sec") a.staleLockSec = Math.max(1, parseInt(argv[++i] ?? "30", 10));
     else if (argv[i] === "--no-parked-startup") a.noParkedStartup = true;
+    else if (argv[i] === "--stuck-turn-timeout-ms") a.stuckTurnTimeoutMs = Math.max(1000, parseInt(argv[++i] ?? "300000", 10));
+    else if (argv[i] === "--heartbeat-stale-ms") a.heartbeatStaleMs = Math.max(1000, parseInt(argv[++i] ?? "90000", 10));
   }
   return a;
 }
@@ -76,9 +88,16 @@ type EdgeState = {
   // --rebuild-fts`). Sentinel's silence-≠-success additive — degraded
   // search is no longer indistinguishable from a clean search with no hits.
   ftsCorruptEmitted: boolean;
+  // Round 13 slice 2: stuck-turn detector. One-shot ratelimit per condition;
+  // flag clears (re-arms) when the condition itself clears (heartbeat
+  // freshens, turn flips, lock taken, CONVO.md grows). The Round-12 hang
+  // case orion himself exhibited maps to `stuckOnOwnTurnEmitted`.
+  peerSidecarDeadEmitted: boolean;
+  localSidecarDeadEmitted: boolean;
+  stuckOnOwnTurnEmitted: boolean;
 };
 const state = new Map<string, EdgeState>();
-for (const e of edges) state.set(e.id, { turn: null, turnMtime: 0, convoMtime: 0, archiveHinted: false, lockSince: 0, lockStaleEmitted: false, ftsCorruptEmitted: false });
+for (const e of edges) state.set(e.id, { turn: null, turnMtime: 0, convoMtime: 0, archiveHinted: false, lockSince: 0, lockStaleEmitted: false, ftsCorruptEmitted: false, peerSidecarDeadEmitted: false, localSidecarDeadEmitted: false, stuckOnOwnTurnEmitted: false });
 
 function convoLineCount(p: string): number {
   try { return fs.readFileSync(p, "utf8").split(/\n/).length; } catch { return 0; }
@@ -93,6 +112,10 @@ for (const e of edges) {
     archiveHinted: false,
     lockSince: fs.existsSync(e.lock) ? Date.now() : 0,
     lockStaleEmitted: false,
+    ftsCorruptEmitted: false,
+    peerSidecarDeadEmitted: false,
+    localSidecarDeadEmitted: false,
+    stuckOnOwnTurnEmitted: false,
   });
 }
 
@@ -133,6 +156,9 @@ function tick() {
       lockSince: prev.lockSince,
       lockStaleEmitted: prev.lockStaleEmitted,
       ftsCorruptEmitted: prev.ftsCorruptEmitted,
+      peerSidecarDeadEmitted: prev.peerSidecarDeadEmitted,
+      localSidecarDeadEmitted: prev.localSidecarDeadEmitted,
+      stuckOnOwnTurnEmitted: prev.stuckOnOwnTurnEmitted,
     };
     const lockHeld = fs.existsSync(e.lock);
     // Track lock lifetime for stale detection (sentinel S-HIGH-2).
@@ -200,6 +226,96 @@ function tick() {
       cur.ftsCorruptEmitted = false; // re-arm after recovery
     }
 
+    // Round 13 slice 2: stuck-turn detector. Three conditions, each
+    // ratelimited to one emit per arm. Re-arms when the condition clears
+    // (heartbeat freshens, turn flips, lock taken, CONVO.md grows).
+    //
+    // Heartbeat reads come from `<conversations>/.heartbeats/<agent>.heartbeat`
+    // (lumeyon's slice-1 contract). readHeartbeatRecord returns status
+    // `'fresh' | 'stale' | 'dead' | 'unparseable' | 'missing'`; we treat
+    // anything other than 'fresh' as "no signal of life" — BUT ONLY when
+    // the heartbeat system is actually deployed. If HEARTBEATS_DIR doesn't
+    // exist OR is empty, we're running pre-lumeyon-slice-1 code and the
+    // expected absence of heartbeat files is NOT a stuck signal. This
+    // gate keeps the detector hermetic in tests and graceful-degrades on
+    // older deployments.
+    //
+    // Note: heartbeat checks intentionally fire INDEPENDENTLY of lockHeld.
+    // A peer holding a lock with a dead sidecar is still stuck — the
+    // existing lock-stale detector catches the orphan-lock case but not
+    // the "lock-free turn=peer + dead sidecar" case this branch handles.
+    let heartbeatSystemActive = false;
+    try {
+      heartbeatSystemActive = fs.existsSync(HEARTBEATS_DIR)
+        && fs.readdirSync(HEARTBEATS_DIR).some((f) => f.endsWith(".heartbeat"));
+    } catch { heartbeatSystemActive = false; }
+
+    if (heartbeatSystemActive && cur.turn === e.peer) {
+      const peerHb = readHeartbeatRecord(e.peer, nowMs);
+      const peerHbAlive = peerHb.status === "fresh";
+      if (!peerHbAlive && !cur.peerSidecarDeadEmitted) {
+        const ageStr = peerHb.ageMs != null ? `${Math.round(peerHb.ageMs / 1000)}s` : "n/a";
+        console.log(`${now} edge=${e.id} peer=${e.peer} stuck=peer-sidecar-dead heartbeat_age=${ageStr} status=${peerHb.status} — peer's sidecar appears dead; their turn won't progress without manual intervention`);
+        cur.peerSidecarDeadEmitted = true;
+      } else if (peerHbAlive) {
+        // FUTURE: re-arm not exercised in --once mode (each invocation is a
+        // fresh process so the in-memory boolean doesn't carry across runs).
+        // tests/monitor-liveness.test.ts test #4 demonstrates fresh-process
+        // behavior; full re-arm coverage needs an in-process tick driver.
+        // Tracked for Round-14. (Round-13 Phase-4 keystone→carina CONCERN #2.)
+        cur.peerSidecarDeadEmitted = false;  // re-arm
+      }
+    } else {
+      cur.peerSidecarDeadEmitted = false;     // re-arm if turn moved off peer or heartbeat system not deployed
+    }
+
+    // local-sidecar-dead: heartbeat-gated (only when heartbeat system is deployed).
+    if (heartbeatSystemActive && cur.turn === id.name) {
+      const ownHb = readHeartbeatRecord(id.name, nowMs);
+      const ownHbAlive = ownHb.status === "fresh";
+      if (!ownHbAlive && !cur.localSidecarDeadEmitted) {
+        const ageStr = ownHb.ageMs != null ? `${Math.round(ownHb.ageMs / 1000)}s` : "n/a";
+        console.log(`${now} edge=${e.id} peer=${e.peer} stuck=local-sidecar-dead heartbeat_age=${ageStr} status=${ownHb.status} — my own sidecar's heartbeat is stale; \`agent-chat exit\` + \`init\` recommended`);
+        cur.localSidecarDeadEmitted = true;
+      } else if (ownHbAlive) {
+        cur.localSidecarDeadEmitted = false;  // re-arm
+      }
+    } else {
+      cur.localSidecarDeadEmitted = false;  // re-arm if turn moved off me OR heartbeat system not deployed
+    }
+
+    // agent-stuck-on-own-turn: NOT heartbeat-gated. This is the Round-12 hang
+    // case (orion himself) — turn=me, no lock, no recent CONVO growth, turn-
+    // mtime older than the stuck threshold. Fires independently of whether
+    // lumeyon's heartbeat-writer has shipped, since the signal is purely
+    // about turn-progress, not sidecar liveness.
+    if (cur.turn === id.name) {
+      const turnAgeMs = cur.turnMtime > 0 ? nowMs - cur.turnMtime : 0;
+      const recentConvoGrowth = cur.convoMtime > 0 && (nowMs - cur.convoMtime) < args.stuckTurnTimeoutMs;
+      // Round-13 Phase-4 keystone→carina CONCERN #1: bare `lockHeld` (file
+      // presence) suppresses agent-stuck-on-own-turn whenever a stale lock
+      // from a dead session is around — the OPPOSITE of progress, and
+      // exactly the failure mode lumeyon exhibited at 02:02Z. Mirror the
+      // lock-stale detector at line 206-208: parse the lock body and
+      // verify the holder is a live original process. Conservative on
+      // unparseable lock bodies (treat as live; don't false-emit on every
+      // malformed lock file in the wild).
+      let lockHeldByLiveSession = false;
+      if (lockHeld) {
+        const lk = parseLockFile(e.lock);
+        lockHeldByLiveSession = lk ? processIsOriginal(lk.pid, lk.starttime) : true;
+      }
+      const isStuckOnOwn = turnAgeMs > args.stuckTurnTimeoutMs && !lockHeldByLiveSession && !recentConvoGrowth;
+      if (isStuckOnOwn && !cur.stuckOnOwnTurnEmitted) {
+        console.log(`${now} edge=${e.id} peer=${e.peer} stuck=agent-stuck-on-own-turn turn_age_s=${Math.round(turnAgeMs / 1000)} timeout_s=${Math.round(args.stuckTurnTimeoutMs / 1000)} — turn has been on me for >${Math.round(args.stuckTurnTimeoutMs / 1000)}s with no progress (no lock, no CONVO.md growth)`);
+        cur.stuckOnOwnTurnEmitted = true;
+      } else if (!isStuckOnOwn) {
+        cur.stuckOnOwnTurnEmitted = false;  // re-arm on any progress signal
+      }
+    } else {
+      cur.stuckOnOwnTurnEmitted = false;  // re-arm if turn moved off me
+    }
+
     // Optional archive hint. Fires once per edge (resets when CONVO.md shrinks
     // back under the threshold, e.g. after archive). The hint is a separate
     // notification line and never blocks the .turn flip notifications above.
@@ -225,7 +341,15 @@ function tick() {
     // every tick because they describe the lock state, not the .turn diff.
     if (!lockHeld) state.set(e.id, cur);
     else {
-      const merged = { ...prev, lockSince: cur.lockSince, lockStaleEmitted: cur.lockStaleEmitted, ftsCorruptEmitted: cur.ftsCorruptEmitted };
+      const merged = {
+        ...prev,
+        lockSince: cur.lockSince,
+        lockStaleEmitted: cur.lockStaleEmitted,
+        ftsCorruptEmitted: cur.ftsCorruptEmitted,
+        peerSidecarDeadEmitted: cur.peerSidecarDeadEmitted,
+        localSidecarDeadEmitted: cur.localSidecarDeadEmitted,
+        stuckOnOwnTurnEmitted: cur.stuckOnOwnTurnEmitted,
+      };
       state.set(e.id, merged);
     }
   }

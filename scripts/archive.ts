@@ -255,6 +255,10 @@ switch (op) {
         latest_at: tr.latest,
         source_section_count: archivedSections.length,
         body_sha256: sha256(body),
+        // Round-13 nit fix (carina R12 nit #3): push body_token_count into
+        // META at seal time so commit doesn't have to statSync BODY.md to
+        // re-derive it. The body length is already known here in scope.
+        body_token_count: Math.ceil(body.length / 4),
         created_at: utcStamp(),
       });
 
@@ -461,8 +465,21 @@ switch (op) {
     const earliest = (metaText.match(/^earliest_at:\s*"?([^"\n]+)"?$/m) ?? [])[1] ?? utcStamp();
     const latest = (metaText.match(/^latest_at:\s*"?([^"\n]+)"?$/m) ?? [])[1] ?? utcStamp();
     const bodySha = (metaText.match(/^body_sha256:\s*"?([^"\n]+)"?$/m) ?? [])[1];
+    // Round-13 nit fix (carina R12 nit #3): read body_token_count from META
+    // instead of statSync'ing BODY.md. Seal step writes the count at archive
+    // time when the body string is in scope; commit just reads it back. Saves
+    // a stat call AND keeps the value consistent under any future BODY.md
+    // mutation (which shouldn't happen — sealed is sealed — but defense in
+    // depth). Falls back to statSync for backward compat with archives sealed
+    // before this fix.
+    let bodyTokens = parseInt((metaText.match(/^body_token_count:\s*(\d+)/m) ?? ["0", "0"])[1], 10);
+    if (!Number.isFinite(bodyTokens) || bodyTokens <= 0) {
+      const bodyPath = path.join(adir, "BODY.md");
+      bodyTokens = fs.existsSync(bodyPath) ? Math.ceil(fs.statSync(bodyPath).size / 4) : 0;
+    }
 
-    // Rewrite META with status sealed.
+    // Rewrite META with status sealed. Preserve body_token_count from seal
+    // step — commit must NOT clobber it (Round-13 nit fix).
     writeYaml(path.join(adir, "META.yaml"), {
       id: aid,
       edge_id: edge.id,
@@ -474,6 +491,7 @@ switch (op) {
       earliest_at: earliest,
       latest_at: latest,
       body_sha256: bodySha,
+      body_token_count: bodyTokens,
       keywords,
       tldr,
       committed_at: utcStamp(),
@@ -483,13 +501,7 @@ switch (op) {
     const cleanSummary = summary.replace(/<!--[\s\S]*?-->\s*\n?/g, "");
     fs.writeFileSync(summaryPath, cleanSummary);
 
-    // Re-read BODY.md to compute descendant_token_count (Round 12 feature 12).
-    // BODY.md was written earlier in seal; we need its size now for the
-    // text.length / 4 heuristic.
-    const bodyPath = path.join(adir, "BODY.md");
-    const bodyTokens = fs.existsSync(bodyPath)
-      ? Math.ceil(fs.statSync(bodyPath).size / 4)
-      : 0;
+    // bodyTokens read from META above (Round-13 nit fix).
     const entry: IndexEntry = {
       id: aid,
       edge_id: edge.id,

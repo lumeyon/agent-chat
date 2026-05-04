@@ -103,6 +103,7 @@ fold into the same lossless-claw archive layer as everything else, so
 | **Atomic turn handoff** | `.turn` written via `tmpfile + rename`. Concurrent reads always observe either the old or the new value. |
 | **Multi-edge background watcher** | One `monitor.ts` invocation watches every edge the agent participates in. Three independent triggers (value-change, mtime-touch, body-grew) catch every form of "your turn" — including the codex-chat trick of appending then re-parking. Filesystem-agnostic polling, so it works over NFS where `inotify` falls silent. |
 | **Per-agent sidecar daemon** | `scripts/sidecar.ts` runs alongside the monitor (default-on; `--no-sidecar` opts out). UDS at `<conversations>/.sockets/<agent>.sock` with mode 0600 for filesystem-permission auth. Eight v1 methods: `whoami`, `time`, `peek`, `last-section`, `unread`, `since-last-spoke`, `health`, `shutdown` (plus `speaker` for multi-user). Inotify-driven `fs.watch` (debounced 25 ms) replaces polling on local FS with kernel-event ms latency; a 5-second reconcile poll catches misses on FUSE/WSL1. The sidecar holds zero protocol authority — `lock`/`flip`/`park`/`unlock` stay file-direct; the daemon is a pure read-accelerator and notification multiplexer. |
+| **Agent liveness signals** | The sidecar writes a `<conversations>/.heartbeats/<agent>.heartbeat` sentinel every 30s (atomic `tmpfile + rename`; pid + starttime fingerprint matches lock-file format). The monitor reads heartbeats during its tick and emits one of three notifications when stuck-detection fires: `peer-sidecar-dead` (turn=peer + their heartbeat is stale), `local-sidecar-dead` (turn=me + my own heartbeat is stale), or `agent-stuck-on-own-turn` (turn=me + turn-mtime > 5min + no live-session lock + no recent CONVO.md growth — the "alive but silent" case). `agent-chat doctor --liveness` is the offline equivalent. Detection is filesystem-only and zero-LLM-token; *resuming* a stuck session is intentionally out of scope (sessions must be poked manually or via Round-14's wakeup mechanism). |
 | **Humans as first-class agents (orthogonal overlay)** | `agents.users.yaml` declares humans separately from any topology; `loadTopology()` overlays them at load time so any topology automatically gets human-AI edges. `agent-chat init` auto-resolves the speaker from environment (`$AGENT_CHAT_USER` / `$USER` / `users.yaml default`); `agent-chat speaker <name>` overrides for multi-user sessions. `agent-chat record-turn --user X --assistant Y` captures the turn as two CONVO.md sections on the appropriate `<speaker>-<agent>` edge. Idempotent retries via per-edge `recorded_turns.jsonl` ledger (sha256). Speaker switches emit recorded handoff sections to the prior edge. Privacy is an explicit non-goal — accountability is the audit trail. |
 | **Conversation archives that stay searchable** | Sealed leaves (`archives/leaf/`) preserve the verbatim transcript; SUMMARY.md captures the distilled knowledge with an *Expand for details about:* footer that signals what was compressed away. |
 | **DAG condensation** | Once leaves accumulate, fold N siblings at depth d into one parent at depth d+1 with a more abstract policy. Agent walks down via `search.ts expand --children`. |
@@ -748,8 +749,23 @@ fastest path to understanding *why* the code looks the way it does.
   archive.
 - **`scripts/search.ts`** — grep / describe / expand / list across the
   per-edge index.
+- **`scripts/llm.ts`** — `runClaude` shell-out + reentrancy sentinel for
+  LLM-summarized archives (Round 12 slice 1).
+- **`scripts/fts.ts`** — bun:sqlite FTS5 ranked search index over
+  archive summaries (Round 12 slice 2).
+- **`scripts/expansion-policy.ts` + `scripts/subagent.ts`** — decision
+  matrix and citation-bound subagent for `search.ts expand`
+  (Round 12 slice 3).
+- **`scripts/large-files.ts`** — large-block extraction with
+  first-N/last-N preview placeholder (Round 12 slice 2).
+- **`scripts/liveness.ts`** — heartbeat schema, parser, format,
+  classifier, `StuckReason` union, threshold constants. Single source
+  of truth for slices 1-3 of Round 13. Strict version validation
+  (refuses missing-or-unknown `sidecar_version`); `STUCK_REASONS`
+  pinned by `as const satisfies ReadonlyArray<StuckReason>` to make
+  union-vs-array drift a TS build error.
 
-Lines of code: ~3,700 across all files combined. No npm dependencies.
+Lines of code: ~5,500+ across all files combined. No npm dependencies.
 
 ---
 

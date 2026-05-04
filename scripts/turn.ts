@@ -18,7 +18,7 @@ import {
   readTurn, writeTurnAtomic, utcStamp,
   processTag, lockTag, parseLockFile, pidIsAlive, processIsOriginal,
   stableSessionPid, pidStarttime,
-  exclusiveWriteOrFail,
+  exclusiveWriteOrFail, safeUnlink,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
 
@@ -94,6 +94,20 @@ switch (op) {
     if (cur !== id.name) die(`refuse to park — turn is "${cur}", not "${id.name}"`);
     refuseIfLockBelongsToAnotherSession(edge, id.name, "park");
     writeTurnAtomic(edge.turn, "parked");
+    // Round-13 protocol fix (orion's stale-lock incident report at
+    // 2026-05-04T12:22Z): park yields the floor, which means releasing the
+    // lock as well. Pre-fix, a `lock → append → park` sequence left the
+    // lock file behind; the only sessions that could clear it were the
+    // original lock-holder (alive but parked) or `unlock --force-stale`
+    // (which refuses on a live pid). The original session was almost
+    // always the human's own session, so they had to manually `rm` the
+    // file. Symmetric with the unlock case's same-session guard:
+    // refuseIfLockBelongsToAnotherSession above already verified ownership
+    // (or no lock present), so unlinking here is safe — we either own the
+    // lock or no lock exists.
+    // Round-13 Phase-4 carina→lumeyon nit: use safeUnlink (ENOENT-tolerant)
+    // for sibling consistency with the other unlink call sites.
+    safeUnlink(edge.lock);
     console.log(`parked ${edge.id}`);
     break;
   }

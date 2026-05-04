@@ -89,6 +89,38 @@ describe("turn.ts init / peek / flip / park", () => {
     expect(turn).toBe("parked");
   });
 
+  test("park implicitly unlocks (Round-13 protocol fix; closes 02:02Z stale-lock incident)", () => {
+    // Pre-Round-13, `lock → append → park` left the lock file behind. The
+    // only sessions that could clear it were the original lock-holder
+    // (alive but parked) or `unlock --force-stale` (which refuses on a
+    // live pid). Round-13 lumeyon's slice-1 added implicit-unlink to
+    // `park`, gated by the same-session ownership check. This test pins
+    // the invariant so a future refactor can't silently reintroduce the
+    // failure mode.
+    runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV);
+    runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV);
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(true);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    // park yields the floor AND releases the lock atomically.
+    const turn = fs.readFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "utf8").trim();
+    expect(turn).toBe("parked");
+    expect(fs.existsSync(path.join(EDGE_DIR, "CONVO.md.turn.lock"))).toBe(false);
+  });
+
+  test("park + unlock = idempotent no-op (Round-13 Phase-4 carina→lumeyon nit)", () => {
+    // Once park implicitly unlocks, an explicit unlock after park must
+    // remain valid as a no-op (preserves backward compatibility for any
+    // call site that didn't yet remove its trailing unlock). The CLI
+    // outputs "<edge> not locked" but exits 0.
+    runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV);
+    runScript("turn.ts", ["lock", "lumeyon"], ORION_ENV);
+    runScript("turn.ts", ["park", "lumeyon"], ORION_ENV);
+    // Lock already gone from park; unlock is a no-op.
+    const r = runScript("turn.ts", ["unlock", "lumeyon"], ORION_ENV);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("not locked");
+  });
+
   test("flip rejects a non-participant target", () => {
     runScript("turn.ts", ["init", "lumeyon", "orion"], ORION_ENV);
     const r = runScript("turn.ts", ["flip", "lumeyon", "carina"], ORION_ENV, { allowFail: true });

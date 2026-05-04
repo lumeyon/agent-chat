@@ -34,12 +34,15 @@ import {
   socketPathFor, pidFilePath, cursorsFilePath,
   ensureControlDirs,
   exclusiveWriteOrFail, writeFileAtomic,
-  pidIsAlive, pidStarttime, processIsOriginal,
+  pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid,
   utcStamp, readTurn, parseLockFile, parseSections, sectionMeta,
   readSessionRecord, currentSessionKey,
   readCurrentSpeaker,
   type SessionRecord, type CurrentSpeaker,
 } from "./lib.ts";
+import {
+  formatHeartbeat, heartbeatPath, SIDECAR_HEARTBEAT_VERSION,
+} from "./liveness.ts";
 
 // ---------------------------------------------------------------------------
 // Argv parsing
@@ -545,6 +548,74 @@ function startAutoCompactionPoll(): void {
   log(`auto-compaction poll started: every ${intervalMs}ms, threshold ${tokenThreshold} tokens`);
 }
 
+// ---------------------------------------------------------------------------
+// Round-13 slice 1 (lumeyon): heartbeat emitter.
+//
+// Every AGENT_CHAT_HEARTBEAT_INTERVAL seconds (default 30, min 0.05),
+// write `<conversations>/.heartbeats/<agent>.heartbeat` via atomic
+// tmpfile+rename. Reader (carina's monitor) polls these to surface
+// stuck-but-pid-alive agents. Schema lives in scripts/liveness.ts (single
+// source of truth).
+//
+// The interval value uses the same `<=0 OR literal "0" disables` semantic
+// as monitor's --no-parked-startup pattern: testing escape hatch can't be
+// silently float-parsed into "enabled".
+//
+// pid + starttime fingerprint matches lockTag (Round-4) and is verified by
+// processIsOriginal (Round-9). When monitor reports stuck-but-pid-alive,
+// these are the fields to grep.
+let heartbeatTimer: NodeJS.Timeout | null = null;
+
+function startHeartbeatEmitter(): void {
+  const raw = process.env.AGENT_CHAT_HEARTBEAT_INTERVAL ?? "30";
+  // Refuse "0" / "" / non-positive — testing escape hatch.
+  if (raw === "0" || raw.trim() === "") {
+    log(`heartbeat emitter disabled via AGENT_CHAT_HEARTBEAT_INTERVAL`);
+    return;
+  }
+  const interval = parseFloat(raw);
+  if (!Number.isFinite(interval) || interval <= 0) {
+    log(`heartbeat emitter disabled (AGENT_CHAT_HEARTBEAT_INTERVAL=${raw})`);
+    return;
+  }
+  const intervalMs = Math.max(50, Math.round(interval * 1000));
+  // Resolve writer-side pid/starttime ONCE at startup; sidecar identity
+  // is invariant across its lifetime. stableSessionPid() returns the
+  // long-lived parent (Round-4); pidStarttime() reads /proc/<pid>/stat
+  // (Round-9). 0-fallback when pidStarttime returns null — reader
+  // tolerates 0 as an integer; pid-recycle protection still works
+  // because the live process's (pid, starttime) won't match.
+  const writerPid = stableSessionPid();
+  const writerStarttime = pidStarttime(writerPid) ?? 0;
+  const hostname = os.hostname();
+  const writeOnce = (): void => {
+    try {
+      // Use full-resolution ISO timestamp (with milliseconds) instead of
+      // utcStamp()'s second-truncated form. Heartbeats can fire at sub-
+      // second intervals (test fixtures use 0.5s) and consumers compare
+      // ts_ms values directly — without milliseconds, two ticks within
+      // the same second produce identical ts and "subsequent ticks
+      // update ts" can't be observed. Round-13 Phase-5 fix surfaced by
+      // tests/heartbeat.test.ts:217.
+      const line = formatHeartbeat({
+        ts: new Date().toISOString(),
+        host: hostname,
+        pid: writerPid,
+        starttime: writerStarttime,
+        sidecar_version: SIDECAR_HEARTBEAT_VERSION,
+      });
+      writeFileAtomic(heartbeatPath(id.name), line);
+    } catch (e) {
+      recordError(`heartbeat write failed: ${(e as Error).message}`);
+    }
+  };
+  // Kickstart: write IMMEDIATELY so consumers see fresh state within
+  // ~10ms of sidecar boot (well under the 100ms test budget). Then tick.
+  writeOnce();
+  heartbeatTimer = setInterval(writeOnce, intervalMs);
+  log(`heartbeat emitter started: every ${intervalMs}ms → ${heartbeatPath(id.name)}`);
+}
+
 function maybeAutoCompact(ec: EdgeCache, tokenThreshold: number): void {
   // Three preconditions before spawning archive.ts:
   //   1. We're not already running an auto-compact for this edge.
@@ -969,11 +1040,17 @@ function gracefulExit(code: number, why: string): void {
     }
   } catch {}
   if (reconcileTimer) { clearInterval(reconcileTimer); reconcileTimer = null; }
+  if (autoCompactTimer) { clearInterval(autoCompactTimer); autoCompactTimer = null; }
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   try {
     if (server) server.close();
   } catch {}
   try { fs.unlinkSync(socketPath); } catch {}
   try { fs.unlinkSync(pidFile); } catch {}
+  // Round-13 slice 1: unlink heartbeat. SIGTERM handler runs the same
+  // path as cmdExit; defense-in-depth via cmdGc covers the killed-9 case
+  // where this handler never fires.
+  try { fs.unlinkSync(heartbeatPath(id.name)); } catch {}
   setImmediate(() => process.exit(code));
 }
 
@@ -1000,6 +1077,7 @@ async function main() {
   for (const ec of cache.values()) attachWatcher(ec);
   startReconcilePoll();
   startAutoCompactionPoll();
+  startHeartbeatEmitter();
   if (args.once) {
     // Smoke-test mode: exit cleanly after announcing readiness.
     gracefulExit(0, "--once");

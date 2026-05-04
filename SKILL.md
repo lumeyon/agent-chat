@@ -43,6 +43,11 @@ identical.
     archive.ts                 # CLI: plan / seal / commit / list — leaf archives (depth 0)
     condense.ts                # CLI: plan / seal / commit — fold same-depth archives into depth+1 summaries
     search.ts                  # CLI: grep / describe / expand / list — LCM-style escalation over the index
+    liveness.ts                # heartbeat schema + parser/format + classifier + StuckReason union (Round 13)
+    llm.ts                     # `claude -p` shell-out + reentrancy sentinel for archive auto (Round 12)
+    fts.ts                     # bun:sqlite FTS5 ranked archive search (Round 12)
+    expansion-policy.ts        # decision matrix gating direct-grep / summaries-only / expand (Round 12)
+    subagent.ts                # citation-bound `claude -p` subagent for `search.ts expand` (Round 12)
   conversations/<topology>/<edge-id>/
     CONVO.md                   # append-only shared transcript for one edge (the "hot file")
     CONVO.md.turn              # single-line sentinel: <agent-id> | parked
@@ -57,6 +62,8 @@ identical.
     sidecar-<agent>.pid        # pidfile (pid + starttime) for crash-recovery
     <agent>.cursors.json       # named-cursor persistence for `unread` calls
   conversations/.logs/         # per-agent log files (rooted on CONVERSATIONS_DIR)
+  conversations/.heartbeats/   # per-agent liveness sentinels (Round 13)
+    <agent>.heartbeat          # one line: ts host pid starttime sidecar_version (atomic write)
     monitor-<agent>.log
     sidecar-<agent>.log
 ```

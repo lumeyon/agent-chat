@@ -1695,3 +1695,130 @@ is verified live. Deferred to Round 13 to keep slice-3 scope bounded.
 - The sentinel-ratified silence-≠-success rule: every deferral and
   fallback in slices 1-3 emits an observable signal (sentinel files,
   monitor notifications, structured Reason discriminators).
+
+---
+
+## Round 13 — Agent liveness (heartbeat + stuck-turn detector + protocol fix)
+
+### Problem surfaced
+
+During Round 12 Phase 4-5, orion (orchestrator) hung silently for
+~25 min while turn=orion across all three review edges. The monitor
+wasn't notified because no flip occurred — the session was alive but
+not making progress. Round 12's archive + FTS + subagent layers all
+work fine, but the protocol has no observable signal for "agent is
+alive but stuck" — silence ≠ success.
+
+### Decision
+
+Three coordinated additions, plus one protocol fix that surfaced
+during Round-13 development itself:
+
+1. **Sidecar heartbeat emitter** (slice 1 — lumeyon). Sidecar writes
+   `<conversations>/.heartbeats/<agent>.heartbeat` every 30s with
+   `ts host pid starttime sidecar_version`. Atomic `tmpfile + rename`.
+   `pid + starttime` matches lockTag (Round 4) and `processIsOriginal`
+   (Round 9), so a recycled pid can't impersonate a live session. SIGTERM
+   / SIGINT / `agent-chat exit` / `gc` all unlink the heartbeat;
+   triple-racer scenarios (sidecar SIGTERM + cmdExit + gc-aggressive)
+   are idempotent via `safeUnlink`.
+2. **Monitor stuck-turn detector** (slice 2 — carina). Three
+   notification reasons gated by distinct conditions and ratelimited
+   per `<edge, condition>` arming:
+    - `peer-sidecar-dead` — turn=peer + peer's heartbeat not fresh.
+    - `local-sidecar-dead` — turn=me + my heartbeat not fresh.
+    - `agent-stuck-on-own-turn` — turn=me + turn-mtime > timeout +
+      no live-session lock + no recent CONVO.md growth. **NOT
+      heartbeat-gated** — fires independently of slice-1 deployment
+      because the signal is purely about turn-progress.
+   Heartbeat-system gate (`HEARTBEATS_DIR` exists + at least one
+   `.heartbeat` file) graceful-degrades the sidecar-dead reasons when
+   slice-1 hasn't shipped yet; without the gate, every monitor.test.ts
+   assertion would have been polluted by spurious "heartbeat missing"
+   emissions.
+3. **`agent-chat doctor --liveness` + `gc --aggressive`** (slice 3 —
+   keystone). Offline doctor that reads heartbeats, classifies
+   `fresh/stale/dead/orphan/missing/unparseable`, cross-references
+   sessions, and emits `stuck-offline=<reason>` + `liveness-issue=<kind>`
+   diagnostics. `gc --aggressive` adds an orphan-socket reaper, stale
+   heartbeat reaper, and `.fts-corrupt` sentinel clear. Host-bounded —
+   never deletes another host's state on shared filesystems. Default
+   `gc` stays scoped to current session; `--aggressive` is the
+   explicit cross-session opt-in.
+4. **`turn.ts park` implicit-unlink** (protocol fix, slice 1).
+   Pre-fix, `lock → append → park` left the lock file behind; the
+   only sessions that could clear it were the lock-holder (alive
+   but parked) or `unlock --force-stale` (refuses on a live pid).
+   The user hit this exact bug at 02:02Z during Round-13 Phase-3
+   when lumeyon's session parked without unlocking and orion had
+   to manually `rm` the file. The fix unlinks the lock atomically
+   under the same-session ownership guard. `unlock` after `park`
+   remains valid as a backward-compat no-op.
+
+### Single-source-of-truth: `scripts/liveness.ts`
+
+All three slices share one module exporting:
+- `Heartbeat` type with pre-parsed `ts_ms` field (saves
+  `Date.parse` on every monitor poll tick).
+- `parseHeartbeat` / `formatHeartbeat` symmetric pair (round-trip
+  test pinned).
+- `HEARTBEAT_STALE_MS = 90_000` / `HEARTBEAT_DEAD_MS = 300_000`.
+- `StuckReason` discriminated union + `STUCK_REASONS` array
+  pinned by `as const satisfies ReadonlyArray<StuckReason>` (a
+  future rename of either side trips the build).
+- `SIDECAR_HEARTBEAT_VERSION = "1"` + parser refusal of
+  missing-or-unknown versions (Phase-4 lumeyon→keystone catch).
+- `classifyHeartbeat` runs `processIsOriginal` for pid-recycle
+  defense before age thresholds — a recycled pid is "dead"
+  regardless of when the heartbeat ts says.
+- `listHeartbeatRecords` for the doctor; ENOENT-graceful so
+  pre-slice-1 deployments return `[]` instead of throwing.
+
+### Cross-review yield (3 reviews → 4 real bugs + 6 nits)
+
+Same shape as Round 12 Phase 4 — every review caught at least one
+real bug. Three real bugs across three slices, all matching the
+same anti-pattern: **load-bearing condition guarded by
+under-specified primitive**:
+
+| Slice | Anti-pattern caught |
+|---|---|
+| carina (slice 2) | `lockHeld = fs.existsSync(e.lock)` — file presence ≠ liveness; stale lock from dead session would silently suppress `agent-stuck-on-own-turn` (the literal Round-12 hang case) |
+| keystone (slice 3) | `parseHeartbeat` accepts missing/unknown `sidecar_version` — string presence ≠ semantic validity |
+| lumeyon (slice 1, self-caught) | test fixture `ts=x` short-circuited on `Date.parse` before reaching the labeled missing-version invariant — passed for the wrong reason |
+
+The recurrence of one anti-pattern shape across three independent
+reviews is the load-bearing receipt for why cross-review-as-
+discipline keeps producing this kind of catch.
+
+### What did NOT change
+
+- Protocol surface (`peek/init/flip/park/lock/unlock/recover`)
+  is unchanged except for `park`'s implicit-unlink, which is
+  backward-compatible.
+- The "filesystem-only with two carve-outs" invariant from
+  Round 12 holds; heartbeat files are plain text, written
+  atomically. No new SQLite, no new daemon (sidecar already
+  exists from Round 9).
+- Existing accelerators (sidecar, monitor, FTS5, archive layer)
+  all still work without heartbeat. Round 13 is purely additive
+  observability.
+
+### Deferred to Round 14
+
+- **Wakeup mechanism** — Round 13 *detects* "alive but silent" but
+  doesn't *resume* the stuck session. Three paths under evaluation:
+  defensive `ScheduleWakeup` from each session, external cron that
+  dispatches ephemeral `claude -p` / `codex exec`, or a full
+  ephemeral-architecture pivot following Ruflo's pattern. The
+  Ruflo audit is the prerequisite for picking the path.
+- **Lock-strategy (b)** (release lock during long LLM call) —
+  unblocked by Round 12's doctor 9-point integrity suite + Round 13's
+  agent-stuck detector but deferred to keep slice scope bounded.
+- **Re-arm coverage in `--once` mode** — current tests demonstrate
+  fresh-process behavior, not the in-memory `*Emitted` flag re-arm
+  semantics. Needs an in-process tick driver to exercise.
+- **`stdout-cap-exceeded` / `stderr-cap-exceeded` Spawner reasons**
+  in `subagent.ts` consumer-side (added in Phase-3.5) verified live
+  in `runClaude` producer side at `scripts/llm.ts:256+266` —
+  cross-slice contract is real-world reachable, not type-only theater.

@@ -24,9 +24,28 @@ export type ExpansionSuccess = {
   citedIds: string[];
   tokensUsed: number;
 };
+// Round-13 nit fix (carina's R12 cross-review): the failure-reason union
+// must be exhaustive. Adding "reentrancy" so the child-reentrancy refusal
+// (subagent invoked from inside an LLM call) preserves its distinct
+// signal instead of collapsing into spawn_error / exit_nonzero. Log
+// scrapers can now distinguish "claude refused to spawn because we're
+// already inside a claude call" from "claude binary missing on PATH".
+//
+// Also adding stdout-cap-exceeded / stderr-cap-exceeded — runClaude's
+// 256KB/64KB caps surface as distinct reasons rather than collapsing into
+// exit_nonzero (orion R13 Phase-2/3 ack: same lossy-mapping issue).
 export type ExpansionFailure = {
   ok: false;
-  reason: "timeout" | "exit_nonzero" | "no_citations" | "token_cap" | "not_found" | "spawn_error";
+  reason:
+    | "timeout"
+    | "exit_nonzero"
+    | "no_citations"
+    | "token_cap"
+    | "not_found"
+    | "spawn_error"
+    | "reentrancy"
+    | "stdout_cap_exceeded"
+    | "stderr_cap_exceeded";
   stderr: string;
   partialAnswer?: string;
   partialCitedIds?: string[];
@@ -45,7 +64,16 @@ export type Spawner = (args: ExpansionArgs) => Promise<{
   stdout: string;
   stderr: string;
   code: number | null;
-  reason: "ok" | "not-found" | "timeout" | "exit" | "killed" | "spawn-error" | "reentrancy";
+  reason:
+    | "ok"
+    | "not-found"
+    | "timeout"
+    | "exit"
+    | "killed"
+    | "spawn-error"
+    | "reentrancy"
+    | "stdout-cap-exceeded"
+    | "stderr-cap-exceeded";
 }>;
 
 // Real spawner — uses carina's runClaude from scripts/llm.ts when available.
@@ -102,8 +130,32 @@ export async function spawnExpansionSubagent(
       partialCitedIds: cited.validIds,
     };
   }
-  if (r.code !== 0 || r.reason === "exit" || r.reason === "spawn-error" || r.reason === "reentrancy") {
-    return { ok: false, reason: r.reason === "spawn-error" ? "spawn_error" : "exit_nonzero", stderr: r.stderr };
+  // Round-13 nit fix (carina's R12 cross-review): reentrancy is its own
+  // failure mode — preserve it explicitly rather than collapsing into
+  // spawn_error or exit_nonzero. Same for the stdout/stderr caps. The
+  // exhaustive switch below protects against silent loss if a future
+  // spawner reason is added.
+  if (r.reason === "reentrancy") {
+    return { ok: false, reason: "reentrancy", stderr: r.stderr };
+  }
+  if (r.reason === "stdout-cap-exceeded") {
+    return { ok: false, reason: "stdout_cap_exceeded", stderr: r.stderr };
+  }
+  if (r.reason === "stderr-cap-exceeded") {
+    return { ok: false, reason: "stderr_cap_exceeded", stderr: r.stderr };
+  }
+  if (r.reason === "spawn-error") {
+    return { ok: false, reason: "spawn_error", stderr: r.stderr };
+  }
+  if (r.code !== 0 || r.reason === "exit") {
+    return { ok: false, reason: "exit_nonzero", stderr: r.stderr };
+  }
+  // At this point r.reason must be "ok" — assert exhaustively so a future
+  // spawner reason addition without a corresponding handler trips a TS
+  // compile error instead of silently collapsing into success path.
+  if (r.reason !== "ok") {
+    const _exhaustive: never = r.reason;
+    return { ok: false, reason: "spawn_error", stderr: `unhandled spawner reason: ${String(_exhaustive)}` };
   }
   // Success path: enforce post-hoc invariants.
   const tokensUsed = Math.ceil(r.stdout.length / 4);
