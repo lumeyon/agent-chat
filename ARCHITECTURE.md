@@ -1822,3 +1822,103 @@ discipline keeps producing this kind of catch.
   in `subagent.ts` consumer-side (added in Phase-3.5) verified live
   in `runClaude` producer side at `scripts/llm.ts:256+266` —
   cross-slice contract is real-world reachable, not type-only theater.
+
+---
+
+## Round 14 — Ruflo lessons audit (strategic direction; no production code)
+
+### Problem surfaced
+
+The user asked for a strategic audit of `/data/eyon/git/ruflo` (open-source
+viral multi-agent orchestration project for Claude Code) to extract
+architectural lessons we can adopt. The audit was queued from Round 12;
+pulled forward when Round 13's stuck-agent failure mode (turn=peer +
+session rate-limited mid-turn = silent stall) surfaced as load-bearing
+and the user read the OpenAI Codex plugin docs and proposed the pivot.
+
+### Decision
+
+Audit through the petersen graph team (carina, lumeyon, keystone),
+3-slice + 5-phase, same protocol as Rounds 12-13. Audit produces a
+strategic punch-list with rigor-tagged verdicts (`ADOPT` requires
+`Downgrade trigger`; `REJECT` requires `Invariant cited`; `ADAPT`
+requires the `Load-bearing IDEA` line). Implementation is Round 15+.
+
+### What the audit answered
+
+**Three convergent findings (independently confirmed across all three
+slices):**
+
+1. **Ruflo is Claude-only.** No `.codex-plugin/` directories anywhere
+   in their repo. Their cross-runtime story is theater.
+2. **HYBRID architecture is right for agent-chat.** Persistent mode
+   (today's default) AND ephemeral mode (opt-in). Both write to the
+   same wire protocol.
+3. **Skill-only plugin pivot, no MCP server needed.** agent-chat's
+   protocol is filesystem-mediated. An MCP server would just wrap the
+   filesystem operations the CLI already does, adding a layer without
+   value.
+
+**The architectural divergence we need to close:**
+
+Ruflo sidesteps the stuck-agent problem (Round 12's failure mode) by
+being ephemeral — `agent_spawn` is metadata-only; actual work is
+`claude -p` shell-outs + `ScheduleWakeup({delaySeconds: 270})` +
+`CronCreate`. Sessions don't persist long enough to get stuck.
+
+Our long-running session model is what surfaces the stuck-agent
+problem. ScheduleWakeup with a cache-warm 270s delay (under
+Anthropic's 300s prompt cache TTL) closes the gap on the Claude side.
+
+### Cross-cutting invariants — Round 14 update to Invariant #1
+
+Round 12 added two carve-outs (FTS5 sqlite, LLM in scripts) to the
+"filesystem-only" invariant. Round 14 adds a third:
+
+- **Per-agent ephemeral execution mode**: `agent-chat run` (Round 15a)
+  shells out `claude -p` invocations that exit when the turn is
+  written. State remains filesystem-only; the deviation is purely
+  about whether a long-running session OWNS the work or whether each
+  turn is a disposable invocation. Both modes write to the same wire
+  format; peers see no difference.
+
+The deviation is gated by user opt-in (`agent-chat run` is a new
+subcommand; existing flows unchanged).
+
+### Round 14 process meta-observation
+
+The same anti-pattern caught Round 12 (bm25 weight-count drift) and
+recurred three times in Round 13 (lockHeld file-presence, missing
+sidecar_version, test fixture short-circuit) recurred again in
+Round 14 — but at the *audit* level: Ruflo's autopilot-loop
+SKILL.md described "markdown checkbox" task discovery, but the
+actual code reads a JSON file. The doc lies; the code is truth.
+
+**Pattern statement:** load-bearing claim guarded by an
+under-specified primitive. Whether the primitive is a numeric tuple's
+length, a boolean's semantic meaning, a string's presence, a test
+fixture's fall-through, or a doc's accuracy, the failure mode is
+identical. Verify the primitive matches the load-bearing claim.
+
+This recurrence across three rounds at three abstraction levels is
+the load-bearing receipt for cross-review-as-architectural-discipline.
+Captured in `docs/audit-rigor.md` (added Round 14) as a project
+convention for future audits.
+
+### Round 15 dispatch shape (pre-committed at Round 14 wrap)
+
+- **Round 15a — ephemeral mode + cache-warm wakeup loop** (~313 LoC,
+  Claude-only, no Codex dependency): closes the Round-13 wakeup gap.
+- **Round 15b — plugin pivot** (~350 LoC, dual-manifest, requires
+  Codex credits for empirical verification): ships agent-chat as a
+  single-codebase Claude+Codex plugin.
+
+15a and 15b are decoupled; either can ship first.
+
+### Where the integrated punch-list lives
+
+`docs/round-14-audit-summary.md` (added Round 14). One file with the
+consolidated cross-slice findings, verdict table, Round 15 scope, and
+deferred empirical questions. Per-slice deep dives stay in the
+`conversations/petersen/{lumeyon,carina,keystone}-orion/CONVO.md`
+files for receipt-density.
