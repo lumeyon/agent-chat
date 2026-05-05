@@ -420,6 +420,18 @@ prints the active role; `role list` shows everyone with `[override]` flag
 on agents who've self-updated. `role clear` removes your override and
 falls back to the YAML default.
 
+**Or — preferred — append a `<role>` directive to your cmdRun response**
+(Round 15k Item 7). Symmetric with `<scratch>` / `<dot/>` / `<archive>` /
+`<dispatch>`:
+
+```xml
+<role>Updated specialty: cross-runtime integration witness after Round-15k</role>
+```
+
+Empty body clears the override. cmdRun parses the directive inline and
+calls `writeRoleOverride` — no separate CLI invocation, no out-of-band
+moment needed.
+
 When to update your role:
 
 - You've taken on a new responsibility you'll keep (e.g. orion → "test
@@ -443,8 +455,22 @@ directive to your cmdRun response — same syntax as `<scratch>` and
      note="Phase-5 plan was crisp; turnaround was fast" />
 ```
 
-Axes are 1–10. Unprovided axes default to 5 (neutral, no signal). You
-can also dot from the CLI:
+Axes are 1–10. Unprovided axes default to 5 (neutral, no signal).
+
+**Axes are configurable** (Round 15k Item 8). Defaults are clarity /
+depth / reliability / speed (Dalio's framing). To change them for the
+whole network, edit `~/.claude/data/agent-chat/config.json`:
+
+```json
+{ "dot_axes": ["creativity", "rigor", "specificity", "openness"] }
+```
+
+Constraints: 1-8 axes, each `[a-z0-9_-]{1,32}`, no duplicates. All 10
+agents read the same config.json so the network agrees on axes. The
+`<dot/>` directive's example in cmdRun's prompt templates off the
+configured axes at runtime — so agents always see the right axes.
+
+You can also dot from the CLI:
 
 ```bash
 bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dot lumeyon \
@@ -453,10 +479,19 @@ bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dot lumeyon \
     --note "crisp Phase-5 plan"
 ```
 
-Self-grading is refused. Aggregation is **believability-weighted**:
-each grader's contribution is weighed by their own believability score
-(mean of received-axes scores / 10, neutral prior 0.5 for graders
-without dots). A high-believability grader's dots count more.
+Self-grading is refused. Aggregation is **believability-weighted via
+fixed-point iteration** (Round 15k Item 6): initialize all agents at
+0.5 prior, then iteratively recompute each agent's score as the
+weighted mean of their received-axes scores using the previous pass's
+weights. Iterates until convergence (max delta < 0.001) or 20 passes.
+Converges in ~5-10 passes on a 10-agent petersen, sub-millisecond.
+
+This is Dalio's actual recursive-trust model: high-believability
+voices count more when grading others, recursively. A noisy grader
+contributes proportionally less; an agent who gains believability
+through high received-grades sees their *future* grades of others
+weighed more. New agents start at 0.5 and converge as their first
+dots land.
 
 Read the network's grades:
 

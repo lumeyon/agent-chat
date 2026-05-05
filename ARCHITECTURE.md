@@ -2678,6 +2678,393 @@ now cmdRun does it from agent-emitted directives.
 
 Total ~345 LoC of additive change. Tests: 340 pass / 0 fail / 2 skip.
 
+## Round 15g — User-global state + config.json + plugin payload restructure
+
+### Problems surfaced empirically during install testing
+
+Three structural issues observed when actually installing the plugin
+through Claude Code's marketplace flow:
+
+1. **Plugin install captured only `skills/`.** scripts/, tests/, and the
+   `agents.*.yaml` topology files lived at repo root, OUTSIDE the
+   `plugins/agent-chat/` directory the marketplace.json pointed at. So
+   `/plugin install` shipped only the SKILL.md, and the very first script
+   the agent tried to run failed with "Module not found
+   /home/eyon/.claude/skills/agent-chat/scripts/agent-chat.ts" — the
+   legacy hardcoded path didn't exist on a fresh plugin install.
+
+2. **CONVERSATIONS_DIR defaulted to `<SKILL_ROOT>/conversations`.** When
+   the plugin runs from `~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/0.6.0/`,
+   that dir is content-addressable per-version and per-install. Two
+   versions of the plugin would have ISOLATED conversations dirs; legacy
+   `~/.claude/skills/agent-chat/` installs and plugin-cache installs
+   would talk past each other. Confirmed empirically: the test-plugin
+   session wrote a "hello" to its plugin-cache `conversations/` while
+   the real orion session was reading from the repo's `conversations/`.
+
+3. **No way for Claude Code and Codex installs to share state.** Even
+   if both ran agent-chat, their CONVERSATIONS_DIRs would diverge
+   based on each plugin's install location.
+
+### Decision
+
+- **Move scripts + agents.*.yaml + tests INTO `plugins/agent-chat/`** so
+  the plugin install captures the full payload. SKILL_ROOT now resolves
+  to the plugin directory, which holds everything the runtime needs.
+- **Add a `$AGENT_CHAT_DIR` discovery preamble** to SKILL.md and
+  bootstrap.md. Resolves to `$CLAUDE_PLUGIN_ROOT` if set, else falls
+  back to the cache path, else falls back to the legacy skill location.
+  All scripts referenced via `bun "$AGENT_CHAT_DIR/scripts/..."`.
+- **Default CONVERSATIONS_DIR to `~/.claude/data/agent-chat/conversations`**
+  (user-global, version-stable). Resolution order: `$AGENT_CHAT_CONVERSATIONS_DIR`
+  env var > config.json `conversations_dir` field > default. The env-var
+  path stays for tests + per-shell isolation.
+- **Add a JSON config layer** at `~/.claude/data/agent-chat/config.json`
+  so Claude Code and Codex installs can point at the same conversations
+  dir without each user fiddling with env vars in every shell. Schema
+  is minimal (`conversations_dir`); fields are validated at module load.
+- **Add `agent-chat doctor --paths`** that prints SKILL_ROOT,
+  CONVERSATIONS_DIR, and the resolution source so users can diagnose
+  install drift in one command.
+
+### Why user-global rather than per-project
+
+Several rounds of debate. Per-project (`<repo>/.agent-chat/conversations/`)
+is more conventional for project-scoped tooling, but the user explicitly
+asked for cross-project state sharing — the same agents collaborating on
+multiple repos should see each other's grade history, scratchpads, and
+archives. User-global is the answer that matches the user's mental model;
+the env var override stays for the per-project case.
+
+### Net delta
+
+- 1 file moved: `marketplace.json` schema unchanged.
+- 4 fresh test files: `tests/config.test.ts` (8 tests), `plugin-manifest.test.ts`
+  (9 tests), `tests/cmd-run.test.ts`, `tests/safety.test.ts`.
+- ~50 LoC added to lib.ts (config loader + DOCTOR_PATHS surfaces).
+- 363 pass / 0 fail / 2 skip after restructure (was 347).
+
+---
+
+## Round 15h — Self-organizing mesh (Dalio Dot Collector + 3 siblings)
+
+User concern surfaced at end of Round 15g: "I have four major concerns
+that we need to be absolutely sure works." The list:
+
+1. All conversations between agents and between users are archived
+   regularly by the agents themselves as part of their workflow.
+2. Some way for agents to update their own roles so other agents learn
+   what they can do well.
+3. A way for the agent's neighbors to always validate and grade their
+   peers in the network.
+4. All agents aware of what every other agent can do well even though
+   they may not be a direct peer — for routing.
+
+User invoked Ray Dalio's Dot Collector as inspiration: multidimensional
+peer ratings aggregated by believability so the most-credible voices
+weigh more on routing decisions. Round 15h ships all four as one round.
+
+### Concern 1 — Per-tick auto-archive
+
+Pre-fix, `autoArchiveSessionEdges` only fired at `agent-chat exit` or
+`gc --auto-archive`. Ephemeral mode (Round 15d-β) means most sessions
+never explicitly exit — every `agent-chat run` tick is a fresh pid that
+returns immediately. So bloated edges accumulated forever.
+
+Fix: invoke `autoArchiveSessionEdges(rec, 200)` at the END of every
+cmdRun tick. Cheap (no-op for under-threshold edges), idempotent (only
+seals parked-AND-bloated). Synthesized-identity ticks (Contract A)
+correctly skip since their SessionRecord was already unlinked.
+
+### Concern 2 — Agent-managed role overrides
+
+Pre-fix, roles were static YAML in `agents.<topology>.yaml`. No
+mechanism for agents to declare "actually I'm now better at X."
+
+Fix:
+- Storage: `<conv>/.roles/<agent>.md` (4 KB cap), atomic writes, overlay-
+  merged into `topology.roles` in `loadTopology`. Re-read every cmdRun tick.
+- CLI: `agent-chat role <get|set|clear|list>` for out-of-band updates.
+- Round 15k Item 7 added the `<role>...</role>` DIRECTIVE so agents can
+  self-update from inside their tick response (the natural place — cmdRun
+  is one-shot, "out-of-band" doesn't fit ephemeral).
+
+### Concern 3 — Dot Collector (Dalio-inspired peer rating)
+
+Pre-fix, no formal grading. Agents implicitly evaluated peers by accept/
+reject patterns; nothing discoverable, nothing aggregateable.
+
+Fix:
+- Multi-axis ledger at `<conv>/.dots/<peer>.jsonl`, append-only, one
+  line per dot. Schema: `{ts, grader, axes, note?}`.
+- Default 4 axes from Dalio's framing: clarity, depth, reliability, speed
+  (each 1-10). Round 15k Item 8 made this **configurable** via
+  `config.json` `dot_axes` (1-8 entries; an org might want
+  `[creativity, rigor, specificity, openness]` for R&D, or
+  `[correctness, completeness, speed]` for code review).
+- Believability-weighted aggregation: each grader's contribution weighed
+  by their own composite score. Round 15k Item 6 made this RECURSIVE via
+  fixed-point iteration — Dalio's actual model, where high-believability
+  graders' votes count more, recursively, until convergence.
+- CLI: `agent-chat dot <peer> --axis a=N` and `agent-chat dots [<peer>]
+  [--json]`. Self-grading refused at the CLI/directive layer (lib is
+  permissive; gate lives at the boundary).
+- Directive: `<dot peer="X" clarity="N" .../>` in cmdRun output. Parsed
+  inline in cmdRun, appended to ledger, non-blocking on failure.
+
+### Concern 4 — Full network roster + relay-path routing
+
+Pre-fix, cmdRun's prompt only listed direct neighbors' roles. Agents had
+no idea what non-neighbors specialized in, so cross-graph routing was
+blind — every dispatch went to the nearest neighbor regardless of
+demonstrated competence.
+
+Fix:
+- New helper `lib.relayPathTo(topo, from, to)` — BFS, O(V+E), returns
+  the shortest path of agent names between two agents. Cached per-tick.
+- cmdRun's prompt now lists EVERY agent in the topology with role
+  first-line + dot composite + believability + routing hint:
+  - Direct neighbor: `emit <dispatch peer="X">`
+  - Non-neighbor: `N hops via X → Y → target — relay through X`
+- For petersen (diameter 2), every non-neighbor is reachable through
+  exactly one intermediary. Diameter caching means the prompt stays
+  compact regardless of topology size.
+
+### Why all four in one round
+
+The user's framing was "we need to be absolutely sure works" — implying
+not just "ship the features" but "verify them at scale." Concerns 2-4
+are useless without each other (a Dot Collector with no roster surface
+is just a database; a roster with no grading is just a YAML rendered as
+a list; role overrides without a routing surface are just cosmetic).
+Shipping all four together let the Round 15h network-test exercise the
+self-organizing-mesh property: 10 agents, each grading 3 neighbors,
+believability propagating through the petersen graph, every roster
+showing every peer with their current composite + relay route.
+
+### Net delta
+
+- ~250 LoC added to lib.ts (roles overlay, dots ledger + aggregation,
+  relayPathTo BFS, configurable axes + fixed-point believability later).
+- ~200 LoC added to agent-chat.ts (cmdRole/cmdDot/cmdDots CLIs, <role>
+  + <dot> directive parsers, full-roster prompt composition).
+- 16 new lib unit tests (relayPathTo coverage, Dot Collector aggregation,
+  role overrides storage).
+- New `scripts/network-test.ts` — 205 checks at petersen-scale.
+- New `scripts/self-test.ts` — 67 hermetic checks.
+- bootstrap.md walkthrough section for the four primitives (~120 lines).
+
+---
+
+## Round 15i — Close 9 known gaps in 4 commits
+
+Audit pass after Round 15h shipped. Goal: stop shipping new features
+until existing claims are honest.
+
+### Item 9 — Boss-agent edges grew unboundedly
+
+`autoArchiveSessionEdges` only sealed edges with turn=parked. record-turn
+flips boss-agent edges back-and-forth between boss and the agent on every
+human turn — they NEVER park. So a long human-AI conversation accumulated
+forever even with auto-archive nominally on.
+
+Fix: second gate for ACTIVE edges past 4× the parked threshold (default
+800 lines vs 200). archive.ts auto already keeps DEFAULT_FRESH_TAIL=4
+sections verbatim, so the active edge keeps continuity for the next turn
+while older content folds into a leaf — same lossless-claw rolling pattern.
+
+### Item 7 — Lyra-L3 hermeticity bug
+
+The .agent-name parser test wrote the file under a tmp cwd but didn't
+clear `$AGENT_NAME` / `$AGENT_TOPOLOGY` / `$CLAUDE_SESSION_ID`. resolveIdentity
+has THREE pre-file sources (#1 SessionRecord, #2 env vars, #3 .agent-name).
+When the test ran inside a live orion session (pid:42010 has a SessionRecord),
+source #1 silently won — the test passed because that record happened to
+also say orion/petersen. False PASS for several months.
+
+Fix: clear all three env vars + bust the module cache so CONVERSATIONS_DIR
+re-evaluates against tmp + assert `id.source` matches `/agent-name/` so
+future env-leaks fail loudly instead of silently passing.
+
+### Items 3-5 — Real-LLM directive parsing smoke
+
+Hermetic self-test verified the directive REGEX shape against synthetic
+strings. But nobody had observed the regex actually firing on real
+`claude -p` output, where wrapping, markdown fences, leading whitespace,
+or trailing commentary could silently mismatch.
+
+Fix: `scripts/llm-smoke.ts` — shells out to claude -p with strict
+verbatim-output prompts asking the LLM to emit each directive shape
+(`<dot/>`, `<dispatch>`, `<scratch>`, `<archive>`), then runs the same
+regex used in cmdRun against the response. ~4 LLM calls, ~$0.05.
+
+### Item 6 — loop-driver --interactive smoke
+
+`loop-driver.ts --interactive` shipped Round 15e with a 3-consecutive-
+idle exit condition. Never tested end-to-end. A regression where
+`consecutiveIdle` never increments would loop forever and never be caught.
+
+Fix: self-test scenario that spawns loop-driver with 1s tick cadence,
+12s timeout cap, asserts exit 0 + log line + elapsed < 12s.
+
+### Items 1-2 — Codex runtime adapter
+
+Round 15b shipped `scripts/runtimes/codex.ts` as a SKELETON that threw
+`RUNTIME_NOT_IMPLEMENTED` on dispatch + scheduleWakeup. Marketplace +
+plugin description claimed dual-runtime. Mismatch.
+
+Fix: implement the adapter using `codex exec <prompt>` (the empirically-
+confirmed non-interactive entrypoint). dispatch shells out, honoring
+AGENT_CHAT_NO_LLM=1 + AGENT_CHAT_INSIDE_LLM_CALL=1 reentrancy guard +
+graceful "not-found" fallback. scheduleWakeup matches the Claude
+adapter — JSON to stdout, consumed by loop-driver.
+
+Item 2 (Codex marketplace install lifecycle) discovered to be partial:
+`codex plugin marketplace add` succeeds at git-clone, but per-plugin
+discovery requires manual config.toml entry. Documented in
+`docs/codex-install.md` rather than risk breaking the Claude Code
+install by changing the marketplace.json schema.
+
+### Net delta
+
+- 1 real bug fixed (item 9: boss-agent unbounded growth).
+- 1 false-PASS test fixed (item 7: lyra-L3 silent env leak).
+- 3 new test scripts (`llm-smoke.ts`, `integration-test.ts` later in 15j).
+- Codex adapter implemented + documented.
+
+---
+
+## Round 15j — Verification at the integration boundary
+
+Round 15h/i shipped pieces; Round 15j ships the test that proves the
+pieces fit together.
+
+### Item 1 (j) — integration-test
+
+Every test we had was in isolation:
+- self-test does the wire protocol but no LLM
+- llm-smoke does the LLM but bypasses cmdRun
+- network-test does the Dot Collector at scale but no LLM and no cmdRun
+
+So nobody had observed the FULL pipeline working end-to-end:
+peer section → cmdRun reads → composes prompt → claude -p → parse
+directives → write section + flip turn + persist dot.
+
+Fix: `scripts/integration-test.ts` plants a realistic two-agent setup
+(orion + lumeyon on petersen with their lumeyon-orion edge initialized
+turn=orion), writes a peer section asking orion to grade lumeyon's
+clarity via `<dot/>`, runs `agent-chat run` as orion (real claude -p),
+asserts side effects:
+
+- cmdRun exited 0 (no crash, no deadlock)
+- CONVO.md grew with ≥1 orion section
+- `.turn` flipped off orion (to lumeyon or parked)
+- `.turn.lock` released (no orphaned locks)
+- `.dots/lumeyon.jsonl` populated with grader=orion (soft check — LLM
+  compliance varies)
+- No archive sealed for an under-threshold edge
+
+Cost: ~1 real LLM call per run (~$0.05-0.10). Gated on `claude` PATH;
+skips with exit 0 otherwise.
+
+### Item 3 (j) — README + docs/codex-install.md
+
+Audit caught the README still describing the sidecar/monitor/heartbeat
+infrastructure deleted in Round 15d-β; said the Codex adapter was a
+SKELETON when 15i implemented it; cited test count "277 pass" against
+current 363; pointed install commands at the wrong marketplace name.
+
+Focused edits (not a full rewrite — How this codebase is built / archive-
+layer / multi-user / topology-cheat-sheet sections still hold):
+- Top quote-block updated for Round 15d through 15j arc.
+- "What you get" table +5 rows for Round 15h/i features.
+- Install section corrected for actual three-step Claude Code dance.
+- Codex section drops "SKELETON" claim, links to new docs page.
+- Test count 277 → 363, four CLI surfaces added as runnable examples.
+
+### Why this is a separate round from 15i
+
+Round 15i was the gap-closure round (fixes for known bugs + missing
+implementations). Round 15j is the verification round (tests + docs that
+prove the integration boundary works). The split forced articulation:
+"do we believe the pieces work together?" got a separate answer from
+"are the individual pieces present?"
+
+---
+
+## Round 15k — Make the mesh tunable + fix the believability prior
+
+Audit pass: four medium-priority items remained from Round 15j's gap
+list.
+
+### Item 7 — `<role>` directive
+
+Round 15h shipped `agent-chat role set` as a CLI but the cmdRun prompt
+told agents to run it "out-of-band — not as a directive in this section."
+But cmdRun is one-shot. There is no out-of-band moment. Result: the
+mechanism shipped but was never discoverable from inside an LLM tick.
+
+Fix: `<role>...</role>` directive parsed inline in cmdRun. Body =
+new role declaration; empty body = clear override. Honors ROLE_MAX_BYTES
+(4 KB) cap. Symmetric with `<scratch>` / `<archive>` / `<dispatch>` /
+`<dot/>`.
+
+### Item 8 — Configurable Dot axes
+
+The 4 default axes (clarity / depth / reliability / speed) were
+hardcoded as a TS `as const` discriminated union. Useful default but
+inflexible — an org wanting different believability dimensions had to
+fork the source.
+
+Fix: `DOT_AXES` is config-driven via `config.json` `dot_axes` field.
+Validation: 1-8 entries, each 1-32 chars `[a-z0-9_-]`, no duplicates.
+Falls through to defaults with a warning if invalid. Type system:
+`DotAxis` widened from union to plain string. Backwards-compat:
+existing dots in jsonl with the 4 default axes work unchanged when
+config is absent. cmdRun prompt templates the `<dot/>` example off
+DOT_AXES at runtime so agents always see the configured axes.
+
+### Item 6 — Believability via fixed-point iteration
+
+Pre-fix, `computeBelievability` was a one-pass unweighted-mean
+computation: every grader contributed equally regardless of their own
+believability. That meant a low-quality grader's noise pulled
+receivers down by the same amount as a high-quality grader's signal.
+The 0.5 neutral prior was sticky: an agent's first grader weighted
+at 1.0 in the unweighted mean.
+
+This is exactly what Dalio's Dot Collector solves with believability
+weighting: people whose own track record is strong get a louder vote
+when grading others. Fixed-point iteration is the classical answer.
+
+Fix: initialize all agents at 0.5 prior. On each pass, recompute every
+agent's score as the believability-WEIGHTED mean of their received-axes
+scores using the previous pass's weights. Iterate until max delta <
+0.001 OR MAX_ITERS=20 hit. Sub-millisecond on 10-agent petersen
+(~5-10 iterations to converge). Edge cases: zero-received agents stay
+at 0.5; cycles in the grade graph converge to the eigenvector of the
+normalized weighting matrix (standard Markov chain result).
+
+### Item 5 — ARCHITECTURE.md update (this section)
+
+Self-explanatory. The doc was 8 rounds out of date.
+
+### Net delta
+
+- ~70 LoC added to agent-chat.ts (`<role>` directive parser, prompt
+  update mentioning role + axes).
+- ~80 LoC added to lib.ts (configurable DOT_AXES, fixed-point
+  believability with bounded iteration).
+- 8 new config tests (configurable axes paths) + 1 new lib test
+  (fixed-point convergence).
+- 372 / 0 fail / 2 skip across all surfaces. self-test 67/67.
+  network-test 205/205 (still holds — the network-test's "weighted ≠
+  unweighted" property reflects the deeper recursive weighting now).
+
+---
+
+## Round 15f historical version note (preserved)
+
 ### Plugin manifest version bump
 
 0.5.0 → 0.6.0 reflects the orchestrator-grade automation layer
