@@ -912,6 +912,17 @@ function cmdDots(args: string[]): void {
   }
 }
 
+async function cmdNetworkTest(args: string[]): Promise<void> {
+  // Round-15h follow-up: full-mesh Dot Collector verification on petersen.
+  // Spawns scripts/network-test.ts which plants 30 dots across all 10 AI
+  // agents and asserts believability propagation, aggregation, roster shape,
+  // relay-path correctness, and role-override propagation.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/network-test.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
 async function cmdSelfTest(args: string[]): Promise<void> {
   // Round-15g: end-to-end smoke test for the installed plugin. Spawns the
   // plugin's own scripts in subprocesses against a tmp conversations dir
@@ -1885,6 +1896,7 @@ switch (cmd) {
   case "record-turn":  void cmdRecordTurn(rest); break;
   case "run":          void cmdRun(rest); break;
   case "self-test":    void cmdSelfTest(rest); break;
+  case "network-test": void cmdNetworkTest(rest); break;
   case "role":         cmdRole(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
@@ -1937,6 +1949,14 @@ switch (cmd) {
       `      config.json layer, two-agent identity binding, edge canonicalization,\n` +
       `      lock+append+flip+unlock round-trip, and park semantics. Exits 0\n` +
       `      on all-pass; agents driving via tmux can rely on the exit code.\n\n` +
+      `  network-test [--json]\n` +
+      `      Full-mesh Dot Collector verification at petersen-scale (~2-3s).\n` +
+      `      Plants 30 dots across all 10 AI agents (each grades their 3\n` +
+      `      direct neighbors with deterministic persona-driven scores), then\n` +
+      `      asserts believability propagation, weighted vs unweighted\n` +
+      `      aggregation, full-roster visibility, BFS relay paths for all\n` +
+      `      45 AI-pairs, and role-override propagation. ~205 checks; exits 0\n` +
+      `      on all-pass.\n\n` +
       `  role <get|set|clear|list> [<agent>] [--stdin | --from-file <path>]\n` +
       `      Round-15h Concern-2: agent-managed role overrides. \`get [<agent>]\`\n` +
       `      prints the active role (override > YAML default). \`set\` (with\n` +
