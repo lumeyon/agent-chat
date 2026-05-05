@@ -749,6 +749,21 @@ async function cmdGc(args: string[]): Promise<void> {
 // emitted under ephemeral-only). The doctor command now reports session
 // records on this host; future rounds may extend with ephemeral-aware
 // stuck-tick detection (e.g. probing scratchpad mtime + .turn age).
+async function cmdSelfTest(args: string[]): Promise<void> {
+  // Round-15g: end-to-end smoke test for the installed plugin. Spawns the
+  // plugin's own scripts in subprocesses against a tmp conversations dir
+  // and verifies the wire protocol, config layer, doctor surfaces, and
+  // edge canonicalization. See scripts/self-test.ts for the full check
+  // list. The script self-reports PASS/FAIL and exits 0 on all-pass.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/self-test.ts"), ...args], {
+    stdio: "inherit",
+    env: process.env,
+  });
+  await new Promise<void>((resolve) => child.on("exit", (code) => {
+    process.exit(code ?? 1);
+  }));
+}
+
 async function cmdDoctor(args: string[]): Promise<void> {
   const sub = args[0];
   if (sub === "--paths") {
@@ -1615,6 +1630,7 @@ switch (cmd) {
   case "speaker":      cmdSpeaker(rest); break;
   case "record-turn":  void cmdRecordTurn(rest); break;
   case "run":          void cmdRun(rest); break;
+  case "self-test":    void cmdSelfTest(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -1657,7 +1673,13 @@ switch (cmd) {
       `      recorded_turns.jsonl ledger keyed by sha256(speaker, user, assistant).\n` +
       `      Emits a handoff section on the OLD edge when the speaker changes.\n` +
       `      Exit codes: 64=no current speaker, 65=unknown speaker, 66=no edge,\n` +
-      `      70=bad args, 71/72=lock blocked.\n`,
+      `      70=bad args, 71/72=lock blocked.\n\n` +
+      `  self-test [--json]\n` +
+      `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
+      `      conversations dir and verifies plugin layout, doctor surfaces,\n` +
+      `      config.json layer, two-agent identity binding, edge canonicalization,\n` +
+      `      lock+append+flip+unlock round-trip, and park semantics. Exits 0\n` +
+      `      on all-pass; agents driving via tmux can rely on the exit code.\n`,
     );
     break;
   default:
