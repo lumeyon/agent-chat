@@ -2,13 +2,22 @@
 
 **N agents. One graph. Real conversations. Filesystem-first, no database, no token ceiling.**
 
-> **Ephemeral-only architecture (Round 15d).** agent-chat runs as
-> short-lived process invocations: each `agent-chat run` reads
-> filesystem state, processes actionable edges, and exits. No
-> long-running daemons. Cache-warm continuation handled by
-> `loop-driver.ts` via `ScheduleWakeup` (270s). Per-agent
-> autobiographical scratchpads + agent-managed archive directives
-> + sub-relay activation are the long-term-memory primitives.
+> **Ephemeral-only architecture + Dalio Dot Collector + dual-runtime
+> (Rounds 15d — 15j).** agent-chat runs as short-lived process invocations:
+> each `agent-chat run` reads filesystem state, processes actionable edges,
+> and exits. No long-running daemons; sidecar + monitor were deleted in
+> Round-15d-β. Cache-warm continuation handled by `loop-driver.ts` via
+> `ScheduleWakeup` (270s). The mesh is now self-organizing: per-agent
+> autobiographical scratchpads carry relationship context across ticks;
+> agent-managed archive directives let writers author their own summaries;
+> agents can self-update their roles at runtime so peers learn what they
+> do well; and the **Dalio-inspired Dot Collector** gives every peer
+> multi-axis grades (clarity, depth, reliability, speed) that aggregate
+> into believability-weighted composite scores surfaced in every cmdRun
+> prompt's full network roster + relay-path routing hints. Conversations
+> are stored user-globally at `~/.claude/data/agent-chat/conversations/`
+> (configurable via `~/.claude/data/agent-chat/config.json` for
+> cross-runtime sharing between Claude Code and Codex installs).
 
 `agent-chat` is a Claude Code / Codex skill that lets multiple AI sessions
 collaborate on real work through a shared on-disk protocol — and unlike most
@@ -113,7 +122,13 @@ fold into the same lossless-claw archive layer as everything else, so
 | **Ephemeral execution** | `agent-chat run` reads filesystem state, processes actionable edges (where `.turn = me` and no lock), and exits. No long-running daemons. `loop-driver.ts` wraps cmdRun with cache-warm `ScheduleWakeup` (270s) for self-rescheduling; `--interactive` mode runs a tight 1-3s tick loop until idle for real-time deliberation. Stuck-recovery: any edge whose turn has been on me for >5min with no progress gets auto-redispatched on the next loop iteration. |
 | **Per-agent autobiographical scratchpad** | `<conversations>/.scratch/<agent>.md` — the agent's own narrative of their relationships, written in their voice, persisted across ticks (8KB cap; older content gets condensed via `scratch-condense.ts` into the scratchpad DAG). Read at the start of every tick alongside the CONVO.md tail. The structural answer to "the same agent must know context from the distant past" under ephemeral execution. |
 | **Sub-relay activation** | `agent-chat run --sub-relay-from <chain>` lets a peer dispatch through its own neighbor (carina → lumeyon directly, not just through orion). Cycle refusal + depth ≤ topology-diameter as correctness guards. Activates the (N choose 2) - (orion's neighbors) edges that the persistent-mode "everything through the orchestrator" pattern left dormant. |
-| **Agent-managed memory directives** | Agents emit `<scratch>...</scratch>` and `<archive>sections: N\nsummary: ...</archive>` blocks in their tick responses. The writer of a section authors its archive summary in their own words; bypasses the deterministic synthesizer for archives the agent explicitly authored. `archive.ts auto --seal-count N --agent-summary` is the underlying primitive. |
+| **Agent-managed memory directives** | Agents emit `<scratch>...</scratch>` and `<archive>sections: N\nsummary: ...</archive>` and `<dispatch peer="X">prompt</dispatch>` and `<dot peer="X" clarity="N" depth="N" reliability="N" speed="N" note="..."/>` blocks in their tick responses. The writer of a section authors its archive summary in their own words; bypasses the deterministic synthesizer. `archive.ts auto --seal-count N --agent-summary` is the underlying primitive. |
+| **Self-update your role at runtime** (Round 15h) | `agent-chat role <get\|set\|clear\|list>` lets an agent declare what they currently do well so peers learn it. Storage at `<conversations>/.roles/<agent>.md` (4 KB cap), overlay-merged into `topology.roles` on every cmdRun tick — so peers see the update immediately. The mesh is no longer static. |
+| **Dalio-inspired Dot Collector** (Round 15h) | Multi-axis peer grading along **clarity / depth / reliability / speed** (each 1-10). Append-only ledger at `<conversations>/.dots/<peer>.jsonl`. Aggregation is **believability-weighted**: each grader's contribution is weighed by their own composite score (received-axes-mean / 10, neutral prior 0.5 for new agents). Agents grade via `<dot peer="X" clarity="N" .../>` directive in their tick response or `agent-chat dot <peer> --axis a=N` CLI. Self-grading refused. `agent-chat dots [<peer>]` shows roster + per-axis weighted means + recent dots. |
+| **Full network roster + relay-path routing** (Round 15h) | cmdRun's prompt now lists **every** agent in the topology (not just direct neighbors) with role first-line + dot-collector composite + believability + routing hint. Direct neighbors get `<dispatch peer="X">`; non-neighbors get a "relay through Y" hint computed via `lib.relayPathTo` BFS. For petersen (diameter 2) every non-neighbor is reachable through exactly one intermediary. The mesh becomes self-aware. |
+| **Per-tick auto-archive** (Round 15h+i) | `cmdRun` invokes `autoArchiveSessionEdges` at the END of every tick (not just at exit), so ephemeral mode — where sessions never explicitly exit — actually trims long edges. Two thresholds: parked-AND-bloated past 200 lines, OR active-AND-very-bloated past 800 lines (Round-15i fix for boss-agent edges that flip back-and-forth and never park). Same `archive.ts auto` underlying path; keeps the last 4 sections verbatim. |
+| **Dual-runtime: Claude Code + Codex from one repo** (Round 15b/i) | `scripts/runtimes/{claude,codex}.ts` adapters share a symmetric `dispatch + scheduleWakeup` shape. Claude wraps `claude -p` via `runClaude`; Codex wraps `codex exec`. The wire protocol is identical across runtimes — agents in different runtimes can collaborate on the same petersen graph because every state is filesystem-mediated. CONVERSATIONS_DIR defaults to `~/.claude/data/agent-chat/conversations/` (user-global, version-stable across plugin-cache version dirs); `~/.claude/data/agent-chat/config.json` `conversations_dir` field lets both runtimes share state explicitly. |
+| **Built-in test surfaces** (Rounds 15g – 15j) | `agent-chat self-test` (62 checks, hermetic, ~5s) — wire protocol + identity + edge canonicalization + lock+append+flip+unlock round-trip + park semantics + role overrides + Dot Collector + relay paths + loop-driver clean exit. `agent-chat network-test` (205 checks, ~3s) — full-mesh Dot Collector verification on petersen. `agent-chat llm-smoke` — real `claude -p` directive parsing smoke. `agent-chat integration-test` — real cmdRun + real LLM end-to-end. `agent-chat doctor --paths` — show resolved CONVERSATIONS_DIR + config source. |
 | **Humans as first-class agents (orthogonal overlay)** | `agents.users.yaml` declares humans separately from any topology; `loadTopology()` overlays them at load time so any topology automatically gets human-AI edges. `agent-chat init` auto-resolves the speaker from environment (`$AGENT_CHAT_USER` / `$USER` / `users.yaml default`); `agent-chat speaker <name>` overrides for multi-user sessions. `agent-chat record-turn --user X --assistant Y` captures the turn as two CONVO.md sections on the appropriate `<speaker>-<agent>` edge. Idempotent retries via per-edge `recorded_turns.jsonl` ledger (sha256). Speaker switches emit recorded handoff sections to the prior edge. Privacy is an explicit non-goal — accountability is the audit trail. |
 | **Conversation archives that stay searchable** | Sealed leaves (`archives/leaf/`) preserve the verbatim transcript; SUMMARY.md captures the distilled knowledge with an *Expand for details about:* footer that signals what was compressed away. |
 | **DAG condensation** | Once leaves accumulate, fold N siblings at depth d into one parent at depth d+1 with a more abstract policy. Agent walks down via `search.ts expand --children`. |
@@ -140,44 +155,49 @@ fold into the same lossless-claw archive layer as everything else, so
 
 **Option A — Claude Code plugin marketplace (recommended):**
 
-The Claude Code install commands are **slash commands typed inside an
-active Claude Code session**, not shell commands. Start Claude Code in a
-terminal, then at the prompt type:
+Claude Code's plugin install commands are **slash commands typed inside
+an active Claude Code session**, not shell commands. Start Claude Code
+in a terminal, then at the prompt type the four-step install dance:
 
 ```
 /plugin marketplace add lumeyon/agent-chat
+/plugin install agent-chat@agent-chat-marketplace
+/reload-plugins
 ```
 
-Claude Code fetches `github.com/lumeyon/agent-chat`, reads the repo's
-`marketplace.json`, and registers `agent-chat` as an installable plugin.
-Then enable it:
+The marketplace name is `agent-chat-marketplace` (from the `name` field
+in `.claude-plugin/marketplace.json`), so `/plugin install ...@<name>`
+must reference that, not `@lumeyon/agent-chat`. Once installed, the
+plugin auto-loads its skill on every Claude Code session start. Run
+`agent-chat self-test` to verify the install:
 
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" self-test  # → 62/62 pass
 ```
-/plugin install agent-chat@lumeyon/agent-chat
-```
 
-(Use `/plugin --help` if you need to confirm the exact subcommand syntax
-for your Claude Code version.)
+`$AGENT_CHAT_DIR` resolves automatically via the bootstrap preamble in
+the SKILL.md to `~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/<version>/`.
 
-**For Codex** — the install IS a shell command (their CLI exposes it
-directly):
+**For Codex** (Round-15i runtime adapter is now implemented — `codex exec`
+is the non-interactive entrypoint):
 
 ```bash
 codex plugin marketplace add lumeyon/agent-chat
 ```
 
-**Note:** the Codex runtime adapter is a SKELETON until the empirical
-probe completes (see `docs/round-15b-codex-probe.md`). The plugin
-manifest installs cleanly on Codex but the dispatcher will throw
-`RUNTIME_NOT_IMPLEMENTED` until the probe lands.
+The marketplace add succeeds (clones the repo to
+`~/.codex/.tmp/marketplaces/agent-chat-marketplace/`), but Codex's
+plugin install lifecycle differs from Claude Code's — full per-plugin
+enable currently requires a manual `~/.codex/config.toml` entry:
 
-For per-project Codex installs (drop into `.agents/plugins` rather than
-the user-global tree):
-
-```bash
-cd /path/to/your/project
-codex plugin marketplace add lumeyon/agent-chat --sparse .agents/plugins
+```toml
+[plugins."agent-chat@agent-chat-marketplace"]
+enabled = true
 ```
+
+The runtime adapter itself works once the plugin is enabled. The
+empirical findings on Codex's install lifecycle live as comments at
+the top of `scripts/runtimes/codex.ts`.
 
 **Option B — Direct symlink (legacy, pre-plugin path):**
 
@@ -186,10 +206,10 @@ git clone https://github.com/lumeyon/agent-chat.git ~/git/agent-chat
 ln -s ~/git/agent-chat ~/.claude/skills/agent-chat
 ```
 
-Claude Code auto-discovers skills under `~/.claude/skills/`. The repo is
-the skill — no copy step, no build step, no install command. This works
-without the plugin marketplace flow but won't pick up future plugin-only
-features (per-runtime adapters, marketplace metadata, etc.).
+Claude Code auto-discovers skills under `~/.claude/skills/`. Works
+without the plugin marketplace flow but won't pick up the new
+`scripts/runtimes/<runtime>.ts` per-runtime adapters or marketplace
+metadata. The plugin path is preferred.
 
 ### 2. Tell each session who it is — in plain English
 
@@ -823,8 +843,17 @@ No setup, no extra dependencies — `bun test` from the repo root runs everythin
 [buntest]: https://bun.sh/docs/cli/test
 
 ```bash
-bun test
-# → 277 pass, 2 skip (gated LLM tests), 0 fail
+bun test plugins/agent-chat/tests/
+# → 363 pass, 2 skip (gated LLM tests), 0 fail
+```
+
+Plus three CLI-driven test surfaces that exercise different layers:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" self-test         # 62 hermetic checks (~5s)
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" network-test      # 205 Dot Collector checks at petersen-scale (~3s)
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" llm-smoke         # real claude -p directive parsing (~30-90s, ~$0.05)
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" integration-test  # real cmdRun + real LLM end-to-end (~30-90s, ~$0.05)
 ```
 
 The suite is organized in four layers:
