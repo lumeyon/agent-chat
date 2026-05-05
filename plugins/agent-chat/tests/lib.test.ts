@@ -293,16 +293,49 @@ describe("readAgentNameFile — `# comment` tolerance (lyra L3)", () => {
     const path = require("node:path");
     const os = require("node:os");
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-comment-"));
-    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    // Round-15i Item-7 hermeticity fix: resolveIdentity has THREE pre-file
+    // sources that must all miss for the .agent-name path to actually
+    // execute:
+    //   #1 SessionRecord at <conv>/.sessions/<currentSessionKey>.json
+    //      (currentSessionKey = $CLAUDE_SESSION_ID || pid:<parent-shell-pid>)
+    //   #2 $AGENT_NAME + $AGENT_TOPOLOGY env vars
+    //   #3 .agent-name file in cwd
+    // Pre-fix, the test cleared none of these, so when a developer ran it
+    // from inside a live agent-chat orion session (pid:42010 has a session
+    // record), source #1 silently won and the .agent-name parser was never
+    // exercised. False PASS that happened to give the right name/topology
+    // because both pointed at "orion/petersen". Now: route currentSessionKey
+    // to a fresh tmp dir + clear AGENT_NAME/AGENT_TOPOLOGY + force a
+    // CLAUDE_SESSION_ID with no record on disk.
+    const prevConv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    const prevName = process.env.AGENT_NAME;
+    const prevTopo = process.env.AGENT_TOPOLOGY;
+    const prevSid = process.env.CLAUDE_SESSION_ID;
     process.env.AGENT_CHAT_CONVERSATIONS_DIR = cwd;
+    process.env.CLAUDE_SESSION_ID = "lyra-l3-hermeticity-test-no-record";
+    delete process.env.AGENT_NAME;
+    delete process.env.AGENT_TOPOLOGY;
     fs.writeFileSync(path.join(cwd, ".agent-name"), "name: orion # main project\ntopology: petersen # graph\n");
     try {
-      const id = resolveIdentity(cwd);
+      // Bust the module cache so CONVERSATIONS_DIR re-evaluates against the
+      // tmp env. Without the bust, an earlier import in the test run would
+      // have CONVERSATIONS_DIR frozen to a different path — sessionFile()
+      // would look in the wrong dir and source #1 might still hit.
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}lyra-l3`);
+      const id = fresh.resolveIdentity(cwd);
       expect(id.name).toBe("orion");
       expect(id.topology).toBe("petersen");
+      // Hermeticity assertion: source MUST be the .agent-name file. If a
+      // future code change re-orders resolution or a parent-env regression
+      // sneaks in, this assertion will catch it instead of silently passing.
+      expect(id.source).toMatch(/agent-name/);
     } finally {
-      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
-      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      if (prevConv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevConv;
+      if (prevName != null) process.env.AGENT_NAME = prevName;
+      if (prevTopo != null) process.env.AGENT_TOPOLOGY = prevTopo;
+      if (prevSid == null) delete process.env.CLAUDE_SESSION_ID;
+      else process.env.CLAUDE_SESSION_ID = prevSid;
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });

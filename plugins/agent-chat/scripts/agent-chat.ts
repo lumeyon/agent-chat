@@ -393,17 +393,33 @@ function cmdInit(args: string[]): void {
 //
 // Returns the count of edges archived. Caller logs the summary so the
 // behavior is visible in `agent-chat exit` / `gc --auto-archive` stdout.
+// Round-15i Item-9 fix: boss-agent edges (and any other actively-flipping
+// edge) never land in turn=parked under normal record-turn flow, so the
+// pre-fix `if (turn !== "parked") continue` filter meant they grew without
+// bound. The fix: also archive ACTIVE edges past an ACTIVE threshold (4×
+// the parked threshold by default — 800 lines if parked threshold is 200).
+// archive.ts auto already keeps the last DEFAULT_FRESH_TAIL=4 sections
+// verbatim, so the active edge keeps continuity for the next turn while
+// older content is folded into a leaf archive — same lossless-claw rolling
+// pattern.
+const ACTIVE_THRESHOLD_MULTIPLIER = 4;
 function autoArchiveSessionEdges(rec: SessionRecord, threshold: number): number {
   const topo = (() => { try { return loadTopology(rec.topology); } catch { return null; } })();
   if (!topo) return 0;
   const edges = edgesOf(topo, rec.agent);
+  const activeThreshold = threshold * ACTIVE_THRESHOLD_MULTIPLIER;
   let archived = 0;
   for (const edge of edges) {
     if (!fs.existsSync(edge.convo)) continue;
-    if (readTurn(edge.turn) !== "parked") continue;
+    const turn = readTurn(edge.turn);
     let lines = 0;
     try { lines = fs.readFileSync(edge.convo, "utf8").split("\n").length; } catch { continue; }
-    if (lines < threshold) continue;
+    // Two gates: parked-AND-bloated past the regular threshold (e.g. 200), or
+    // active-AND-very-bloated past the active threshold (e.g. 800). Skip if
+    // neither applies — most ticks fall here.
+    const parkedAndBloated = turn === "parked" && lines >= threshold;
+    const activeAndVeryBloated = turn !== "parked" && lines >= activeThreshold;
+    if (!parkedAndBloated && !activeAndVeryBloated) continue;
     // Inherit the session's identity via env (CLAUDE_SESSION_ID + topology
     // override) so the spawned `archive.ts auto` resolveIdentity hits the
     // same record this session is operating under.
