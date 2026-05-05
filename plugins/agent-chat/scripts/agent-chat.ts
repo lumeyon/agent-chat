@@ -928,6 +928,16 @@ function cmdDots(args: string[]): void {
   }
 }
 
+async function cmdIntegrationTest(args: string[]): Promise<void> {
+  // Round-15j-A: end-to-end pipeline smoke. Spawns a real claude -p
+  // through cmdRun against a synthetic two-agent setup, asserts the
+  // section-append + turn-flip + dot-persistence side effects.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/integration-test.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
 async function cmdLlmSmoke(args: string[]): Promise<void> {
   // Round-15i Items 3-5: shells out to real claude -p with controlled
   // prompts and verifies the directive-parser regexes (used in cmdRun)
@@ -1925,6 +1935,7 @@ switch (cmd) {
   case "self-test":    void cmdSelfTest(rest); break;
   case "network-test": void cmdNetworkTest(rest); break;
   case "llm-smoke":    void cmdLlmSmoke(rest); break;
+  case "integration-test": void cmdIntegrationTest(rest); break;
   case "role":         cmdRole(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
