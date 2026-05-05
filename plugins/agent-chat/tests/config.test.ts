@@ -108,3 +108,146 @@ describe("Round 15g — CONVERSATIONS_DIR resolution order", () => {
     }
   });
 });
+
+describe("Round 15k Item-8 — configurable Dot axes via config.json", () => {
+  const PRINT_AXES = `import('${LIB_PATH}').then(m => console.log(JSON.stringify({axes: m.DOT_AXES, defaults: m.DEFAULT_DOT_AXES, cfg: m.CONFIG.dot_axes})))`;
+
+  function runAxes(home: string) {
+    const env: Record<string, string> = { ...(process.env as any), HOME: home };
+    delete env.AGENT_CHAT_CONVERSATIONS_DIR;
+    const r = spawnSync("bun", ["-e", PRINT_AXES], { env, encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`bun child exited ${r.status}: ${r.stderr}`);
+    return JSON.parse(r.stdout.trim().split("\n").pop()!);
+  }
+
+  test("default DOT_AXES is the 4-axis Dalio set when config absent", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-default-"));
+    try {
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["clarity", "depth", "reliability", "speed"]);
+      expect(out.defaults).toEqual(["clarity", "depth", "reliability", "speed"]);
+      expect(out.cfg).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes overrides default", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-custom-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+        dot_axes: ["creativity", "rigor", "specificity", "openness"],
+      }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["creativity", "rigor", "specificity", "openness"]);
+      expect(out.cfg).toEqual(["creativity", "rigor", "specificity", "openness"]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes accepts 1-axis minimum", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-1-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({ dot_axes: ["correctness"] }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["correctness"]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes accepts 8-axis maximum", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-8-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      const eight = ["a", "b", "c", "d", "e", "f", "g", "h"];
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({ dot_axes: eight }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(eight);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes > 8 entries falls back to defaults (with warning)", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-toomany-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({ dot_axes: nine }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["clarity", "depth", "reliability", "speed"]);
+      expect(out.cfg).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes with bad name (special chars) falls back to defaults", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-badname-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+        dot_axes: ["valid", "with space", "bad/slash"],
+      }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["clarity", "depth", "reliability", "speed"]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("config.json dot_axes with duplicates falls back to defaults", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-dup-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+        dot_axes: ["clarity", "clarity", "depth"],
+      }));
+      const out = runAxes(tmp);
+      expect(out.axes).toEqual(["clarity", "depth", "reliability", "speed"]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("aggregateDots respects custom axes (not the 4 hardcoded)", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-axes-agg-"));
+    try {
+      const cfgDir = path.join(tmp, ".claude/data/agent-chat");
+      fs.mkdirSync(cfgDir, { recursive: true });
+      fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+        dot_axes: ["correctness", "speed"],
+      }));
+      // Plant a dot directly in the conv dir, then aggregate via subprocess.
+      const convDir = path.join(tmp, ".claude/data/agent-chat/conversations");
+      const dotsDir = path.join(convDir, ".dots");
+      fs.mkdirSync(dotsDir, { recursive: true });
+      fs.writeFileSync(path.join(dotsDir, "alice.jsonl"),
+        JSON.stringify({ ts: "x", grader: "bob", axes: { correctness: 9, speed: 7 } }) + "\n");
+      const probe = `import('${LIB_PATH}').then(m => console.log(JSON.stringify(m.aggregateDots('alice'))))`;
+      const env: Record<string, string> = { ...(process.env as any), HOME: tmp };
+      delete env.AGENT_CHAT_CONVERSATIONS_DIR;
+      const r = spawnSync("bun", ["-e", probe], { env, encoding: "utf8" });
+      const agg = JSON.parse(r.stdout.trim().split("\n").pop()!);
+      expect(agg.count).toBe(1);
+      expect(agg.weighted.correctness).toBeGreaterThan(0);
+      expect(agg.weighted.speed).toBeGreaterThan(0);
+      // The default axes (depth, reliability, clarity) should NOT appear in
+      // the aggregate when config overrides them.
+      expect(agg.weighted.clarity).toBeUndefined();
+      expect(agg.weighted.depth).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});

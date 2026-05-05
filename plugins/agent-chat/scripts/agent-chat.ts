@@ -867,8 +867,11 @@ function cmdDot(args: string[]): void {
   // Fill any unprovided axes with neutral (5) so aggregation has a number.
   // This matches Dalio's DC where every dot covers every dimension; agents
   // who only want to grade one axis can default the rest to 5 (no signal).
-  const fullAxes: Record<DotAxis, number> = { clarity: 5, depth: 5, reliability: 5, speed: 5 };
-  for (const a of DOT_AXES) if (axes[a] != null) fullAxes[a] = axes[a];
+  // DOT_AXES is config-driven (Round-15k Item-8), so the default-5 init
+  // walks the runtime list — works whether axes are the 4 defaults or a
+  // user-configured set of 1-8 named axes.
+  const fullAxes: Record<string, number> = {};
+  for (const a of DOT_AXES) fullAxes[a] = axes[a] ?? 5;
   const dot: Dot = { ts: utcStamp(), grader: id.name, axes: fullAxes, note };
   appendDot(peer, dot);
   console.log(`✓ dot recorded: ${id.name} → ${peer}: ${DOT_AXES.map(a => `${a}=${fullAxes[a]}`).join(" ")}${note ? ` (${note})` : ""}`);
@@ -1602,8 +1605,8 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         // routing decisions can weight by demonstrated competence.
         `If you want to grade ${edge.peer}'s recent contribution (Dot Collector — ` +
         `Dalio-inspired multi-axis peer rating), append ` +
-        `<dot peer="${edge.peer}" clarity="N" depth="N" reliability="N" speed="N" note="why" /> ` +
-        `where N is 1-10 per axis. Self-grading is refused. ` +
+        `<dot peer="${edge.peer}" ${DOT_AXES.map(a => `${a}="N"`).join(" ")} note="why" /> ` +
+        `where N is 1-10 per axis (axes: ${DOT_AXES.join(", ")}). Self-grading is refused. ` +
         // Round-15k Item-7: <role> directive — self-update your specialty
         // declaration so peers learn what you do well now. Body is the new
         // role text (overwrites any existing override); empty body clears
@@ -1755,8 +1758,11 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       } else if (!topo.agents.includes(peer)) {
         console.error(`[agent-chat run] dot directive refused: "${peer}" not in topology ${id.topology}`);
       } else {
-        const axes: Record<DotAxis, number> = { clarity: 5, depth: 5, reliability: 5, speed: 5 };
+        // Round-15k Item-8: axes is config-driven; init each runtime axis
+        // to neutral 5, then override with any value parsed from attrs.
+        const axes: Record<string, number> = {};
         for (const ax of DOT_AXES) {
+          axes[ax] = 5;
           const am = attrs.match(new RegExp(`${ax}=["']?(\\d+(?:\\.\\d+)?)["']?`, "i"));
           if (am) {
             const v = Number(am[1]);

@@ -102,9 +102,24 @@ export const SKILL_ROOT = path.resolve(
 //
 // Schema (fields are all optional):
 //   {
-//     "conversations_dir": "/absolute/path/for/shared/state"
+//     "conversations_dir": "/absolute/path/for/shared/state",
+//     "dot_axes": ["clarity", "depth", "reliability", "speed"]
 //   }
-export type AgentChatConfig = { conversations_dir?: string };
+//
+// dot_axes (Round-15k Item-8): override the four-axis Dot Collector default
+// with a user-chosen set. Useful when an organization wants different
+// believability dimensions (e.g. ["creativity", "rigor", "specificity",
+// "openness"] for an R&D mesh, or ["correctness", "completeness", "speed"]
+// for a code-review mesh). Constraints:
+//   - 1-8 axes (anything more bloats the cmdRun prompt)
+//   - each axis name 1-32 chars, [a-z0-9_-]+ (filesystem + regex safe)
+//   - all 10 agents must agree (read from the same config.json — that's why
+//     it lives at user-global ~/.claude/data/agent-chat/config.json)
+// If invalid, falls through to the default 4-axis set with a warning.
+export type AgentChatConfig = {
+  conversations_dir?: string;
+  dot_axes?: string[];
+};
 export const CONFIG_PATH = path.join(
   os.homedir(),
   ".claude",
@@ -127,6 +142,21 @@ function loadConfig(): AgentChatConfig {
         console.warn(`[agent-chat] config.conversations_dir must be an absolute path string, ignoring`);
       } else {
         cfg.conversations_dir = parsed.conversations_dir;
+      }
+    }
+    if (parsed.dot_axes != null) {
+      const arr = parsed.dot_axes;
+      const AXIS_NAME_RE = /^[a-z0-9_-]{1,32}$/i;
+      if (!Array.isArray(arr)) {
+        console.warn(`[agent-chat] config.dot_axes must be an array, ignoring`);
+      } else if (arr.length < 1 || arr.length > 8) {
+        console.warn(`[agent-chat] config.dot_axes must have 1-8 entries (got ${arr.length}), ignoring`);
+      } else if (!arr.every((a) => typeof a === "string" && AXIS_NAME_RE.test(a))) {
+        console.warn(`[agent-chat] config.dot_axes entries must each be a 1-32 char [a-z0-9_-] string, ignoring`);
+      } else if (new Set(arr).size !== arr.length) {
+        console.warn(`[agent-chat] config.dot_axes contains duplicates, ignoring`);
+      } else {
+        cfg.dot_axes = arr.map((a: string) => a.toLowerCase());
       }
     }
     return cfg;
@@ -675,13 +705,21 @@ export function clearRoleOverride(agent: string): boolean {
 // is the grader's believability. Returned alongside the unweighted mean
 // for comparison.
 export const DOTS_DIR = path.join(CONVERSATIONS_DIR, ".dots");
-export const DOT_AXES = ["clarity", "depth", "reliability", "speed"] as const;
-export type DotAxis = typeof DOT_AXES[number];
+
+// Round-15k Item-8: DOT_AXES is config-driven. Defaults to the original
+// Dalio-inspired 4-axis set ("clarity", "depth", "reliability", "speed"),
+// overridden by config.json `dot_axes` (validated at module load — see
+// loadConfig). The type widened from a discriminated union to plain string
+// so the runtime list is the source of truth; invalid axes are still caught
+// at appendDot/CLI/directive parse time against the runtime DOT_AXES list.
+export const DEFAULT_DOT_AXES = ["clarity", "depth", "reliability", "speed"] as const;
+export const DOT_AXES: readonly string[] = CONFIG.dot_axes ?? DEFAULT_DOT_AXES;
+export type DotAxis = string;
 
 export type Dot = {
   ts: string;
   grader: string;
-  axes: Record<DotAxis, number>;
+  axes: Record<string, number>;
   note?: string;
 };
 
@@ -747,27 +785,23 @@ export function computeBelievability(allDots: Record<string, Dot[]> = readAllDot
 
 export type DotAggregate = {
   count: number;
-  unweighted: Record<DotAxis, number>; // mean per axis
-  weighted: Record<DotAxis, number>;   // believability-weighted mean per axis
-  composite: number;                   // mean across axes of `weighted`, in [0, 10]
+  unweighted: Record<string, number>; // mean per axis (key = axis name from DOT_AXES)
+  weighted: Record<string, number>;   // believability-weighted mean per axis
+  composite: number;                  // mean across axes of `weighted`, in [0, 10]
 };
 
 export function aggregateDots(peer: string, allDots?: Record<string, Dot[]>): DotAggregate {
   const all = allDots ?? readAllDots();
   const dots = all[peer] ?? [];
   const believability = computeBelievability(all);
-  const empty: Record<DotAxis, number> = { clarity: 0, depth: 0, reliability: 0, speed: 0 };
+  const empty: Record<string, number> = {};
+  for (const a of DOT_AXES) empty[a] = 0;
   if (dots.length === 0) {
     return { count: 0, unweighted: { ...empty }, weighted: { ...empty }, composite: 0 };
   }
-  const uw: Record<DotAxis, { sum: number; n: number }> = {
-    clarity: { sum: 0, n: 0 }, depth: { sum: 0, n: 0 },
-    reliability: { sum: 0, n: 0 }, speed: { sum: 0, n: 0 },
-  };
-  const wt: Record<DotAxis, { sum: number; w: number }> = {
-    clarity: { sum: 0, w: 0 }, depth: { sum: 0, w: 0 },
-    reliability: { sum: 0, w: 0 }, speed: { sum: 0, w: 0 },
-  };
+  const uw: Record<string, { sum: number; n: number }> = {};
+  const wt: Record<string, { sum: number; w: number }> = {};
+  for (const a of DOT_AXES) { uw[a] = { sum: 0, n: 0 }; wt[a] = { sum: 0, w: 0 }; }
   for (const d of dots) {
     const w = believability[d.grader] ?? 0.5;
     for (const a of DOT_AXES) {
@@ -778,13 +812,15 @@ export function aggregateDots(peer: string, allDots?: Record<string, Dot[]>): Do
       }
     }
   }
-  const unweighted: Record<DotAxis, number> = { ...empty };
-  const weighted: Record<DotAxis, number> = { ...empty };
+  const unweighted: Record<string, number> = { ...empty };
+  const weighted: Record<string, number> = { ...empty };
+  let compositeSum = 0;
   for (const a of DOT_AXES) {
     unweighted[a] = uw[a].n > 0 ? uw[a].sum / uw[a].n : 0;
     weighted[a] = wt[a].w > 0 ? wt[a].sum / wt[a].w : 0;
+    compositeSum += weighted[a];
   }
-  const composite = (weighted.clarity + weighted.depth + weighted.reliability + weighted.speed) / 4;
+  const composite = DOT_AXES.length > 0 ? compositeSum / DOT_AXES.length : 0;
   return { count: dots.length, unweighted, weighted, composite };
 }
 
