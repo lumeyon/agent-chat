@@ -35,14 +35,19 @@ describe("Round 15b — plugin manifest validity", () => {
   });
 
   test("marketplace.json declares agent-chat as a plugin entry", () => {
-    const p = path.join(SKILL_ROOT, "marketplace.json");
+    // Claude Code's /plugin marketplace add expects the marketplace.json
+    // at .claude-plugin/marketplace.json (inside the manifest dir), not
+    // at the repo root. The plugins[].source path is therefore relative
+    // to .claude-plugin/, so "../" points at the repo root where the
+    // skill content lives.
+    const p = path.join(SKILL_ROOT, ".claude-plugin/marketplace.json");
     expect(fs.existsSync(p)).toBe(true);
     const m = JSON.parse(fs.readFileSync(p, "utf8"));
     expect(Array.isArray(m.plugins)).toBe(true);
     expect(m.plugins.length).toBeGreaterThanOrEqual(1);
     const ac = m.plugins.find((p: any) => p.name === "agent-chat");
     expect(ac).toBeDefined();
-    expect(ac?.source).toBe("./");
+    expect(ac?.source).toBe("../");
   });
 
   test("Claude + Codex manifests share name + version (dual-runtime invariant)", () => {
