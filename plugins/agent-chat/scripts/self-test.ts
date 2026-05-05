@@ -326,6 +326,36 @@ scenario("Round-15h Concern-4 — relay path BFS for non-neighbor routing", () =
   }
 });
 
+scenario("Round-15i Item-6 — loop-driver --interactive exits cleanly when idle", () => {
+  // Spawn loop-driver in interactive mode with 1s cadence. With no edges
+  // flipped to me, singleTickPass returns idle, so 3 consecutive idle ticks
+  // kick in and the loop exits within ~6-8s. Cap at 15s to fail fast on
+  // a regression that loops forever. AGENT_CHAT_NO_LLM=1 short-circuits
+  // any LLM call cmdRun might attempt, keeping the test hermetic.
+  const start = Date.now();
+  const r = spawnSync("bun", [
+    path.join(SKILL_ROOT, "scripts/loop-driver.ts"),
+    "--interactive",
+    "--interactive-tick-seconds", "1",
+  ], {
+    encoding: "utf8",
+    timeout: 15_000,
+    env: {
+      ...(process.env as Record<string, string>),
+      ...orionEnv,
+      AGENT_CHAT_NO_LLM: "1",
+      AGENT_CHAT_LOOP_MOCK_WAKEUP: "1",
+    },
+  });
+  const elapsed = Date.now() - start;
+  check("loop-driver --interactive exits 0 (clean termination)", r.status === 0,
+    `status=${r.status} stderr=${(r.stderr ?? "").slice(0, 200)}`);
+  check("exited within 12s (no infinite loop)", elapsed < 12_000, `elapsed=${elapsed}ms`);
+  check("stderr logs '3 consecutive idle ticks'",
+    /3 consecutive idle ticks/.test(r.stderr ?? ""),
+    `stderr=${(r.stderr ?? "").slice(0, 300)}`);
+});
+
 scenario("Round-15h Concern-1 — per-tick auto-archive trigger (smoke)", () => {
   // The full archive cycle requires a runClaude shell-out which we can't
   // do in a hermetic test. Smoke-check: autoArchiveSessionEdges is callable
