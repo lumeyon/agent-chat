@@ -928,6 +928,17 @@ function cmdDots(args: string[]): void {
   }
 }
 
+async function cmdLlmSmoke(args: string[]): Promise<void> {
+  // Round-15i Items 3-5: shells out to real claude -p with controlled
+  // prompts and verifies the directive-parser regexes (used in cmdRun)
+  // actually fire on real LLM output. Skips gracefully if `claude`
+  // isn't on PATH.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/llm-smoke.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
 async function cmdNetworkTest(args: string[]): Promise<void> {
   // Round-15h follow-up: full-mesh Dot Collector verification on petersen.
   // Spawns scripts/network-test.ts which plants 30 dots across all 10 AI
@@ -1913,6 +1924,7 @@ switch (cmd) {
   case "run":          void cmdRun(rest); break;
   case "self-test":    void cmdSelfTest(rest); break;
   case "network-test": void cmdNetworkTest(rest); break;
+  case "llm-smoke":    void cmdLlmSmoke(rest); break;
   case "role":         cmdRole(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
@@ -1973,6 +1985,13 @@ switch (cmd) {
       `      aggregation, full-roster visibility, BFS relay paths for all\n` +
       `      45 AI-pairs, and role-override propagation. ~205 checks; exits 0\n` +
       `      on all-pass.\n\n` +
+      `  llm-smoke\n` +
+      `      Real-LLM directive parsing smoke test. Shells out to \`claude -p\`\n` +
+      `      with strict verbatim-output prompts asking the LLM to emit each\n` +
+      `      directive shape (<dot/>, <dispatch>, <scratch>, <archive>), then\n` +
+      `      verifies the same regex used in cmdRun fires on the real output.\n` +
+      `      Catches LLM-vs-parser drift. Costs ~4 LLM calls. Skips gracefully\n` +
+      `      if \`claude\` not on PATH or AGENT_CHAT_NO_LLM=1.\n\n` +
       `  role <get|set|clear|list> [<agent>] [--stdin | --from-file <path>]\n` +
       `      Round-15h Concern-2: agent-managed role overrides. \`get [<agent>]\`\n` +
       `      prints the active role (override > YAML default). \`set\` (with\n` +
