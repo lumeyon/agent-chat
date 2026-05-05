@@ -74,14 +74,38 @@ describe("Round 15b — runtime adapter signatures", () => {
     expect(m.RUNTIME_NAME).toBe("claude");
   });
 
-  test("scripts/runtimes/codex.ts exports dispatch + scheduleWakeup + RUNTIME_NAME (skeleton; throws)", async () => {
+  test("scripts/runtimes/codex.ts exports dispatch + scheduleWakeup + RUNTIME_NAME (Round-15i implementation)", async () => {
     const m = await import("../scripts/runtimes/codex.ts");
     expect(typeof m.dispatch).toBe("function");
     expect(typeof m.scheduleWakeup).toBe("function");
     expect(m.RUNTIME_NAME).toBe("codex");
-    // Skeleton — calling either throws RUNTIME_NOT_IMPLEMENTED.
-    await expect(m.dispatch({ prompt: "test" })).rejects.toThrow(/not yet implemented/);
-    expect(() => m.scheduleWakeup("test")).toThrow(/not yet implemented/);
+    // Round-15i: codex.ts now implements dispatch via `codex exec`.
+    // Verify the AGENT_CHAT_NO_LLM=1 short-circuit path so we don't have
+    // to spawn the real CLI in tests.
+    const prevNoLlm = process.env.AGENT_CHAT_NO_LLM;
+    process.env.AGENT_CHAT_NO_LLM = "1";
+    try {
+      const r = await m.dispatch({ prompt: "test" });
+      expect(r.stdout).toBeNull();
+      expect(r.reason).toBe("not-found");
+    } finally {
+      if (prevNoLlm == null) delete process.env.AGENT_CHAT_NO_LLM;
+      else process.env.AGENT_CHAT_NO_LLM = prevNoLlm;
+    }
+    // scheduleWakeup mock-mode emits the same WOULD_WAKE format as Claude.
+    const prevMock = process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP;
+    process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP = "1";
+    const captured: string[] = [];
+    const origLog = console.log;
+    console.log = (msg: string) => captured.push(msg);
+    try {
+      m.scheduleWakeup("test reason");
+      expect(captured).toEqual(["WOULD_WAKE delay_seconds=270 reason=test reason"]);
+    } finally {
+      console.log = origLog;
+      if (prevMock == null) delete process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP;
+      else process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP = prevMock;
+    }
   });
 
   test("Both runtime adapters have symmetric dispatch + scheduleWakeup signatures", async () => {
