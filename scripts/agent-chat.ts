@@ -33,6 +33,7 @@ import {
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
+  computeDiameter, readScratch, writeScratch, scratchPath, SCRATCH_DIR,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
@@ -1395,11 +1396,26 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   // sidecar_version, file-checklist-doc-lies, NO_LLM-footgun. Phase-5
   // resolution: drop the flag entirely so CLI surface matches code
   // semantics. For self-scheduling, run `bun scripts/loop-driver.ts`.
-  const opts = { unsafe: false, peers: [] as string[], speaker: null as string | null };
+  const opts = {
+    unsafe: false,
+    peers: [] as string[],
+    speaker: null as string | null,
+    // Round-15d: sub-relay activation. When a peer agent dispatches to one
+    // of its own neighbors (e.g. carina → lumeyon), --sub-relay-from
+    // names the dispatching parent. cmdRun uses this to:
+    //   (a) refuse cycles (lumeyon → carina when carina was the parent),
+    //   (b) bound chain depth ≤ topology.diameter,
+    //   (c) tag the resulting CONVO.md section with sub-relay provenance.
+    // The flag value is a comma-separated chain (most-recent first):
+    //   "carina,orion" means carina dispatched me, who was originally
+    //   dispatched by orion. Empty/absent = top-level dispatch.
+    subRelayFrom: null as string | null,
+  };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--unsafe") opts.unsafe = true;
     else if (a === "--speaker") opts.speaker = args[++i] ?? null;
+    else if (a === "--sub-relay-from") opts.subRelayFrom = args[++i] ?? null;
     else if (!a.startsWith("--")) opts.peers.push(a);
   }
   // Reentrancy guard: refuse if we're already inside an LLM call. The
@@ -1431,6 +1447,32 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
     console.error(`[agent-chat run] no target edges (peer filter: ${opts.peers.join(",") || "none"}).`);
     return { workDone: false, pending: 0 };
   }
+
+  // Round-15d: sub-relay validation. If we're being dispatched as a sub-
+  // relay (parent in opts.subRelayFrom), enforce two invariants:
+  //   1. Cycle refusal: my own name must NOT appear in the chain.
+  //   2. Depth ≤ topology.diameter: longer chains hit a graph property
+  //      that says "you can reach the same destination via fewer hops",
+  //      so deeper recursion is wasted (or a cycle).
+  let subRelayChain: string[] = [];
+  if (opts.subRelayFrom) {
+    subRelayChain = opts.subRelayFrom.split(",").map((s) => s.trim()).filter(Boolean);
+    if (subRelayChain.includes(id.name)) {
+      die(`refuse: sub-relay cycle detected. My agent name "${id.name}" already appears in chain "${opts.subRelayFrom}". A→B→A would cycle.`, 67);
+    }
+    const diameter = computeDiameter(topo);
+    if (subRelayChain.length >= diameter) {
+      die(`refuse: sub-relay chain depth ${subRelayChain.length} ≥ topology diameter ${diameter}. Deeper chains hit a graph property that says the same destination is reachable in fewer hops.`, 68);
+    }
+    console.error(`[agent-chat run] sub-relay: chain=[${subRelayChain.join(", ")}] depth=${subRelayChain.length} max=${diameter}`);
+  }
+
+  // Round-15d: read the agent's autobiographical scratchpad. This is the
+  // structural answer to "the same agent must know context from the
+  // distant past" under ephemeral-only execution. Empty for first-run
+  // agents; populated agents have their cross-tick relationship summary
+  // here. Caller composes prompt with scratchpad prepended.
+  const scratchContent = readScratch(id.name);
 
   // Lazy-import safety + runClaude — keeps cmdRun decoupled from optional deps.
   const { detectDestructive } = await import("./safety.ts");
@@ -1474,18 +1516,50 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       pending++;
       continue;
     }
-    // Compose continuation prompt: last few peer sections from CONVO.md.
+    // Compose continuation prompt: scratchpad (autobiographical memory) +
+    // last few peer sections from CONVO.md.
     let prompt = "";
     try {
       const convoText = fs.readFileSync(edge.convo, "utf8");
       const { sections } = parseSections(convoText);
       const tail = sections.slice(-4).join("\n\n");
+      const scratchBlock = scratchContent
+        ? `Your persistent scratchpad (your own autobiographical memory across all relationships, written by past invocations of yourself):\n\n${scratchContent}\n\n---\n\n`
+        : "";
+      const subRelayBlock = subRelayChain.length > 0
+        ? `Sub-relay context: dispatched as part of chain [${subRelayChain.join(" → ")} → ${id.name}]. Original dispatcher is "${subRelayChain[subRelayChain.length - 1]}".\n\n`
+        : "";
       prompt =
         `You are agent "${id.name}" in topology "${id.topology}", currently in conversation with "${edge.peer}".\n\n` +
+        scratchBlock +
+        subRelayBlock +
         `Recent conversation tail (last 4 sections):\n\n${tail}\n\n` +
         `Compose your response as a single Markdown section beginning with the canonical header ` +
         `"## ${id.name} — <topic> (UTC <stamp>)" and ending with "→ ${edge.peer}" or "→ parked". ` +
-        `Output the section verbatim, no preamble.`;
+        `Output the section verbatim, no preamble.\n\n` +
+        // Round-15d: agent-managed memory directives. The agent may
+        // optionally append two structured blocks AFTER the section:
+        //
+        // <scratch>
+        //   <new contents of your scratchpad — your autobiographical
+        //    memory for this relationship and others. Capped at 8KB.>
+        // </scratch>
+        //
+        // <archive>
+        //   sections: <count of recent CONVO.md sections to seal as a
+        //              leaf archive. e.g. "12" or "20-30">
+        //   summary: <your own summary of what those sections covered.
+        //            Used verbatim as the archive's SUMMARY.md content.>
+        // </archive>
+        //
+        // Both blocks are OPTIONAL. Omit them if no scratchpad update or
+        // archive is needed this tick. cmdRun parses them after extracting
+        // the canonical section.
+        `If you want to update your scratchpad or archive prior sections, ` +
+        `append <scratch>...</scratch> and/or <archive>sections: N\\nsummary: ...</archive> ` +
+        `blocks AFTER the section. Both are optional. The scratchpad is your ` +
+        `own memory across ticks; the archive request seals N prior CONVO.md sections ` +
+        `with your summary as the load-bearing record.`;
     } catch (err) {
       console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
       continue;
@@ -1530,12 +1604,39 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
       continue;
     }
+    // Round-15d: parse agent-managed memory directives BEFORE the section
+    // append. The agent's response may include <scratch>...</scratch> and/or
+    // <archive>...</archive> blocks AFTER the canonical section. We extract
+    // them, persist their effects, and strip them from the section before
+    // appending to CONVO.md (the directives are runtime metadata, not
+    // part of the conversation).
+    let stdout = r.stdout;
+    let scratchUpdate: string | null = null;
+    let archiveDirective: { sections: number; summary: string } | null = null;
+    const scratchMatch = stdout.match(/<scratch>([\s\S]*?)<\/scratch>/);
+    if (scratchMatch) {
+      scratchUpdate = scratchMatch[1].trim();
+      stdout = stdout.replace(scratchMatch[0], "").trim();
+    }
+    const archiveMatch = stdout.match(/<archive>([\s\S]*?)<\/archive>/);
+    if (archiveMatch) {
+      const body = archiveMatch[1].trim();
+      const sectionsLine = body.match(/sections:\s*(\d+)/);
+      const summaryLine = body.match(/summary:\s*([\s\S]*?)$/m);
+      if (sectionsLine && summaryLine) {
+        const n = parseInt(sectionsLine[1], 10);
+        if (Number.isFinite(n) && n > 0) {
+          archiveDirective = { sections: n, summary: summaryLine[1].trim() };
+        }
+      }
+      stdout = stdout.replace(archiveMatch[0], "").trim();
+    }
     // Append the section + flip turn to peer + unlock.
     try {
       // Sanity: section must end with a "→ <next>" line so the turn flip
       // matches the section semantics. If runClaude omitted it, append
       // "→ <peer>" on a new line.
-      const tail = r.stdout.trimEnd();
+      const tail = stdout.trimEnd();
       const hasArrow = /\n→\s+\S+\s*$/.test(tail);
       const sectionText = hasArrow ? tail + "\n" : tail + `\n\n→ ${edge.peer}\n`;
       fs.appendFileSync(edge.convo, "\n---\n\n" + sectionText);
@@ -1549,6 +1650,47 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
       console.log(`[agent-chat run] processed ${edge.id} → flipped to ${edge.peer}`);
       workDone = true;
+      // Round-15d: persist agent-managed memory directives AFTER successful
+      // section append. Failures here are non-blocking — the conversation
+      // is intact; missing scratchpad update or archive seal can be retried
+      // next tick.
+      if (scratchUpdate != null) {
+        try {
+          writeScratch(id.name, scratchUpdate);
+          console.log(`[agent-chat run] scratchpad updated for ${id.name} (${scratchUpdate.length} bytes)`);
+        } catch (err) {
+          console.error(`[agent-chat run] scratchpad write failed: ${(err as Error).message}`);
+        }
+      }
+      if (archiveDirective) {
+        // Round-15d-α: archive directive is PARSED here but execution is
+        // deferred to Round-15d-β. The agent's authored summary is
+        // persisted to a pending-archive scratch file so the integration
+        // commit can pick it up without losing the agent's intent.
+        // Round-15d-β will: (a) add `--seal-count N --agent-summary`
+        // flags to archive.ts auto so the agent's words become the
+        // canonical SUMMARY.md (bypassing the deterministic synthesizer)
+        // and (b) trigger the auto-archive call here.
+        try {
+          fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+          const pendingPath = path.join(SCRATCH_DIR, `pending-archive-${id.name}-${edge.peer}-${Date.now()}.md`);
+          const contents = `# Pending archive directive (Round-15d-α; integration deferred to 15d-β)
+edge: ${edge.id}
+agent: ${id.name}
+peer: ${edge.peer}
+sections_to_seal: ${archiveDirective.sections}
+captured_at: ${new Date().toISOString()}
+
+---
+
+${archiveDirective.summary}
+`;
+          fs.writeFileSync(pendingPath, contents, { mode: 0o600 });
+          console.log(`[agent-chat run] archive directive captured: ${archiveDirective.sections} sections; pending at ${pendingPath}`);
+        } catch (err) {
+          console.error(`[agent-chat run] archive directive capture failed: ${(err as Error).message}`);
+        }
+      }
     } catch (err) {
       console.error(`[agent-chat run] append/flip failed for ${edge.id}: ${(err as Error).message}`);
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}

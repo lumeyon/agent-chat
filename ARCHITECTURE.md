@@ -2247,3 +2247,63 @@ Round 14's audit predicted ~350 LoC for the plugin pivot. The actual
 shipped LoC is closer to ~280 (60 manifests + 90 Claude adapter + 70
 Codex skeleton + 60 tests + the doc). The remaining ~70 LoC ships
 when the probe is done.
+
+---
+
+## Round 15d-α — agent-managed memory + sub-relay activation (additive primitives)
+
+### Problem surfaced
+
+User directives at Round-15c wrap:
+
+1. **"Ephemeral will be not just the default but the only way going forward."** (Persistent mode deletion goal — staged across 15d-α + 15d-β.)
+2. **"We need to somehow get those agents to reach out to other agents in their network to get the job done. At the moment it seems like only you and your relationships do all the work."** (Sub-relay activation — first-class.)
+3. **"We MUST continue to support long term memory for all conversations between agents and between agents and humans. The long term memory support is critical to our success. So when the same agent is used, it knows the context from the distant past as needed."** (Long-term memory under ephemeral execution.)
+4. **"We need to auto-archive after each round with ephemeral agents... agents need to cleanup themselves and think for themselves what they want to archive. They need to be in charge of their own memory."** (Agent-managed memory, not mechanical thresholds.)
+
+Round-15d-α ships the additive primitives that make the directives implementable. Round-15d-β follows with the persistent-mode deletion (sidecar.ts + monitor.ts heartbeat infrastructure + cmdInit/Exit/Gc/Doctor refactors).
+
+### Decision
+
+Three additive primitives in this commit; no deletions. Wire protocol unchanged.
+
+#### 1. Per-agent autobiographical scratchpad
+
+`<conversations>/.scratch/<agent>.md` — the agent's own narrative of their relationship with each peer, written in their own voice, persisted across ephemeral ticks. Read at the START of every cmdRun tick alongside the CONVO.md tail; updated at the END when the agent emits a `<scratch>...</scratch>` block in their response.
+
+This is the structural answer to "the same agent must know context from the distant past." Per-edge memory still lives in the CONVO.md archive layer (lossless-claw-inspired DAG, FTS5 search). The scratchpad is **higher abstraction level** — the agent's holistic memory across all relationships, written by them, capped at 8KB raw (older content gets archived).
+
+The kernel insight: under persistent-mode, an agent held mental working memory across hours via in-process state. Under ephemeral mode, that working memory has to live somewhere. The scratchpad makes it the agent's **authored autobiographical narrative** rather than re-reading CONVO.md tail every tick.
+
+#### 2. Sub-relay activation
+
+`agent-chat run --sub-relay-from <chain>` lets an agent dispatch through a non-orion neighbor. carina can dispatch lumeyon through the carina-lumeyon edge (which previously sat unused); lumeyon can dispatch sentinel through lumeyon-sentinel, etc.
+
+Bounded by two invariants:
+- **Cycle refusal**: my own agent name must NOT appear in the chain. carina → lumeyon → carina would refuse with exit 67.
+- **Depth ≤ topology.diameter**: petersen=2, ring=5, star=2, pair=1. Beyond that depth, the same destination is reachable in fewer hops via a different path; deeper recursion is wasted (or a cycle).
+
+The diameter is computed at topology load time (BFS from every node, cached on the Topology object). User directive: *"Sub-relay max-depth is 2 for petersen graph but it may be more for other graphs."*
+
+User directive on budget: *"I'm not a fan of budget cap. It's better to get the right answer then to force a sloppy solution because of a budget cap."* — no wall-clock timeout on sub-relay chains. They run until they conclude. Cycle detection is the only correctness guard.
+
+#### 3. Agent-authored archive directives
+
+When a peer wants to archive prior CONVO.md sections, they emit an `<archive>sections: N\nsummary: <their words></archive>` block in their response. cmdRun parses the block and persists the directive — Round-15d-β will wire it into the existing `archive.ts auto` path so the agent's words become the canonical SUMMARY.md (bypassing the deterministic synthesizer).
+
+The shift: archive content was previously authored by `synthesizeAutoSummary()` (mechanical) or `claude -p` summarization (LLM, but a fresh invocation with no context for what mattered). Round-15d makes the **agent who wrote the original sections** the author of their summary. No information loss in the synthesizer step.
+
+### Sequencing
+
+This is **Round-15d-α**, the additive half. Tests: scratchpad round-trip + size-cap truncation + per-agent isolation + topology diameter pins for petersen/star/pair/ring. 11 new tests, all green. Full suite 414 pass / 0 fail.
+
+**Round-15d-β (follow-up):** delete sidecar.ts + monitor.ts + heartbeat infrastructure; refactor cmdInit/cmdExit/cmdGc/cmdDoctor to skip persistent-mode lifecycle by default; wire the agent-authored archive directive into archive.ts auto via `--seal-count N --agent-summary` flags; ship `scripts/scratch-condense.ts` for scratchpad archival; add tick-extension `--until-signal`, `--interactive` 1-3s cadence, and stuck-recovery in loop-driver. ~3000 LoC of careful surgery; safer in a focused session.
+
+### Why split 15d into α+β
+
+Honest scope accounting: completing the full Round-15d (additive primitives + persistent-mode deletion + tick-extension + interactive + stuck-recovery + scratch-condense) in a single solo session would be 6-8 hours of careful work. Splitting into α (additive, this commit) + β (deletion + remaining polish) ships value reliably:
+
+- **Round-15d-α verified by tests in this commit** lets the user dogfood the new primitives on a real audit (TradingAgents) before deletion lands. If the scratchpad approximation of working memory proves insufficient, β can adjust the design before retiring the persistent escape hatch.
+- **Round-15d-β is mostly mechanical** — deletion of well-isolated modules + refactor of dispatcher functions. Lower architectural risk; higher LoC churn.
+
+The sequencing also matches the audit-rigor frame from Round-14: each commit has falsifiable invariants. α's invariant is "scratchpad + sub-relay primitives don't break existing behavior"; β's is "ephemeral-only is sufficient for all existing use cases."

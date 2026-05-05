@@ -11,7 +11,52 @@ export type Topology = {
   description?: string;
   agents: string[];
   edges: [string, string][];
+  // Round-15d: graph diameter computed at load time (BFS from every node).
+  // Used as the max-depth ceiling for ephemeral sub-relay chains. Petersen=2,
+  // ring=5, star=2, pair=1. Computed lazily; cached.
+  _diameter?: number;
 };
+
+// Round-15d: compute the graph diameter (longest shortest-path between any
+// two nodes). Sub-relay chains are bounded to this depth: a peer dispatched
+// from orion may dispatch to its neighbor, who may dispatch to its neighbor,
+// and so on — but the recursion stops when the chain length equals the
+// graph's diameter. Beyond that, every node is reachable in fewer hops via
+// a different path, so deeper recursion would be a cycle or a less-direct
+// route. User directive at Round-15d: "max-depth is 2 for petersen but it
+// may be more for other graphs."
+export function computeDiameter(topo: Topology): number {
+  if (topo._diameter != null) return topo._diameter;
+  // Build adjacency list.
+  const adj = new Map<string, Set<string>>();
+  for (const a of topo.agents) adj.set(a, new Set());
+  for (const [a, b] of topo.edges) {
+    adj.get(a)!.add(b);
+    adj.get(b)!.add(a);
+  }
+  let diameter = 0;
+  // BFS from every node; track max distance.
+  for (const start of topo.agents) {
+    const dist = new Map<string, number>();
+    dist.set(start, 0);
+    const queue: string[] = [start];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const d = dist.get(cur)!;
+      for (const nbr of adj.get(cur) ?? []) {
+        if (!dist.has(nbr)) {
+          dist.set(nbr, d + 1);
+          queue.push(nbr);
+        }
+      }
+    }
+    for (const d of dist.values()) {
+      if (d > diameter) diameter = d;
+    }
+  }
+  topo._diameter = diameter;
+  return diameter;
+}
 
 // agents.users.yaml — orthogonal user registry overlaid onto any topology
 // at loadTopology time. Slice 1 of the multi-user transparency refactor:
@@ -373,6 +418,62 @@ export const SOCKETS_DIR = path.join(CONVERSATIONS_DIR, ".sockets");
 // skill adopting the wakeup pattern reads the same value — same drift-
 // insurance pattern as Round-13's STUCK_REASONS.
 export const CACHE_WARM_DELAY_SEC = 270;
+
+// Round-15d: per-agent scratchpad directory. The scratchpad is the agent's
+// autobiographical narrative — their summary of their relationship with
+// each peer, written in their own voice, persisted across ephemeral ticks.
+// Read at the START of every cmdRun tick alongside the CONVO.md tail;
+// written at the END of every tick the agent updates it. The file is
+// the structural answer to "the same agent must know context from the
+// distant past" under ephemeral-only execution.
+//
+// One file per agent (NOT per edge): the scratchpad is the agent's holistic
+// memory across all their relationships. Per-edge memory lives in the
+// CONVO.md archive layer. Scratchpad is small (default cap 8KB raw; older
+// content gets archived into scratch.archives/ via scratch-condense).
+export const SCRATCH_DIR = path.join(CONVERSATIONS_DIR, ".scratch");
+
+// Default scratchpad size cap. Larger scratchpads get archived (see
+// scratch-condense.ts). The cap balances "enough context for an agent
+// to recall their relationship history" vs "doesn't bloat every prompt".
+// 8KB ≈ 2000 tokens — modest fraction of even a small Claude context.
+export const SCRATCHPAD_MAX_BYTES = 8 * 1024;
+
+export function scratchPath(agent: string): string {
+  // Sanitize agent name same way other per-agent paths do (lyra L1
+  // pattern; defense against agent names that could escape the dir).
+  const safe = agent.replace(/[^A-Za-z0-9_-]/g, "_");
+  return path.join(SCRATCH_DIR, `${safe}.md`);
+}
+
+// Read the agent's scratchpad. Returns "" if no scratchpad exists yet
+// (first tick for this agent). Caller composes prompt by prepending
+// the scratchpad content; an empty scratchpad means the agent has no
+// autobiographical context to draw on — which is correct for a
+// freshly-introduced agent.
+export function readScratch(agent: string): string {
+  try {
+    return fs.readFileSync(scratchPath(agent), "utf8");
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return "";
+    throw err;
+  }
+}
+
+// Write the agent's scratchpad. Atomic write so concurrent reads (e.g.
+// a sub-relay tick from a different process) don't see torn state.
+// Caps content at SCRATCHPAD_MAX_BYTES — caller should have already
+// triggered scratch-condense if approaching the cap.
+export function writeScratch(agent: string, contents: string): void {
+  fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+  if (contents.length > SCRATCHPAD_MAX_BYTES) {
+    // Hard cap: truncate with a marker. Caller should have condensed
+    // before reaching this point; this is a safety net.
+    contents = contents.slice(0, SCRATCHPAD_MAX_BYTES - 80) +
+      "\n\n<!-- TRUNCATED at SCRATCHPAD_MAX_BYTES — run scratch-condense.ts -->\n";
+  }
+  writeFileAtomic(scratchPath(agent), contents, { mode: 0o600 });
+}
 
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
