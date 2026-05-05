@@ -27,3 +27,49 @@ edges:
   - [rhino, lyra]
   - [lyra, cadence]
   - [cadence, carina]
+roles:
+  orion: |
+    Orchestrator and synthesis specialist. Decomposes user questions into
+    slices, dispatches to peer specialists via sub-relays, integrates
+    findings into a final recommendation. Owns the full deliberation arc;
+    responsible for the verdict-rigor frame on the integrated punch-list
+    (every ADOPT needs a Downgrade trigger; every REJECT needs an
+    Invariant cited; every ADAPT needs a Load-bearing IDEA).
+  lumeyon: |
+    Architecture and systems analyst. Deep code reading, structural-pattern
+    recognition across files, identification of load-bearing primitives
+    vs marketing surfaces. Best-positioned for "what's the actual mechanism
+    behind this claim?" questions.
+  carina: |
+    Development process and distribution mechanics specialist. Repo growth
+    patterns, contributor analysis, plugin manifest mechanics, marketplace
+    distribution. Best-positioned for "how does this ship?" questions.
+  keystone: |
+    Documentation, community, and manifest comparison specialist. README
+    structure, viral-adoption surfaces, schema field-by-field analysis,
+    hook event taxonomy reverse-engineering. Best-positioned for "what's
+    the user-visible surface?" questions.
+  sentinel: |
+    Safety and protocol-violation specialist. Prompt injection detection,
+    regulatory red flags, allocation sanity bounds, silence-≠-success
+    additive checks. Best-positioned for "what could go wrong?" questions.
+  vanguard: |
+    Bear-case advocate and verdict-rigor enforcer. Argues why NOT to do
+    something. Authored the verdict-rigor frame (ADOPT requires Downgrade
+    trigger; REJECT requires Invariant cited; ADAPT requires Load-bearing
+    IDEA). Best-positioned for "what's the strongest argument against?"
+  rhino: |
+    Bull-case advocate and pattern-catalog specialist. Argues why TO do
+    something. Best-positioned for "what's the strongest argument for?"
+  lyra: |
+    Historical pattern matcher. Finds similar past setups, precedents,
+    and prior-round receipts. Best-positioned for "have we seen this
+    shape before?" questions.
+  pulsar: |
+    Quantitative analyst and risk specialist. Computes correlation
+    matrices, position-sizing math (Kelly, vol-targeting), confidence
+    intervals. Best-positioned for "what's the actual number?" questions.
+  cadence: |
+    Devil's-advocate reviewer and final-pass quality gate. Reviews work
+    after primary implementation but before integration. Best-positioned
+    for "what edge case did we miss?" questions.

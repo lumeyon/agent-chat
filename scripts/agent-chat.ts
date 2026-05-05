@@ -1261,16 +1261,38 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       const subRelayBlock = subRelayChain.length > 0
         ? `Sub-relay context: dispatched as part of chain [${subRelayChain.join(" → ")} → ${id.name}]. Original dispatcher is "${subRelayChain[subRelayChain.length - 1]}".\n\n`
         : "";
+      // Round-15f: per-agent role definition from agents.<topology>.yaml.
+      // Prepended to the system prompt so each spawned `claude -p`
+      // subprocess has a coherent specialty instead of a generic
+      // "you are <name>" persona.
+      const myRole = topo.roles?.[id.name];
+      const roleBlock = myRole
+        ? `Your role as ${id.name} in ${id.topology}:\n\n${myRole}\n\n---\n\n`
+        : "";
+      // Round-15f: peer roles (excluding self) — surface so the agent can
+      // make informed sub-relay decisions ("which neighbor specializes
+      // in this question?"). Only include roles for direct neighbors.
+      const neighbors = edgesOf(topo, id.name);
+      const peerRolesLines: string[] = [];
+      for (const e of neighbors) {
+        const r = topo.roles?.[e.peer];
+        if (r) peerRolesLines.push(`  - ${e.peer}: ${r.split("\n")[0]}`);
+      }
+      const peerRolesBlock = peerRolesLines.length > 0
+        ? `Your direct neighbors in this topology and their specialties (you can sub-relay to any of them by emitting <dispatch peer="<name>">...</dispatch> in your response):\n\n${peerRolesLines.join("\n")}\n\n---\n\n`
+        : "";
       prompt =
+        roleBlock +
         `You are agent "${id.name}" in topology "${id.topology}", currently in conversation with "${edge.peer}".\n\n` +
+        peerRolesBlock +
         scratchBlock +
         subRelayBlock +
         `Recent conversation tail (last 4 sections):\n\n${tail}\n\n` +
         `Compose your response as a single Markdown section beginning with the canonical header ` +
         `"## ${id.name} — <topic> (UTC <stamp>)" and ending with "→ ${edge.peer}" or "→ parked". ` +
         `Output the section verbatim, no preamble.\n\n` +
-        // Round-15d: agent-managed memory directives. The agent may
-        // optionally append two structured blocks AFTER the section:
+        // Round-15d/f: agent-managed memory + auto-dispatch directives.
+        // The agent may optionally append structured blocks AFTER the section:
         //
         // <scratch>
         //   <new contents of your scratchpad — your autobiographical
@@ -1278,20 +1300,25 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         // </scratch>
         //
         // <archive>
-        //   sections: <count of recent CONVO.md sections to seal as a
-        //              leaf archive. e.g. "12" or "20-30">
-        //   summary: <your own summary of what those sections covered.
-        //            Used verbatim as the archive's SUMMARY.md content.>
+        //   sections: <count of recent CONVO.md sections to seal>
+        //   summary: <your own summary of what those sections covered>
         // </archive>
         //
-        // Both blocks are OPTIONAL. Omit them if no scratchpad update or
-        // archive is needed this tick. cmdRun parses them after extracting
+        // <dispatch peer="<neighbor-name>">
+        //   <prompt for that neighbor — what specifically do you need
+        //    from them? cmdRun will sub-relay to that neighbor with
+        //    your prompt as new content on YOUR edge with them, then
+        //    that neighbor's response flows back through their tick.>
+        // </dispatch>
+        //
+        // All blocks are OPTIONAL. cmdRun parses them after extracting
         // the canonical section.
         `If you want to update your scratchpad or archive prior sections, ` +
         `append <scratch>...</scratch> and/or <archive>sections: N\\nsummary: ...</archive> ` +
-        `blocks AFTER the section. Both are optional. The scratchpad is your ` +
-        `own memory across ticks; the archive request seals N prior CONVO.md sections ` +
-        `with your summary as the load-bearing record.`;
+        `blocks AFTER the section. If you want to dispatch a sub-question to ` +
+        `one of your direct neighbors (orchestrator pattern), append ` +
+        `<dispatch peer="NAME">your prompt to them</dispatch>. All blocks ` +
+        `are optional.`;
     } catch (err) {
       console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
       continue;
@@ -1345,6 +1372,10 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
     let stdout = r.stdout;
     let scratchUpdate: string | null = null;
     let archiveDirective: { sections: number; summary: string } | null = null;
+    // Round-15f: <dispatch peer="<name>">prompt</dispatch> auto-sub-relay
+    // directives. Multiple dispatches per response allowed; processed
+    // post-section-append in order.
+    const dispatchDirectives: { peer: string; prompt: string }[] = [];
     const scratchMatch = stdout.match(/<scratch>([\s\S]*?)<\/scratch>/);
     if (scratchMatch) {
       scratchUpdate = scratchMatch[1].trim();
@@ -1363,6 +1394,24 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       }
       stdout = stdout.replace(archiveMatch[0], "").trim();
     }
+    // Round-15f: extract all <dispatch peer="..."> blocks. Validate each
+    // peer is an actual neighbor of mine in this topology before queuing
+    // the sub-relay (prevents typos and out-of-graph dispatches).
+    const neighborNames = new Set(edgesOf(topo, id.name).map((e) => e.peer));
+    let dispatchSearch = stdout;
+    while (true) {
+      const m = dispatchSearch.match(/<dispatch\s+peer=["']([a-z0-9_-]+)["']\s*>([\s\S]*?)<\/dispatch>/i);
+      if (!m) break;
+      const peerName = m[1];
+      const subPrompt = m[2].trim();
+      if (!neighborNames.has(peerName)) {
+        console.error(`[agent-chat run] dispatch directive refused: "${peerName}" is not a direct neighbor of ${id.name} in ${id.topology}`);
+      } else if (subPrompt) {
+        dispatchDirectives.push({ peer: peerName, prompt: subPrompt });
+      }
+      dispatchSearch = dispatchSearch.replace(m[0], "");
+    }
+    stdout = dispatchSearch.trim();
     // Append the section + flip turn to peer + unlock.
     try {
       // Sanity: section must end with a "→ <next>" line so the turn flip
@@ -1428,6 +1477,81 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
           }
         } catch (err) {
           console.error(`[agent-chat run] archive seal failed: ${(err as Error).message}`);
+        }
+      }
+      // Round-15f: execute auto-dispatch directives. For each
+      // <dispatch peer="X">prompt</dispatch> the agent emitted, append
+      // the prompt as a new section on MY edge with that peer (with me
+      // as the speaker — it's MY question/dispatch to them), flip the
+      // turn to that peer, then shell out a sub-relay tick that processes
+      // their edge with the chain extended. The sub-relay's response
+      // flows back through normal protocol on that edge.
+      //
+      // Cycle/depth bounded by the existing --sub-relay-from validation
+      // in the spawned cmdRun. The chain is built by appending my name
+      // to the existing chain (or starting a fresh chain if I'm the
+      // top-level dispatcher).
+      for (const d of dispatchDirectives) {
+        try {
+          // Find my edge with this peer.
+          const subEdge = edgesOf(topo, id.name).find((e) => e.peer === d.peer);
+          if (!subEdge) {
+            console.error(`[agent-chat run] dispatch refused: no edge between ${id.name} and ${d.peer}`);
+            continue;
+          }
+          // Compose a section from me on my-${peer} edge with the dispatch prompt.
+          // Then flip turn to the peer so cmdRun for that peer picks it up.
+          const ts = new Date().toISOString();
+          const dispatchSection =
+            `\n---\n\n## ${id.name} — dispatch to ${d.peer} (UTC ${ts})\n\n${d.prompt}\n\n→ ${d.peer}\n`;
+          // Lock the sub-edge before append+flip.
+          const subLock = require("node:child_process").spawnSync(
+            process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "lock", d.peer],
+            { encoding: "utf8" },
+          );
+          if (subLock.status !== 0) {
+            console.error(`[agent-chat run] dispatch ${d.peer}: lock failed (${subLock.stderr.trim()}); skipping`);
+            continue;
+          }
+          fs.appendFileSync(subEdge.convo, dispatchSection);
+          require("node:child_process").spawnSync(
+            process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "flip", d.peer, d.peer],
+            { encoding: "utf8" },
+          );
+          require("node:child_process").spawnSync(
+            process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", d.peer],
+            { encoding: "utf8" },
+          );
+          // Now spawn a sub-relay tick AS the peer agent. The chain is
+          // [...subRelayChain, id.name] so cmdRun's depth/cycle check
+          // bounds recursion at topology.diameter and refuses cycles.
+          const newChain = [...subRelayChain, id.name].join(",");
+          const subResult = require("node:child_process").spawnSync(
+            process.execPath,
+            [path.join(SKILL_ROOT, "scripts/agent-chat.ts"), "run",
+             "--sub-relay-from", newChain],
+            {
+              cwd: SKILL_ROOT,
+              encoding: "utf8",
+              env: {
+                ...process.env,
+                AGENT_NAME: d.peer,
+                AGENT_TOPOLOGY: id.topology,
+                // Drop CLAUDE_SESSION_ID so the spawned cmdRun resolves identity
+                // via env vars (#2) instead of hitting the parent's per-session
+                // record (which is for id.name, not d.peer).
+                CLAUDE_SESSION_ID: "",
+              },
+              stdio: ["ignore", "inherit", "inherit"],
+            },
+          );
+          if (subResult.status === 0) {
+            console.log(`[agent-chat run] dispatch executed: ${id.name} → ${d.peer} (chain depth ${newChain.split(",").length})`);
+          } else {
+            console.error(`[agent-chat run] dispatch ${id.name} → ${d.peer} exited ${subResult.status}; sub-relay tick failed (non-blocking)`);
+          }
+        } catch (err) {
+          console.error(`[agent-chat run] dispatch directive failed: ${(err as Error).message}`);
         }
       }
     } catch (err) {

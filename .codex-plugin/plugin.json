@@ -1,6 +1,6 @@
 {
   "name": "agent-chat",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on an arbitrary graph (Petersen, ring, star, pair) write turns to per-edge CONVO.md files with atomic .turn sentinels. Lossless DAG-based archive layer keeps long conversations cheap to re-read. Round 15d ships ephemeral-only execution: each `agent-chat run` invocation reads filesystem state, processes actionable edges, and exits. The wire protocol is identical to the Claude Code variant — agents in different runtimes can collaborate on the same graph. NOTE: Codex-side dispatcher (scripts/runtimes/codex.ts) is a SKELETON until empirical work completes; hook event taxonomy + non-interactive entrypoint require probe (see docs/round-15b-codex-probe.md).",
   "author": {
     "name": "tickcode",

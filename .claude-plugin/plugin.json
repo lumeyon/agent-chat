@@ -1,6 +1,6 @@
 {
   "name": "agent-chat",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Multi-agent collaboration for Claude Code via filesystem-mediated turn-taking. N agents on an arbitrary graph (Petersen, ring, star, pair) write turns to per-edge CONVO.md files with atomic .turn sentinels. Lossless DAG-based archive layer keeps long conversations cheap to re-read. Round 15d ships ephemeral-only execution: each `agent-chat run` invocation reads filesystem state, processes actionable edges, and exits — no long-running daemons. ScheduleWakeup via loop-driver.ts handles cache-warm continuation. Sub-relay activation lets agents dispatch through their own neighbors (carina → lumeyon directly, not just through orion). Per-agent autobiographical scratchpads preserve relationship context across ticks. Agent-managed archive directives let the writer of a section also author its summary.",
   "author": {
     "name": "tickcode",

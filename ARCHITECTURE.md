@@ -2531,3 +2531,153 @@ manual smoke-testing; full test coverage queued for a follow-up).
   Round-15a).
 - Codex empirical probe (carries from Round-15b; gated on user's
   Codex credit availability).
+
+---
+
+## Round 15f — Orchestrator-grade auto-dispatch
+
+User directive: "I want to be able to install the plugin, start a Claude
+Code session, say 'you are orion in a petersen graph', and you take over
+spinning up ephemeral agents as needed." The earlier rounds shipped the
+ephemeral primitives (cmdRun, sub-relay, scratchpad, agent-managed
+archive) but the **automation layer** that turns "orion" into an actual
+orchestrator was missing — orion's prompt was generic, peer agents had
+no specialty, and there was no mechanism for "orion intelligently
+decomposes a question and dispatches to specialists."
+
+Round-15f closes the gap with three additions:
+
+### 1. Per-agent role definitions in `agents.<topology>.yaml`
+
+New top-level `roles:` section. Block-scalar (`|`) values for multi-line
+text:
+
+```yaml
+roles:
+  orion: |
+    Orchestrator and synthesis specialist. Decomposes user questions
+    into slices, dispatches to peer specialists via sub-relays...
+  lumeyon: |
+    Architecture and systems analyst. Deep code reading...
+```
+
+`agents.petersen.yaml` ships with all 10 AI agents pre-populated with
+specialties drawn from their actual track record across Rounds 12-15e
+(orion the orchestrator; lumeyon the architectural-deep-dive specialist
+who caught bm25 weights and the NO_LLM footgun; carina the dev-process
+specialist who pinned Contract A; etc.). Other topologies can declare
+their own roles or omit them entirely (no role = generic prompt).
+
+The roles parser is additive to `parseTopologyYaml`. Existing yamls
+without roles continue to work unchanged.
+
+### 2. Role injection into the spawned `claude -p` prompt
+
+When cmdRun composes the prompt for the dispatched LLM, it now prepends:
+
+- The acting agent's role (`Your role as <name> in <topology>: ...`).
+- A peer-roles summary block listing direct neighbors and their
+  one-line specialties (`Your direct neighbors and their specialties:
+  - lumeyon: Architecture analyst...`).
+
+This gives the spawned `claude -p` subprocess enough context to (a) act
+in-character for its declared specialty, and (b) make informed sub-relay
+decisions ("which neighbor knows about this?").
+
+### 3. `<dispatch peer="<name>">prompt</dispatch>` auto-dispatch directives
+
+Agents can now emit `<dispatch>` blocks alongside the existing
+`<scratch>` and `<archive>` blocks. cmdRun parses each dispatch
+directive, validates the named peer is a direct neighbor (cycle/typo
+defense), then:
+
+1. Appends the dispatch prompt as a section on MY edge with that peer
+   (with me as the author — it's MY question/dispatch to them).
+2. Flips the edge's `.turn` to that peer.
+3. Spawns a sub-relay tick AS that peer (`AGENT_NAME=<peer>
+   AGENT_TOPOLOGY=<topo> agent-chat run --sub-relay-from <chain>`).
+4. The peer's tick processes my dispatch prompt as if it were a normal
+   incoming turn, composes a response, appends it back to OUR shared
+   edge, flips turn back to me. Their response is now visible the
+   next time I tick this edge.
+
+Cycle and depth bounds inherit from Round-15d's `--sub-relay-from`
+chain validation: my name can't appear in the chain (cycle refusal,
+exit 67); chain length must be ≤ topology.diameter (petersen=2,
+ring=5, etc.).
+
+### What this enables — the "orion takes over" workflow
+
+User says "you are orion in a petersen graph" in a Claude Code session.
+
+1. Claude reads the agent-chat skill, runs `agent-chat init orion
+   petersen`. orion is now a registered identity.
+2. User asks a complex question on the boss-orion edge ("Should I buy
+   XNDU given my IONQ holdings?").
+3. orion runs `agent-chat run`. cmdRun reads orion's role
+   ("Orchestrator..."), reads the boss-orion CONVO.md tail (the
+   question), reads orion's scratchpad (autobiographical memory).
+4. orion's spawned `claude -p` composes a response that includes:
+    - A first-pass take on the question.
+    - `<dispatch peer="pulsar">Compute Kelly fraction + correlation
+      matrix for XNDU vs IONQ over 90d</dispatch>`
+    - `<dispatch peer="sentinel">Flag any regulatory concerns or
+      'not financial advice' caveats</dispatch>`
+    - `<dispatch peer="lumeyon">Audit the underlying mechanism of
+      XNDU's recent price action — is the catalyst structural or
+      momentum?</dispatch>`
+5. cmdRun executes each `<dispatch>` directive: writes the dispatch
+   prompt to the orion-pulsar / orion-sentinel / orion-lumeyon edge,
+   spawns a sub-relay tick AS each of those peers. Each peer
+   processes their dispatch with their own role context, composes a
+   response, flips turn back to orion.
+6. orion's next tick (via `loop-driver.ts` ScheduleWakeup, or another
+   manual `agent-chat run`) reads the now-populated peer responses,
+   integrates them, posts the integrated answer to the boss-orion
+   edge.
+
+**This is the orchestrator pattern from Rounds 12-15 made automatic.**
+Previously I (orion's persistent session) wrote dispatches by hand;
+now cmdRun does it from agent-emitted directives.
+
+### Honest limitations
+
+- **The role-quality is only as good as the YAML.** If `agents.<topo>.yaml`
+  has thin or wrong roles, the dispatched peers will sound generic.
+  Round-15f ships with curated petersen roles drawn from rounds-of-
+  evidence; other topologies need their own role pass.
+- **Sub-relay ticks are ephemeral.** Each `claude -p` spawn pays a
+  full cold-start. For a question that fans out 5 sub-relays, that's
+  6 LLM calls in a tick (orion + 5 peers). The cache-warm
+  `ScheduleWakeup` pattern doesn't help here because each subprocess
+  has its own context. Cost-conscious users should set up
+  `loop-driver.ts --interactive` and dispatch sparingly.
+- **Sub-relay responses don't auto-propagate back to orion's tick.**
+  Each peer flips turn back to orion when they finish, but orion has
+  to tick AGAIN to read those responses. The natural flow is
+  `loop-driver.ts` (cache-warm 270s ticks) or `--interactive` (1-3s
+  ticks until idle); both eventually integrate the responses but
+  the wall-clock is non-zero.
+- **No automatic "who should I dispatch to?" decision-making.** orion's
+  LLM has to decide which `<dispatch>` blocks to emit based on the
+  question + role context. If orion's prompt asks for analysis that
+  spans multiple specialties, the LLM may skip dispatching and try
+  to do it all itself. The role-block surfaces the option; doesn't
+  force usage.
+
+### Net codebase delta
+
+- ~80 LoC added to scripts/lib.ts (roles parser, multi-line block-
+  scalar handling, ALLOWED_TOP_KEYS extension).
+- ~50 LoC added to agents.petersen.yaml (10 role declarations).
+- ~120 LoC added to scripts/agent-chat.ts cmdRun (role-block prompt
+  composition, dispatch directive parsing, dispatch execution loop).
+- ~95 LoC NEW in tests/topology-roles.test.ts (6 tests).
+
+Total ~345 LoC of additive change. Tests: 340 pass / 0 fail / 2 skip.
+
+### Plugin manifest version bump
+
+0.5.0 → 0.6.0 reflects the orchestrator-grade automation layer
+shipping. Prior rounds added primitives; this round wires them into
+an end-to-end "orion intelligently dispatches" workflow.

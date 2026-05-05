@@ -15,6 +15,20 @@ export type Topology = {
   // Used as the max-depth ceiling for ephemeral sub-relay chains. Petersen=2,
   // ring=5, star=2, pair=1. Computed lazily; cached.
   _diameter?: number;
+  // Round-15f: per-agent role definitions. When the agent dispatches an
+  // ephemeral peer via `claude -p`, cmdRun prepends the role text to the
+  // spawned subprocess's prompt so each peer has a coherent specialty
+  // instead of a generic "you are <name>" persona. Optional — agents
+  // without roles default to a generic prompt.
+  //
+  // YAML shape:
+  //   roles:
+  //     orion: |
+  //       Orchestrator. Decomposes user questions into slices and
+  //       dispatches to peer specialists.
+  //     lumeyon: |
+  //       Architecture and systems analyst. Deep code reading.
+  roles?: Record<string, string>;
 };
 
 // Round-15d: compute the graph diameter (longest shortest-path between any
@@ -99,7 +113,7 @@ export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
 // prototype-pollution vectors `__proto__`/`constructor`/`prototype`. Agent
 // names are restricted to a safe character class so they can be used in
 // filesystem paths (lock body, presence file, log file) without escaping.
-const ALLOWED_TOP_KEYS = new Set(["topology", "description", "agents", "edges"]);
+const ALLOWED_TOP_KEYS = new Set(["topology", "description", "agents", "edges", "roles"]);
 const AGENT_NAME_RE = /^[a-z0-9_-]{1,40}$/i;
 
 export function isValidAgentName(name: string): boolean {
@@ -111,20 +125,73 @@ export function parseTopologyYaml(text: string): Topology {
   const out: any = Object.create(null);
   out.agents = [];
   out.edges = [];
-  let section: "agents" | "edges" | null = null;
+  out.roles = Object.create(null);
+  let section: "agents" | "edges" | "roles" | null = null;
+  // Round-15f: roles section uses block-scalar bodies (`|`) so role text
+  // can span multiple lines. Track the current role being accumulated.
+  let currentRoleAgent: string | null = null;
+  let currentRoleLines: string[] = [];
+  let currentRoleIndent = -1;
+  const flushCurrentRole = () => {
+    if (currentRoleAgent != null) {
+      out.roles[currentRoleAgent] = currentRoleLines.join("\n").trim();
+      currentRoleAgent = null;
+      currentRoleLines = [];
+      currentRoleIndent = -1;
+    }
+  };
   for (let raw of lines) {
-    const line = raw.replace(/#.*$/, ""); // strip comments
-    if (!line.trim()) continue;
+    // Inside a roles block-scalar body, preserve content verbatim
+    // (don't strip inline `#` — role text may legitimately contain #).
+    const inRoleBody = section === "roles" && currentRoleAgent != null;
+    const line = inRoleBody ? raw : raw.replace(/#.*$/, "");
+    if (!inRoleBody && !line.trim()) continue;
+    if (inRoleBody) {
+      const indent = raw.match(/^(\s*)/)?.[1].length ?? 0;
+      // Empty line inside body: keep, preserves paragraph breaks.
+      if (!raw.trim()) { currentRoleLines.push(""); continue; }
+      // Lines indented at-least-as-much as the opening line stay in the role.
+      if (currentRoleIndent < 0) currentRoleIndent = indent;
+      if (indent >= currentRoleIndent) {
+        currentRoleLines.push(raw.slice(currentRoleIndent));
+        continue;
+      }
+      // Less indent → role body ended; flush + fall through to outer parse.
+      flushCurrentRole();
+    }
     const top = line.match(/^([a-z_]+):\s*(.*)$/i);
     if (top && !line.startsWith(" ") && !line.startsWith("\t")) {
+      flushCurrentRole();
       const [, key, val] = top;
       if (!ALLOWED_TOP_KEYS.has(key)) {
         throw new Error(`unknown top-level yaml key "${key}" — allowed: ${[...ALLOWED_TOP_KEYS].join(", ")}`);
       }
       if (key === "agents") { section = "agents"; continue; }
       if (key === "edges") { section = "edges"; continue; }
+      if (key === "roles") { section = "roles"; continue; }
       section = null;
       out[key] = val.trim();
+      continue;
+    }
+    if (section === "roles") {
+      // Match `<agent>: |` (block-scalar opener) or `<agent>: <inline-text>`.
+      const roleHead = line.match(/^\s+([a-z0-9_-]+):\s*(\|?)\s*(.*)$/i);
+      if (roleHead) {
+        flushCurrentRole();
+        const agent = roleHead[1];
+        if (!isValidAgentName(agent)) {
+          throw new Error(`role declared for invalid agent name "${agent}"`);
+        }
+        if (roleHead[2] === "|") {
+          // Block-scalar — accumulate following indented lines.
+          currentRoleAgent = agent;
+          currentRoleLines = [];
+          currentRoleIndent = -1;
+        } else if (roleHead[3]) {
+          // Inline value — single line role.
+          out.roles[agent] = roleHead[3].trim();
+        }
+      }
       continue;
     }
     const dash = line.match(/^\s*-\s*(.*)$/);
@@ -144,9 +211,12 @@ export function parseTopologyYaml(text: string): Topology {
       out.edges.push([m[1], m[2]]);
     }
   }
+  flushCurrentRole();
   if (typeof out.topology !== "string") throw new Error("topology field missing");
   if (!Array.isArray(out.agents) || out.agents.length === 0) throw new Error("agents list empty");
   if (!Array.isArray(out.edges) || out.edges.length === 0) throw new Error("edges list empty");
+  // Drop empty roles map for cleanliness.
+  if (Object.keys(out.roles).length === 0) delete out.roles;
   return out as Topology;
 }
 
