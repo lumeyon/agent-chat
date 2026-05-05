@@ -136,23 +136,50 @@ fold into the same lossless-claw archive layer as everything else, so
 [bun]: https://bun.sh
 [tsx]: https://github.com/privatenumber/tsx
 
-### 1. Install (three options)
+### 1. Install (two options)
 
-**Option A — Claude Code marketplace (Round 15b, recommended):**
+**Option A — Claude Code plugin marketplace (recommended):**
 
-```bash
-claude code plugin marketplace add lumeyon/agent-chat
+The Claude Code install commands are **slash commands typed inside an
+active Claude Code session**, not shell commands. Start Claude Code in a
+terminal, then at the prompt type:
+
+```
+/plugin marketplace add lumeyon/agent-chat
 ```
 
-Claude Code auto-installs from the repo's `marketplace.json` + reads
-`.claude-plugin/plugin.json`. Symmetric for Codex once empirical work
-completes (see `docs/round-15b-codex-probe.md` for status):
+Claude Code fetches `github.com/lumeyon/agent-chat`, reads the repo's
+`marketplace.json`, and registers `agent-chat` as an installable plugin.
+Then enable it:
+
+```
+/plugin install agent-chat@lumeyon/agent-chat
+```
+
+(Use `/plugin --help` if you need to confirm the exact subcommand syntax
+for your Claude Code version.)
+
+**For Codex** — the install IS a shell command (their CLI exposes it
+directly):
 
 ```bash
 codex plugin marketplace add lumeyon/agent-chat
 ```
 
-**Option B — Direct symlink (the original install path):**
+**Note:** the Codex runtime adapter is a SKELETON until the empirical
+probe completes (see `docs/round-15b-codex-probe.md`). The plugin
+manifest installs cleanly on Codex but the dispatcher will throw
+`RUNTIME_NOT_IMPLEMENTED` until the probe lands.
+
+For per-project Codex installs (drop into `.agents/plugins` rather than
+the user-global tree):
+
+```bash
+cd /path/to/your/project
+codex plugin marketplace add lumeyon/agent-chat --sparse .agents/plugins
+```
+
+**Option B — Direct symlink (legacy, pre-plugin path):**
 
 ```bash
 git clone https://github.com/lumeyon/agent-chat.git ~/git/agent-chat
@@ -160,21 +187,9 @@ ln -s ~/git/agent-chat ~/.claude/skills/agent-chat
 ```
 
 Claude Code auto-discovers skills under `~/.claude/skills/`. The repo is
-the skill — no copy step, no build step, no install command.
-
-For per-project use, symlink into the project's `.claude/skills/`
-directory instead.
-
-**Option C — From the marketplace directly into a project:**
-
-```bash
-cd /path/to/your/project
-codex plugin marketplace add lumeyon/agent-chat --sparse .agents/plugins
-```
-
-The `--sparse` flag drops the plugin into a project-local plugin tree
-rather than the user-global one. Useful for per-project agent-chat
-deployments with distinct topologies.
+the skill — no copy step, no build step, no install command. This works
+without the plugin marketplace flow but won't pick up future plugin-only
+features (per-runtime adapters, marketplace metadata, etc.).
 
 ### 2. Tell each session who it is — in plain English
 

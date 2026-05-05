@@ -100,7 +100,7 @@ The Round-15b commit (this skeleton) ships:
 
 - `.claude-plugin/plugin.json` — Claude-side manifest, fully populated.
 - `.codex-plugin/plugin.json` — Codex-side manifest, fully populated, with a description that flags the hook taxonomy probe as outstanding.
-- `marketplace.json` — single-plugin marketplace shape so install URL pattern matches Ruflo's (`claude code plugin marketplace add lumeyon/agent-chat`).
+- `marketplace.json` — single-plugin marketplace shape. Install via Claude Code's `/plugin marketplace add lumeyon/agent-chat` (slash command typed inside an active Claude Code session) or Codex's `codex plugin marketplace add lumeyon/agent-chat` (shell command).
 - `scripts/runtimes/claude.ts` — full implementation (wraps existing primitives).
 - `scripts/runtimes/codex.ts` — skeleton with throws-on-call.
 - `docs/round-15b-codex-probe.md` — this file.

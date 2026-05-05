@@ -2144,9 +2144,11 @@ empirical work the user can complete later:
    the Codex empirical probe as outstanding.
 
 3. **`marketplace.json`** at repo root — single-plugin marketplace
-   declaring agent-chat. Install URL pattern matches Ruflo's:
-   `claude code plugin marketplace add lumeyon/agent-chat` (or the
-   Codex equivalent).
+   declaring agent-chat. Install commands: Claude Code uses a slash
+   command typed inside an active session (`/plugin marketplace add
+   lumeyon/agent-chat`); Codex uses a shell command (`codex plugin
+   marketplace add lumeyon/agent-chat`). The two runtimes converged on
+   the same URL pattern but differ in invocation surface.
 
 4. **`scripts/runtimes/claude.ts`** + **`scripts/runtimes/codex.ts`**
    — per-runtime adapter shims with symmetric `dispatch` +
