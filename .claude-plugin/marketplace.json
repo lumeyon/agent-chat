@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "agent-chat",
-      "source": "../",
+      "source": "./plugins/agent-chat",
       "description": "Multi-agent collaboration via filesystem-mediated turn-taking. Claude Code + Codex dual-runtime."
     }
   ]
