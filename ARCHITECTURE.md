@@ -2432,3 +2432,102 @@ tests.**
   ignoreSessionRecord opt-in).
 - `docs/anti-pattern-audit.md` precondition checklist (six-rounds-deep
   receipt from Round-15a).
+
+---
+
+## Round 15e — Deferred TODOs landed (archive directive execution + scratch-condense + interactive + stuck-recovery)
+
+Round-15d-α shipped the additive primitives and Round-15d-β deleted the
+persistent-mode infrastructure. Round-15e closes the deferred-TODOs from
+those commits:
+
+- `archive.ts auto` accepts `--seal-count N` + `--agent-summary` flags.
+  When both are passed, the agent's authored summary (read from stdin)
+  becomes the canonical SUMMARY.md, bypassing the deterministic
+  synthesizer + LLM. The schema validator still runs (TL;DR / Decisions
+  / Keywords / Expand-for-details required) — agent's words can't
+  ship a non-validator-passing archive.
+- cmdRun's archive directive parser now actually executes the directive
+  via `archive.ts auto --seal-count N --agent-summary --force` with
+  the agent's summary on stdin. Round-15d-α captured the directive but
+  deferred execution; this round closes the loop.
+- `scripts/scratch-condense.ts` (NEW) — explicit scratchpad condense
+  helper. When a scratchpad approaches the 8KB cap, run
+  `bun scripts/scratch-condense.ts <agent>` to archive the older 75%
+  verbatim into `<conversations>/.scratch/<agent>.archives/d0/<arch_S_*>/`
+  and retain the most-recent 25% as the working scratchpad. The
+  preferred path is still agent-emitted `<scratch>...</scratch>`
+  directives in cmdRun responses (where the agent decides what to keep);
+  scratch-condense is the unattended fallback.
+- `loop-driver.ts` extended:
+    + `--interactive` flag — tight 1-3s tick loop until 3 consecutive
+      idle ticks, for real-time deliberation. Replaces persistent-mode's
+      "you watch agents converse in tmux" pattern with a single-terminal
+      ephemeral-friendly equivalent.
+    + Stuck-recovery — any edge whose turn has been on me for
+      >stuck-tick-seconds (default 300s, matches Round-13's
+      STUCK_TURN_TIMEOUT_MS) with no lock and no recent CONVO.md growth
+      gets auto-redispatched on the next loop iteration. Closes the gap
+      between Round-13's stuck-detection and "actually un-stick" under
+      ephemeral-only execution.
+    + `--max-tick-seconds`, `--stuck-tick-seconds`,
+      `--interactive-tick-seconds` flags for advanced tuning.
+
+### Tick extension `--until-signal`
+
+Originally listed as a Round-15e TODO; folded into `--interactive`
+mode instead. Rationale: `--until-signal` was meant to defer the next
+tick boundary until the agent self-signals completion, allowing long
+single-tool operations (e.g. reading 30 files) to complete in one
+contiguous claude-p invocation. The runClaude primitive already has its
+own 90s timeout and the user directive at Round-15d kickoff was "no
+budget cap." The cleanest answer: in `--interactive` mode the loop
+keeps ticking until consecutive-idle, which is the same effect as
+"until the agent signals done by producing no work." Single primitive,
+covers both use cases.
+
+### Doc rewrite (README + bootstrap, partial)
+
+- README.md "Why you'd want this" section rewritten to drop the
+  "optional fast-path daemon" + "monitor and sidecar (auto-started)"
+  paragraphs. Replaced with the ephemeral execution model + scratchpad
+  + sub-relay narrative.
+- README.md "What you get" capability table rewritten — sidecar /
+  monitor / heartbeat rows replaced with ephemeral execution + scratchpad
+  + sub-relay + agent-managed-memory rows.
+- README.md "Quick start" section 3 ("The monitor and sidecar") replaced
+  with "Process pending work" describing `agent-chat run` and
+  `loop-driver.ts` and `--interactive` and sub-relay invocation.
+- README.md top-of-file deprecation banner removed (no longer needed
+  since the body is up-to-date).
+- bootstrap.md and SKILL.md rewrites still queued; their persistent-mode
+  references are stale but the README is the canonical user-facing
+  doc and is current as of this commit.
+
+### Net codebase delta this round
+
+- ~140 LoC added to scripts/archive.ts (--seal-count + --agent-summary
+  flag wiring).
+- ~145 LoC added to scripts/loop-driver.ts (--interactive +
+  stuck-recovery + arg parsing).
+- ~135 LoC NEW in scripts/scratch-condense.ts.
+- ~30 LoC modified in scripts/agent-chat.ts (cmdRun archive directive
+  now executes).
+- ~80 LoC of README rewrites.
+
+Total ~530 LoC of additive change. Tests: 334 pass / 0 fail / 2 skip.
+Zero new test files this round (the new flags are exercised by
+manual smoke-testing; full test coverage queued for a follow-up).
+
+### What's NOT shipped (queued)
+
+- bootstrap.md + SKILL.md doc rewrites (persistent-mode references).
+- Tests for the new flags: --seal-count + --agent-summary round-trip
+  verification, --interactive mode, stuck-recovery auto-redispatch.
+- scratch-condense.ts unit tests.
+- Lyra-L3 hermeticity bug at tests/lib.test.ts:301 (carries from
+  Round-15d).
+- docs/anti-pattern-audit.md precondition checklist (carries from
+  Round-15a).
+- Codex empirical probe (carries from Round-15b; gated on user's
+  Codex credit availability).

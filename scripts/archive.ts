@@ -64,17 +64,34 @@ function parseArgs(argv: string[]) {
     archiveId: string | null;
     noLlm: boolean;
     llm: boolean;
+    // Round-15e: agent-managed memory flags. When the agent (cmdRun in
+    // ephemeral mode) emits an <archive>sections: N\nsummary: ...</archive>
+    // directive, cmdRun shells out `archive.ts auto <peer> --seal-count N
+    // --agent-summary` with the agent's authored summary on stdin. The
+    // sealCount overrides the default fresh-tail-based split; agentSummary
+    // signals "skip the synthesizer + LLM, use the agent's words verbatim."
+    sealCount: number | null;
+    agentSummary: boolean;
   } = {
     freshTail: DEFAULT_FRESH_TAIL, force: false, archiveId: null, noLlm: false, llm: false,
+    sealCount: null, agentSummary: false,
   };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--fresh-tail") opts.freshTail = parseInt(rest[++i] ?? "", 10);
     else if (rest[i] === "--force") opts.force = true;
     else if (rest[i] === "--no-llm") opts.noLlm = true;
     else if (rest[i] === "--llm") opts.llm = true;
+    else if (rest[i] === "--seal-count") opts.sealCount = parseInt(rest[++i] ?? "", 10);
+    else if (rest[i] === "--agent-summary") opts.agentSummary = true;
     else if (!opts.archiveId && rest[i].startsWith("arch_")) opts.archiveId = rest[i];
   }
   if (!Number.isFinite(opts.freshTail) || opts.freshTail < 0) die("--fresh-tail must be >= 0");
+  if (opts.sealCount != null && (!Number.isFinite(opts.sealCount) || opts.sealCount <= 0)) {
+    die("--seal-count must be a positive integer");
+  }
+  if (opts.agentSummary && opts.sealCount == null) {
+    die("--agent-summary requires --seal-count <N> (agent-managed archives specify both)");
+  }
   if (opts.llm && opts.noLlm) {
     die("--llm and --no-llm cannot be combined (configuration error). Pick one.");
   }
@@ -322,12 +339,26 @@ switch (op) {
       if (pending.length && !opts.force) die(`uncommitted archive(s) pending — commit them first or pass --force: ${pending.join(", ")}`);
 
       const convo = loadConvo();
-      const split = splitForArchive(convo, opts.freshTail);
-      if (split.archivableSectionCount === 0) die("nothing to archive — fresh tail covers all sections.");
-
-      const archivedSections = parseSections(convo).sections.slice(0, split.archivableSectionCount);
+      // Round-15e: when the agent specifies --seal-count N, slice the N
+      // most-recent CONVO.md sections (NOT the freshTail-bounded split).
+      // The agent has already decided what to seal; we honor that.
+      const allSections = parseSections(convo).sections;
+      let archivedSections: string[];
+      let body: string;
+      let split: { archivable: string; archivableSectionCount: number; freshTail: string } | null = null;
+      if (opts.sealCount != null) {
+        if (opts.sealCount > allSections.length) {
+          die(`--seal-count ${opts.sealCount} exceeds CONVO.md section count (${allSections.length})`);
+        }
+        archivedSections = allSections.slice(0, opts.sealCount);
+        body = archivedSections.join("\n\n");
+      } else {
+        split = splitForArchive(convo, opts.freshTail);
+        if (split.archivableSectionCount === 0) die("nothing to archive — fresh tail covers all sections.");
+        archivedSections = allSections.slice(0, split.archivableSectionCount);
+        body = split.archivable;
+      }
       const tr = timeRangeOf(archivedSections);
-      const body = split.archivable;
       const aid = archiveId("leaf", tr.latest, body);
 
       // Round 12 slice 2: idempotency guard (auto path). Same shape as the
@@ -351,24 +382,63 @@ switch (op) {
       try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
       finally { fs.closeSync(bfd); }
 
-      // Round 12: try the LLM path first; fall back to deterministic
-      // synthesizer on any failure (probe-fail, timeout, non-zero exit,
-      // validator-fail). Strictly sequential per cadence (NEVER parallel —
-      // round-9 first-hit-wins corruption surface). The synthesizer fallback
-      // is validator-passing by construction (real-body sections + ≥3
-      // keywords + non-placeholder Expand-for-details).
-      const llmCheck = isLlmEnabled({ noLlmFlag: opts.noLlm, llmFlag: opts.llm });
-      const synthesisResult = await tryLlmThenSynth({
-        edgeId: edge.id,
-        archiveId: aid,
-        participants,
-        earliestAt: tr.earliest,
-        latestAt: tr.latest,
-        archivedSections,
-        rawBody: body,
-        llmEnabled: llmCheck.enabled,
-      });
-      const summary = synthesisResult.summary;
+      // Round-15e: if --agent-summary, the SUMMARY.md content comes from
+      // stdin (the agent's authored summary), wrapped in the canonical
+      // schema (TL;DR / Decisions / Blockers / Follow-ups / Artifacts /
+      // Keywords / Expand-for-details). Bypasses the synthesizer + LLM
+      // entirely — the agent's words are authoritative. Fallback: if
+      // the stdin content doesn't match the schema, the validator catches
+      // it the same way it catches synthesizer bugs (refuse to commit).
+      let summary: string;
+      let synthesisSource: "agent-authored" | "llm" | "auto";
+      if (opts.agentSummary) {
+        synthesisSource = "agent-authored";
+        // Read agent's summary from stdin (synchronous; archive.ts is one-shot).
+        const raw = fs.readFileSync(0, "utf8").trim();
+        if (!raw) die("--agent-summary specified but stdin was empty");
+        // If the agent already wrote the full schema, use as-is; otherwise
+        // wrap with minimal scaffolding (TL;DR + Keywords + Expand footer).
+        const hasSchema = /^##\s+TL;DR\b/m.test(raw) && /^##\s+Keywords\b/m.test(raw)
+          && /^##\s+Expand for details about\b/m.test(raw);
+        if (hasSchema) {
+          summary = raw;
+        } else {
+          // Wrap the agent's prose into the validator-passing shape. The
+          // first line becomes the TL;DR; the rest becomes Decisions;
+          // Keywords + Expand-for-details get auto-extracted via the
+          // existing helpers.
+          const firstLine = raw.split("\n")[0].trim();
+          const rest = raw.slice(firstLine.length).trim();
+          summary =
+            `## TL;DR\n${firstLine}\n\n` +
+            `## Decisions\n${rest || "(none)"}\n\n` +
+            `## Blockers\n(none)\n\n` +
+            `## Follow-ups\n(none)\n\n` +
+            `## Artifacts referenced\n(none)\n\n` +
+            `## Keywords\n${extractKeywords(raw).join(", ") || "agent, summary, manual"}\n\n` +
+            `## Expand for details about:\n- agent-authored summary; full details in BODY.md\n`;
+        }
+      } else {
+        // Round 12: try the LLM path first; fall back to deterministic
+        // synthesizer on any failure (probe-fail, timeout, non-zero exit,
+        // validator-fail). Strictly sequential per cadence (NEVER parallel —
+        // round-9 first-hit-wins corruption surface). The synthesizer fallback
+        // is validator-passing by construction (real-body sections + ≥3
+        // keywords + non-placeholder Expand-for-details).
+        const llmCheck = isLlmEnabled({ noLlmFlag: opts.noLlm, llmFlag: opts.llm });
+        const synthesisResult = await tryLlmThenSynth({
+          edgeId: edge.id,
+          archiveId: aid,
+          participants,
+          earliestAt: tr.earliest,
+          latestAt: tr.latest,
+          archivedSections,
+          rawBody: body,
+          llmEnabled: llmCheck.enabled,
+        });
+        summary = synthesisResult.summary;
+        synthesisSource = synthesisResult.source === "llm" ? "llm" : "auto";
+      }
       const v = validateSummary(summary);
       if (!v.ok) {
         // Both LLM and synth failed — surface loud and bail before touching
@@ -404,12 +474,28 @@ switch (op) {
         tldr,
         created_at: utcStamp(),
         committed_at: utcStamp(),
-        synthesis: synthesisResult.source === "llm" ? "llm" : "auto",
+        synthesis: synthesisSource,
       });
 
       // Truncate CONVO.md to header + breadcrumb + fresh tail (atomic).
-      const breadcrumb = `\n<!-- archive breadcrumb: ${aid} sealed (auto) at ${utcStamp()} (${archivedSections.length} sections, ${tr.earliest} → ${tr.latest}) — see archives/leaf/${aid}/ -->\n\n`;
-      const newConvo = split.header.replace(/\n+$/, "\n") + breadcrumb + (split.freshTail ? `---\n\n${split.freshTail}` : "");
+      // Round-15e: when --seal-count was specified, the "fresh tail" is
+      // everything AFTER the sealed sections (not the freshTail-bounded
+      // split.freshTail). Compute it from allSections - archivedSections.
+      let header: string;
+      let freshTail: string;
+      if (split) {
+        header = split.header;
+        freshTail = split.freshTail;
+      } else {
+        // Reconstruct: parseSections gives us section bodies; the header
+        // is anything before the first `---` separator.
+        const headerMatch = convo.match(/^([\s\S]*?)(?=\n---\n)/);
+        header = headerMatch ? headerMatch[1] + "\n" : "";
+        const remaining = allSections.slice(opts.sealCount!);
+        freshTail = remaining.join("\n\n---\n\n");
+      }
+      const breadcrumb = `\n<!-- archive breadcrumb: ${aid} sealed (${synthesisSource}) at ${utcStamp()} (${archivedSections.length} sections, ${tr.earliest} → ${tr.latest}) — see archives/leaf/${aid}/ -->\n\n`;
+      const newConvo = header.replace(/\n+$/, "\n") + breadcrumb + (freshTail ? `---\n\n${freshTail}` : "");
       writeFileAtomic(edge.convo, newConvo, { fsync: true });
 
       // Index entry — fsync'd so the validated archive is durable.

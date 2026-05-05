@@ -1395,32 +1395,39 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         }
       }
       if (archiveDirective) {
-        // Round-15d-α: archive directive is PARSED here but execution is
-        // deferred to Round-15d-β. The agent's authored summary is
-        // persisted to a pending-archive scratch file so the integration
-        // commit can pick it up without losing the agent's intent.
-        // Round-15d-β will: (a) add `--seal-count N --agent-summary`
-        // flags to archive.ts auto so the agent's words become the
-        // canonical SUMMARY.md (bypassing the deterministic synthesizer)
-        // and (b) trigger the auto-archive call here.
+        // Round-15e: execute the agent's archive directive via
+        // `archive.ts auto <peer> --seal-count N --agent-summary` with
+        // the agent's authored summary on stdin. archive.ts validates
+        // the schema (TL;DR / Decisions / Keywords / Expand-for-details
+        // required) and refuses if invalid; non-blocking on failure
+        // so the conversation isn't half-committed.
         try {
-          fs.mkdirSync(SCRATCH_DIR, { recursive: true });
-          const pendingPath = path.join(SCRATCH_DIR, `pending-archive-${id.name}-${edge.peer}-${Date.now()}.md`);
-          const contents = `# Pending archive directive (Round-15d-α; integration deferred to 15d-β)
-edge: ${edge.id}
-agent: ${id.name}
-peer: ${edge.peer}
-sections_to_seal: ${archiveDirective.sections}
-captured_at: ${new Date().toISOString()}
-
----
-
-${archiveDirective.summary}
-`;
-          fs.writeFileSync(pendingPath, contents, { mode: 0o600 });
-          console.log(`[agent-chat run] archive directive captured: ${archiveDirective.sections} sections; pending at ${pendingPath}`);
+          const archiveResult = require("node:child_process").spawnSync(
+            process.execPath,
+            [path.join(SKILL_ROOT, "scripts/archive.ts"), "auto", edge.peer,
+             "--seal-count", String(archiveDirective.sections),
+             "--agent-summary",
+             "--force"],
+            {
+              encoding: "utf8",
+              input: archiveDirective.summary,
+              env: { ...process.env, AGENT_CHAT_NO_LLM: "1" },
+            },
+          );
+          if (archiveResult.status === 0) {
+            console.log(`[agent-chat run] archive sealed (agent-authored): ${archiveDirective.sections} sections on ${edge.id}`);
+          } else {
+            console.error(`[agent-chat run] archive seal failed (non-blocking): ${archiveResult.stderr}`);
+            // Persist the directive to the pending dir so a future run
+            // can recover the agent's intent.
+            try {
+              fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+              const pendingPath = path.join(SCRATCH_DIR, `pending-archive-${id.name}-${edge.peer}-${Date.now()}.md`);
+              fs.writeFileSync(pendingPath, archiveDirective.summary, { mode: 0o600 });
+            } catch {}
+          }
         } catch (err) {
-          console.error(`[agent-chat run] archive directive capture failed: ${(err as Error).message}`);
+          console.error(`[agent-chat run] archive seal failed: ${(err as Error).message}`);
         }
       }
     } catch (err) {

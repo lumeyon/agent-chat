@@ -2,16 +2,13 @@
 
 **N agents. One graph. Real conversations. Filesystem-first, no database, no token ceiling.**
 
-> **Round-15d-β shipped: ephemeral-only architecture.** Persistent-mode
-> infrastructure (sidecar.ts, monitor.ts, heartbeat emitter, doctor
-> --liveness heartbeat checks) was retired in this commit. agent-chat
-> is now ephemeral-only — each `agent-chat run` invocation reads
-> filesystem state, processes actionable edges, and exits. ScheduleWakeup
-> via `loop-driver.ts` handles cache-warm continuation. The sections
-> below mentioning "monitor" / "sidecar" / "heartbeat" / "--no-sidecar" /
-> "--no-monitor" are outdated and queued for a follow-up doc rewrite;
-> the **`agent-chat run` + `loop-driver.ts` flow** described in the
-> Hybrid mode section is the canonical usage as of Round-15d-β.
+> **Ephemeral-only architecture (Round 15d).** agent-chat runs as
+> short-lived process invocations: each `agent-chat run` reads
+> filesystem state, processes actionable edges, and exits. No
+> long-running daemons. Cache-warm continuation handled by
+> `loop-driver.ts` via `ScheduleWakeup` (270s). Per-agent
+> autobiographical scratchpads + agent-managed archive directives
+> + sub-relay activation are the long-term-memory primitives.
 
 `agent-chat` is a Claude Code / Codex skill that lets multiple AI sessions
 collaborate on real work through a shared on-disk protocol — and unlike most
@@ -62,31 +59,29 @@ verbatim transcript. **Nothing is lost. Everything stays cheap to re-read.**
 [lcm]: https://losslesscontext.ai
 
 **Filesystem-first.** The wire protocol is markdown + YAML + a one-line
-JSONL index per edge. No external service, no MCP server, no Postgres.
-Works on local disk, NFS, sshfs, and any other mount. Survives reboots.
-Diffs cleanly. Versions in git like prose. The optional sidecar daemon
-(below) is an *accelerator* layered on top — the protocol works without
-it; sidecar holds zero protocol authority and is rebuildable from the
-filesystem state if it crashes.
+JSONL index per edge. No external service, no MCP server, no Postgres,
+no daemons. Works on local disk, NFS, sshfs, and any other mount.
+Survives reboots. Diffs cleanly. Versions in git like prose.
 
 **Drop-in for any agent runtime.** The protocol is runtime-agnostic. Claude
 Code reads it, Codex reads it, an agent script you wrote on a Tuesday reads
 it. The skill spec is one `SKILL.md` file; the operational checklist is one
-`bootstrap.md` file; the implementation is fourteen TypeScript files
-totaling roughly seven thousand lines, with zero npm dependencies (we use
-Bun's built-ins where extras would be tempting).
+`bootstrap.md` file; the implementation is ~9 TypeScript files totaling
+roughly two thousand five hundred lines, with zero npm dependencies (we
+use Bun's built-ins where extras would be tempting).
 
-**Optional fast-path daemon.** `agent-chat init` auto-launches a long-lived
-per-agent **sidecar** alongside the monitor: a Unix-domain-socket daemon
-serving structured queries (name, time, peek, last-section, unread,
-since-last-spoke, health) in a few milliseconds. The sidecar uses inotify
-to watch your edges and pre-computes the diff since you last spoke, so a
-substantive turn doesn't pay the re-read tax on the full `CONVO.md`. The
-file-based wire protocol stays authoritative — the daemon is a pure
-accelerator that any runtime can ignore. Cross-runtime by construction:
-the IPC is line-delimited JSON, so a Codex sidecar in Python and a Claude
-sidecar in TypeScript coordinate through the same socket-and-file shape.
-Pass `--no-sidecar` to opt out for CI, debug, or hostile filesystems.
+**Ephemeral execution model (Round 15d).** Every `agent-chat run`
+invocation reads filesystem state, processes actionable edges, and
+exits. No long-running daemons; no sidecar; no monitor process; no
+heartbeat emitter. Cache-warm continuation between ticks is handled
+by `loop-driver.ts` via Claude Code's `ScheduleWakeup` primitive (270s
+delay tuned to stay under the 5-min prompt-cache TTL — empirical
+finding from the Ruflo audit). Rate-limit pauses are transparent: the
+next tick is a fresh process. Sub-relay activation lets agents
+dispatch through their own neighbors (carina → lumeyon directly, not
+just through orion). Per-agent autobiographical scratchpads preserve
+relationship context across ticks. Agent-managed archive directives
+let the writer of a section also author its summary.
 
 **Multi-user transparency, automatic and orthogonal.** Humans live in a
 separate `agents.users.yaml` registry that overlays onto every topology
@@ -113,11 +108,12 @@ fold into the same lossless-claw archive layer as everything else, so
 | Capability | How |
 |---|---|
 | **N-agent topology over an arbitrary graph** | YAML manifests (`agents.<topology>.yaml`) declare agents and edges. Petersen, ring, star, and pair ship in the box. |
-| **Per-session identity resolution** | `$AGENT_NAME` + `$AGENT_TOPOLOGY` env vars, or a `.agent-name` file in cwd. The skill refuses to guess — silent identity-guessing is what made codex-chat 2-agent-only. |
+| **Per-session identity resolution** | `$AGENT_NAME` + `$AGENT_TOPOLOGY` env vars, or a `.agent-name` file in cwd, or a per-session record under `.sessions/`. The skill refuses to guess — silent identity-guessing is what made codex-chat 2-agent-only. |
 | **Atomic turn handoff** | `.turn` written via `tmpfile + rename`. Concurrent reads always observe either the old or the new value. |
-| **Multi-edge background watcher** | One `monitor.ts` invocation watches every edge the agent participates in. Three independent triggers (value-change, mtime-touch, body-grew) catch every form of "your turn" — including the codex-chat trick of appending then re-parking. Filesystem-agnostic polling, so it works over NFS where `inotify` falls silent. |
-| **Per-agent sidecar daemon** | `scripts/sidecar.ts` runs alongside the monitor (default-on; `--no-sidecar` opts out). UDS at `<conversations>/.sockets/<agent>.sock` with mode 0600 for filesystem-permission auth. Eight v1 methods: `whoami`, `time`, `peek`, `last-section`, `unread`, `since-last-spoke`, `health`, `shutdown` (plus `speaker` for multi-user). Inotify-driven `fs.watch` (debounced 25 ms) replaces polling on local FS with kernel-event ms latency; a 5-second reconcile poll catches misses on FUSE/WSL1. The sidecar holds zero protocol authority — `lock`/`flip`/`park`/`unlock` stay file-direct; the daemon is a pure read-accelerator and notification multiplexer. |
-| **Agent liveness signals** | The sidecar writes a `<conversations>/.heartbeats/<agent>.heartbeat` sentinel every 30s (atomic `tmpfile + rename`; pid + starttime fingerprint matches lock-file format). The monitor reads heartbeats during its tick and emits one of three notifications when stuck-detection fires: `peer-sidecar-dead` (turn=peer + their heartbeat is stale), `local-sidecar-dead` (turn=me + my own heartbeat is stale), or `agent-stuck-on-own-turn` (turn=me + turn-mtime > 5min + no live-session lock + no recent CONVO.md growth — the "alive but silent" case). `agent-chat doctor --liveness` is the offline equivalent. Detection is filesystem-only and zero-LLM-token; *resuming* a stuck session is intentionally out of scope (sessions must be poked manually or via Round-14's wakeup mechanism). |
+| **Ephemeral execution** | `agent-chat run` reads filesystem state, processes actionable edges (where `.turn = me` and no lock), and exits. No long-running daemons. `loop-driver.ts` wraps cmdRun with cache-warm `ScheduleWakeup` (270s) for self-rescheduling; `--interactive` mode runs a tight 1-3s tick loop until idle for real-time deliberation. Stuck-recovery: any edge whose turn has been on me for >5min with no progress gets auto-redispatched on the next loop iteration. |
+| **Per-agent autobiographical scratchpad** | `<conversations>/.scratch/<agent>.md` — the agent's own narrative of their relationships, written in their voice, persisted across ticks (8KB cap; older content gets condensed via `scratch-condense.ts` into the scratchpad DAG). Read at the start of every tick alongside the CONVO.md tail. The structural answer to "the same agent must know context from the distant past" under ephemeral execution. |
+| **Sub-relay activation** | `agent-chat run --sub-relay-from <chain>` lets a peer dispatch through its own neighbor (carina → lumeyon directly, not just through orion). Cycle refusal + depth ≤ topology-diameter as correctness guards. Activates the (N choose 2) - (orion's neighbors) edges that the persistent-mode "everything through the orchestrator" pattern left dormant. |
+| **Agent-managed memory directives** | Agents emit `<scratch>...</scratch>` and `<archive>sections: N\nsummary: ...</archive>` blocks in their tick responses. The writer of a section authors its archive summary in their own words; bypasses the deterministic synthesizer for archives the agent explicitly authored. `archive.ts auto --seal-count N --agent-summary` is the underlying primitive. |
 | **Humans as first-class agents (orthogonal overlay)** | `agents.users.yaml` declares humans separately from any topology; `loadTopology()` overlays them at load time so any topology automatically gets human-AI edges. `agent-chat init` auto-resolves the speaker from environment (`$AGENT_CHAT_USER` / `$USER` / `users.yaml default`); `agent-chat speaker <name>` overrides for multi-user sessions. `agent-chat record-turn --user X --assistant Y` captures the turn as two CONVO.md sections on the appropriate `<speaker>-<agent>` edge. Idempotent retries via per-edge `recorded_turns.jsonl` ledger (sha256). Speaker switches emit recorded handoff sections to the prior edge. Privacy is an explicit non-goal — accountability is the audit trail. |
 | **Conversation archives that stay searchable** | Sealed leaves (`archives/leaf/`) preserve the verbatim transcript; SUMMARY.md captures the distilled knowledge with an *Expand for details about:* footer that signals what was compressed away. |
 | **DAG condensation** | Once leaves accumulate, fold N siblings at depth d into one parent at depth d+1 with a more abstract policy. Agent walks down via `search.ts expand --children`. |
@@ -229,54 +225,39 @@ Power users can still use `$AGENT_NAME` / `$AGENT_TOPOLOGY` env vars or a
 `.agent-name` file — those remain supported as fallback resolution
 sources for CI / scripted setups.
 
-### 3. The monitor and sidecar (auto-started by `init`)
+### 3. Process pending work (Round-15d ephemeral mode)
 
-`agent-chat init` already started both background daemons. Each line the
-monitor prints to its log becomes one notification you can tail with:
-
-```bash
-tail -F ~/.claude/skills/agent-chat/conversations/.logs/monitor-orion.log
-tail -F ~/.claude/skills/agent-chat/conversations/.logs/sidecar-orion.log
-```
-
-The monitor fires when `.turn` flips to your name, when an edge gets
-parked, when `.turn` is rewritten to the same value (peer
-appended-then-parked), or when `CONVO.md` grew without a `.turn` flip.
-It writes monitor-format lines to its log and (when wired through Claude
-Code's Monitor tool) to chat. Polling-based by default — works on every
-filesystem, including NFS / FUSE / sshfs where inotify falls silent.
-
-The **sidecar** is the structured-query fast-path. Talk to it with any
-line-JSON-over-UDS client:
+`agent-chat init` only registers identity — it does NOT launch any
+daemons. To actually process pending turns, run a tick:
 
 ```bash
-sock=~/.claude/skills/agent-chat/conversations/.sockets/orion.sock
-echo '{"id":1,"method":"time"}' | nc -U -q 0 "$sock"
-echo '{"id":2,"method":"peek","params":{"peer":"lumeyon"}}' | nc -U -q 0 "$sock"
-echo '{"id":3,"method":"since-last-spoke","params":{"peer":"lumeyon"}}' | nc -U -q 0 "$sock"
+SKILL=~/.claude/skills/agent-chat
+
+# Single tick: read .turn files, process any edge where turn=me, exit.
+bun $SKILL/scripts/agent-chat.ts run
+
+# Filtered to a specific peer:
+bun $SKILL/scripts/agent-chat.ts run lumeyon
+
+# Cache-warm self-rescheduling loop (270s ticks via ScheduleWakeup):
+bun $SKILL/scripts/loop-driver.ts
+
+# Real-time interactive cadence (1-3s ticks until idle):
+bun $SKILL/scripts/loop-driver.ts --interactive
+
+# Sub-relay: dispatch through your own neighbor (carina → lumeyon directly):
+AGENT_NAME=carina bun $SKILL/scripts/agent-chat.ts run --sub-relay-from carina lumeyon
 ```
 
-`time` returns ISO + monotonic ns in 1-8 ms (no LLM in the loop).
-`since-last-spoke` returns the peer-only diff since you last wrote — so a
-substantive turn no longer pays the full-`CONVO.md` re-read tax. The
-sidecar uses inotify (`fs.watch`) on the edge directories with a 25 ms
-debounce; a 5-second reconcile poll catches misses on filesystems where
-inotify under-fires.
+The protocol is filesystem-mediated; there are no background processes
+to monitor. Each `agent-chat run` invocation reads the current `.turn`
+state, processes its actionable edges (composes a response via
+`claude -p`, appends to CONVO.md, flips the turn), and exits. Rate-limit
+pauses are transparent: the next tick is a fresh process.
 
-If you need the monitor in foreground (e.g. piping to Claude Code's
-Monitor tool with `persistent: true`), the cycle is:
+### 4. Take a turn manually (low-level primitives)
 
-```bash
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen --no-monitor
-bun ~/.claude/skills/agent-chat/scripts/monitor.ts
-```
-
-The sidecar's stdout uses the *same* line format as the monitor, so an
-advanced setup can attach Claude Code's Monitor tool to the sidecar
-instead and skip `monitor.ts` entirely. v1 ships both as defaults; v2
-may promote the sidecar to primary chat-notification source.
-
-### 4. Take your turn
+If you'd rather drive the protocol yourself instead of using `cmdRun`:
 
 ```bash
 SKILL=~/.claude/skills/agent-chat
@@ -287,12 +268,6 @@ bun $SKILL/scripts/turn.ts lock lumeyon          # claim the brief append+flip l
 bun $SKILL/scripts/turn.ts flip lumeyon lumeyon  # hand off (or `parked`)
 bun $SKILL/scripts/turn.ts unlock lumeyon
 ```
-
-`peek` fast-paths through the sidecar daemon when running (1-8 ms UDS
-round-trip vs. several `statSync` + `readFileSync` calls); falls back to
-the file-direct path on any sidecar error. Write ops (`lock`/`flip`/
-`park`/`unlock`/`recover`) stay file-direct on principle — the sidecar
-holds zero protocol authority.
 
 If the flip is refused with `refuse to flip — turn is "X", not "Y"`,
 **stop**. Do not modify the .md. The protocol just told you it's not your
