@@ -12,14 +12,15 @@ import * as path from "node:path";
 import { SKILL_ROOT } from "../scripts/lib.ts";
 
 describe("Round 15b — plugin manifest validity", () => {
-  // Round-15g layout: marketplace.json at .claude-plugin/marketplace.json
-  // (repo root); plugin manifests + skills under plugins/agent-chat/.
-  // Forward-only source path (no `../` parent traversal — Claude Code
-  // refuses parent-traversal source types per the install error).
-  const PLUGIN_DIR = path.join(SKILL_ROOT, "plugins/agent-chat");
+  // Round-15g final layout: scripts/ + agents.*.yaml + tests/ + skills/
+  // moved INSIDE plugins/agent-chat/ so the plugin install captures the
+  // full payload. SKILL_ROOT therefore resolves to the plugin's root
+  // (<repo>/plugins/agent-chat/). The marketplace.json lives at the
+  // repo root one level UP.
+  const REPO_ROOT = path.resolve(SKILL_ROOT, "../..");
 
   test(".claude-plugin/plugin.json is valid JSON with required fields", () => {
-    const p = path.join(PLUGIN_DIR, ".claude-plugin/plugin.json");
+    const p = path.join(SKILL_ROOT, ".claude-plugin/plugin.json");
     expect(fs.existsSync(p)).toBe(true);
     const m = JSON.parse(fs.readFileSync(p, "utf8"));
     expect(m.name).toBe("agent-chat");
@@ -30,36 +31,33 @@ describe("Round 15b — plugin manifest validity", () => {
   });
 
   test(".codex-plugin/plugin.json is valid JSON with required fields", () => {
-    const p = path.join(PLUGIN_DIR, ".codex-plugin/plugin.json");
+    const p = path.join(SKILL_ROOT, ".codex-plugin/plugin.json");
     expect(fs.existsSync(p)).toBe(true);
     const m = JSON.parse(fs.readFileSync(p, "utf8"));
     expect(m.name).toBe("agent-chat");
     expect(typeof m.version).toBe("string");
     expect(typeof m.description).toBe("string");
     expect(m.license).toBe("MIT");
-    // Codex docs don't document an engines.codex constraint; absent is fine.
   });
 
-  test("marketplace.json declares agent-chat as a plugin entry", () => {
-    const p = path.join(SKILL_ROOT, ".claude-plugin/marketplace.json");
+  test("marketplace.json (repo root) declares agent-chat as a plugin entry", () => {
+    const p = path.join(REPO_ROOT, ".claude-plugin/marketplace.json");
     expect(fs.existsSync(p)).toBe(true);
     const m = JSON.parse(fs.readFileSync(p, "utf8"));
     expect(Array.isArray(m.plugins)).toBe(true);
-    expect(m.plugins.length).toBeGreaterThanOrEqual(1);
     const ac = m.plugins.find((p: any) => p.name === "agent-chat");
     expect(ac).toBeDefined();
-    // Forward-only source path; no `../` (Claude Code rejects parent traversal).
     expect(ac?.source).toBe("./plugins/agent-chat");
   });
 
-  test("SKILL.md exists at plugins/agent-chat/skills/agent-chat/SKILL.md", () => {
-    const p = path.join(PLUGIN_DIR, "skills/agent-chat/SKILL.md");
+  test("SKILL.md exists at skills/agent-chat/SKILL.md (inside plugin)", () => {
+    const p = path.join(SKILL_ROOT, "skills/agent-chat/SKILL.md");
     expect(fs.existsSync(p)).toBe(true);
   });
 
   test("Claude + Codex manifests share name + version (dual-runtime invariant)", () => {
-    const c = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, ".claude-plugin/plugin.json"), "utf8"));
-    const x = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, ".codex-plugin/plugin.json"), "utf8"));
+    const c = JSON.parse(fs.readFileSync(path.join(SKILL_ROOT, ".claude-plugin/plugin.json"), "utf8"));
+    const x = JSON.parse(fs.readFileSync(path.join(SKILL_ROOT, ".codex-plugin/plugin.json"), "utf8"));
     expect(c.name).toBe(x.name);
     expect(c.version).toBe(x.version);
     // Description CAN diverge (Codex variant flags the empirical probe);

@@ -18,7 +18,7 @@ When you say that, Claude should **immediately** run, as its very first
 action, **before any other skill operation**:
 
 ```bash
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts init orion petersen
 ```
 
 That single command:
@@ -83,7 +83,7 @@ previously been `orion` in this terminal and Claude is being relaunched,
 the init command offers to resume that identity rather than forcing a
 redeclaration.
 
-When the session ends, run `bun scripts/agent-chat.ts exit` to clean up
+When the session ends, run `bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" exit` to clean up
 the session file and stop the monitor. Forgetting is fine — `agent-chat
 gc` sweeps stale entries (presence files for pids that are no longer
 alive).
@@ -91,9 +91,9 @@ alive).
 Other useful subcommands:
 
 ```bash
-bun scripts/agent-chat.ts who          # list live agents on this host
-bun scripts/agent-chat.ts whoami       # print this session's identity
-bun scripts/agent-chat.ts gc           # sweep dead session/presence files
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" who          # list live agents on this host
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" whoami       # print this session's identity
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" gc           # sweep dead session/presence files
 ```
 
 The remaining steps below describe the protocol for any session, however
@@ -120,7 +120,7 @@ The skill needs to know exactly two things: **what is your agent name**, and
 To verify identity right now, run from anywhere inside the skill directory:
 
 ```bash
-bun scripts/resolve.ts
+bun "$AGENT_CHAT_DIR/scripts/resolve.ts"
 ```
 
 (or `npx tsx scripts/resolve.ts`, or `node --experimental-strip-types scripts/resolve.ts` on Node 23+)
@@ -147,7 +147,7 @@ Verification: run this in **each** terminal as the very first thing the
 session does:
 
 ```bash
-bun scripts/resolve.ts --whoami
+bun "$AGENT_CHAT_DIR/scripts/resolve.ts" --whoami
 ```
 
 It prints one line: `<agent>@<host>:<pid> via <source> in topology <topo>`.
@@ -194,22 +194,22 @@ Use the small CLI in `scripts/turn.ts`. `<peer>` is the *other* agent's name;
 the edge id is derived alphabetically so both sides resolve the same path.
 
 ```bash
-bun scripts/turn.ts peek <peer>                  # what's the .turn value, who has the lock?
-bun scripts/turn.ts init <peer> <first-writer>   # one-time edge initialization
-bun scripts/turn.ts lock <peer>                  # claim the brief append+flip lock
-bun scripts/turn.ts flip <peer> <next>           # next ∈ {peer-name, parked}
-bun scripts/turn.ts park <peer>                  # equivalent to: flip <peer> parked
-bun scripts/turn.ts unlock <peer>                # release the lock
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" peek <peer>                  # what's the .turn value, who has the lock?
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" init <peer> <first-writer>   # one-time edge initialization
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" lock <peer>                  # claim the brief append+flip lock
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" flip <peer> <next>           # next ∈ {peer-name, parked}
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" park <peer>                  # equivalent to: flip <peer> parked
+bun "$AGENT_CHAT_DIR/scripts/turn.ts" unlock <peer>                # release the lock
 ```
 
 Append-and-flip sequence:
 
-1. `bun scripts/turn.ts peek <peer>` — confirm `.turn` is your name and lock is empty.
-2. `bun scripts/turn.ts lock <peer>` — claim the lock.
+1. `bun "$AGENT_CHAT_DIR/scripts/turn.ts" peek <peer>` — confirm `.turn` is your name and lock is empty.
+2. `bun "$AGENT_CHAT_DIR/scripts/turn.ts" lock <peer>` — claim the lock.
 3. Append your section to the CONVO.md path printed by `peek` (use the
    `## <agent> — <topic> (UTC ...)` template ending with `→ <next>`).
-4. `bun scripts/turn.ts flip <peer> <peer-name|parked>` — atomically hand off.
-5. `bun scripts/turn.ts unlock <peer>` — release the lock.
+4. `bun "$AGENT_CHAT_DIR/scripts/turn.ts" flip <peer> <peer-name|parked>` — atomically hand off.
+5. `bun "$AGENT_CHAT_DIR/scripts/turn.ts" unlock <peer>` — release the lock.
 
 If `flip` complains the turn is not yours, **stop**. Do not modify the .md.
 
@@ -218,12 +218,12 @@ If `flip` complains the turn is not yours, **stop**. Do not modify the .md.
 If the topology does not give you a direct edge to the agent you need, ask
 one of your neighbors to forward the message. With Petersen the diameter is
 2, so any non-neighbor is reachable through exactly one intermediary.
-`bun scripts/resolve.ts` shows your three neighbors; pick the one most
+`bun "$AGENT_CHAT_DIR/scripts/resolve.ts"` shows your three neighbors; pick the one most
 likely to know the target's domain.
 
 ## Step 5 — when you genuinely have nothing to add
 
-Park the edge with `bun scripts/turn.ts park <peer>`. Don't leave `.turn`
+Park the edge with `bun "$AGENT_CHAT_DIR/scripts/turn.ts" park <peer>`. Don't leave `.turn`
 holding your peer's name as a fake "I owe you" — silence is ambiguous,
 `parked` is explicit.
 
@@ -245,13 +245,13 @@ Trigger conditions (any one):
 ### Archive a leaf chunk
 
 ```bash
-bun scripts/archive.ts plan <peer>                     # dry-run: show what would seal
-bun scripts/archive.ts seal <peer>                     # writes BODY.md + SUMMARY.md stub,
+bun "$AGENT_CHAT_DIR/scripts/archive.ts" plan <peer>                     # dry-run: show what would seal
+bun "$AGENT_CHAT_DIR/scripts/archive.ts" seal <peer>                     # writes BODY.md + SUMMARY.md stub,
                                                        # truncates CONVO.md to header + breadcrumb
                                                        # + fresh tail (last 4 sections kept verbatim)
 # now edit the SUMMARY.md the seal step printed: fill every TODO,
 # strip the comment blocks, write a real "Expand for details about:" line
-bun scripts/archive.ts commit <peer> arch_L_...        # validate + finalize the index entry
+bun "$AGENT_CHAT_DIR/scripts/archive.ts" commit <peer> arch_L_...        # validate + finalize the index entry
 ```
 
 The validator rejects a SUMMARY.md that is missing any of the required
@@ -267,11 +267,11 @@ fold them into a depth-1 summary so future grep queries hit one concise
 node instead of N similar ones:
 
 ```bash
-bun scripts/condense.ts plan <peer>                    # dry-run: list eligible leaves
-bun scripts/condense.ts seal <peer> --limit 4          # fold the 4 oldest unfolded leaves
+bun "$AGENT_CHAT_DIR/scripts/condense.ts" plan <peer>                    # dry-run: list eligible leaves
+bun "$AGENT_CHAT_DIR/scripts/condense.ts" seal <peer> --limit 4          # fold the 4 oldest unfolded leaves
                                                        # into one depth-1 archive
 # fill in the new SUMMARY.md
-bun scripts/condense.ts commit <peer> arch_C_...
+bun "$AGENT_CHAT_DIR/scripts/condense.ts" commit <peer> arch_C_...
 ```
 
 Same pattern repeats for d1→d2 and d2→d3+. Each depth uses a more
@@ -284,10 +284,10 @@ have to memorize it.
 The same escalation lossless-claw uses, just over the on-disk index:
 
 ```bash
-bun scripts/search.ts grep "scan orchestration"        # cheap: index.jsonl + SUMMARY.md hits
-bun scripts/search.ts describe arch_L_...              # medium: full SUMMARY.md + META
-bun scripts/search.ts expand arch_L_...                # cold: BODY.md (verbatim transcript)
-bun scripts/search.ts expand arch_C_... --children     # for condensed: walk to child summaries
+bun "$AGENT_CHAT_DIR/scripts/search.ts" grep "scan orchestration"        # cheap: index.jsonl + SUMMARY.md hits
+bun "$AGENT_CHAT_DIR/scripts/search.ts" describe arch_L_...              # medium: full SUMMARY.md + META
+bun "$AGENT_CHAT_DIR/scripts/search.ts" expand arch_L_...                # cold: BODY.md (verbatim transcript)
+bun "$AGENT_CHAT_DIR/scripts/search.ts" expand arch_C_... --children     # for condensed: walk to child summaries
 ```
 
 Most lookups stop at `grep`. Only run `expand` when the SUMMARY.md's
@@ -327,10 +327,10 @@ if the floor is on me → flip turn → exit — and either terminates (if
 
 ```bash
 # Single-tick: useful for cron-driven sweeps, manual one-shots, batch jobs.
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run --once <peer>
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts run --once <peer>
 
 # Scheduled loop: respond on this edge until parked or terminated.
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts run
 ```
 
 The scheduled loop survives the LLM session's exit (Claude Code's
@@ -354,8 +354,8 @@ behind it) does NOT refuse — the live-liveness probe is the authoritative
 signal. To switch from persistent → ephemeral:
 
 ```bash
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts exit   # stop sidecar + monitor
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run    # start ephemeral loop
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts exit   # stop sidecar + monitor
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts run    # start ephemeral loop
 ```
 
 Mixing modes across DIFFERENT agents on the same graph is fully supported.

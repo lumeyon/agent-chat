@@ -99,13 +99,31 @@ The skill explicitly does *not* infer identity from running-process
 heuristics or model-name guessing — those gave us the codex-chat 2-agent
 ceiling we are trying to break.
 
+### First step — discover the plugin install path (Round-15g)
+
+agent-chat installs as a Claude Code plugin under
+`~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/<version>/`
+or as a direct symlink under `~/.claude/skills/agent-chat/`. **Before
+running any `bun scripts/...` command, set `$AGENT_CHAT_DIR` so all
+invocations work regardless of install method:**
+
+```bash
+export AGENT_CHAT_DIR="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1)}"
+[ -z "$AGENT_CHAT_DIR" ] && [ -d ~/.claude/skills/agent-chat ] && AGENT_CHAT_DIR=~/.claude/skills/agent-chat
+[ -z "$AGENT_CHAT_DIR" ] && echo "ERROR: agent-chat not installed; install via /plugin marketplace add lumeyon/agent-chat" && return 1
+```
+
+This sets `$AGENT_CHAT_DIR` to the plugin install path (preferred) OR
+the legacy direct-symlink path (fallback). Use it in EVERY subsequent
+command: `bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" init <name> ...`.
+
 ### Many sessions sharing one cwd (preferred path)
 
 Run each session normally and have it run, on its first turn, when the
 user states its identity:
 
 ```bash
-bun scripts/agent-chat.ts init <name> [<topology>]
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" init <name> [<topology>]
 ```
 
 That writes a per-session identity file keyed by `$CLAUDE_SESSION_ID` (or
@@ -206,7 +224,7 @@ true` entry. Explicit `agent-chat speaker <name>` overrides the default.
 **At the END of every assistant response, the agent MUST run:**
 
 ```bash
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts record-turn \
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts record-turn \
   --user "<verbatim user prompt>" \
   --assistant "<verbatim assistant response>"
 ```
@@ -230,9 +248,9 @@ call inside hook-retry harnesses or to recover from a partial write.
 The agent runs (typically once per response, automatically):
 
 ```bash
-bun scripts/agent-chat.ts record-turn --user "<text>" --assistant "<text>"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" record-turn --user "<text>" --assistant "<text>"
 # or, for large payloads:
-bun scripts/agent-chat.ts record-turn --stdin   # reads JSON {user, assistant}
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" record-turn --stdin   # reads JSON {user, assistant}
 ```
 
 Reads `current_speaker` (set by `agent-chat speaker <name>`, slice 2)
@@ -317,7 +335,7 @@ conversation — auto-proceed is decided per-edge, not globally.
 
 When the topology does not give you a direct edge to your target:
 
-1. `bun scripts/resolve.ts` — list your neighbors.
+1. `bun "$AGENT_CHAT_DIR/scripts/resolve.ts"` — list your neighbors.
 2. Pick the neighbor most likely to know the target.
 3. Open or continue an edge with that neighbor and ask them to forward.
 4. The intermediary appends a relay turn on its edge with the target,
