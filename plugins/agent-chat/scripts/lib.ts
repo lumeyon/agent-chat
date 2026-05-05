@@ -441,6 +441,16 @@ export function loadTopology(topologyName: string): Topology {
       }
     }
   }
+  // Round-15h Concern-2: agent-managed role overrides. After parsing the
+  // YAML defaults, overlay any per-agent override file from
+  // <conv>/.roles/<agent>.md. Override wins. This lets an agent evolve
+  // their own role at runtime without editing the topology yaml — peers
+  // re-read the topology on every cmdRun tick, so changes propagate
+  // naturally. Missing override file is silent (use yaml default).
+  const overlay = readRoleOverrides();
+  if (Object.keys(overlay).length > 0) {
+    t.roles = { ...(t.roles ?? {}), ...overlay };
+  }
   return t;
 }
 
@@ -601,11 +611,223 @@ export function writeScratch(agent: string, contents: string): void {
   writeFileAtomic(scratchPath(agent), contents, { mode: 0o600 });
 }
 
+// ── Round-15h Concern-2: agent-managed role overrides ───────────────────
+//
+// The topology YAML provides default roles; agents can write their own
+// override at <conv>/.roles/<agent>.md and overlay-merge wins. Roles are
+// re-read on every cmdRun tick (loadTopology calls readRoleOverrides), so
+// an agent who updates their role on tick N has it visible to peers on
+// tick N+1.
+export const ROLES_DIR = path.join(CONVERSATIONS_DIR, ".roles");
+export const ROLE_MAX_BYTES = 4 * 1024;
+
+export function rolePath(agent: string): string {
+  return path.join(ROLES_DIR, `${safeAgent(agent)}.md`);
+}
+
+export function readRoleOverride(agent: string): string | null {
+  try {
+    return fs.readFileSync(rolePath(agent), "utf8");
+  } catch (e: any) {
+    if (e?.code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+export function readRoleOverrides(): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!fs.existsSync(ROLES_DIR)) return out;
+  for (const f of fs.readdirSync(ROLES_DIR)) {
+    if (!f.endsWith(".md")) continue;
+    const agent = f.slice(0, -3);
+    try { out[agent] = fs.readFileSync(path.join(ROLES_DIR, f), "utf8"); } catch {}
+  }
+  return out;
+}
+
+export function writeRoleOverride(agent: string, body: string): void {
+  fs.mkdirSync(ROLES_DIR, { recursive: true });
+  if (body.length > ROLE_MAX_BYTES) {
+    throw new Error(`role body too long (${body.length} bytes > cap ${ROLE_MAX_BYTES}); split into a scratchpad entry instead`);
+  }
+  writeFileAtomic(rolePath(agent), body, { mode: 0o600 });
+}
+
+export function clearRoleOverride(agent: string): boolean {
+  try { fs.unlinkSync(rolePath(agent)); return true; }
+  catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
+}
+
+// ── Round-15h Concern-3: Dot Collector (Dalio-inspired peer rating) ─────
+//
+// Multidimensional grading. Each dot is one peer's rating of another peer's
+// recent contribution along several axes (1-10). Stored as JSONL ledger
+// per peer (the GRADEE) at <conv>/.dots/<peer>.jsonl. Append-only so the
+// historical record is preserved; aggregation is computed on read.
+//
+// Believability (Dalio's concept): not all graders are equally credible.
+// An agent who themselves has high dots-received counts more when grading
+// others. We compute believability as the mean of an agent's received-axes
+// scores (across all axes, all dots received, weighted equally), divided
+// by 10. New agents start at 0.5 (neutral prior) until they accumulate dots.
+//
+// Aggregation: weighted mean of per-axis scores, where each dot's weight
+// is the grader's believability. Returned alongside the unweighted mean
+// for comparison.
+export const DOTS_DIR = path.join(CONVERSATIONS_DIR, ".dots");
+export const DOT_AXES = ["clarity", "depth", "reliability", "speed"] as const;
+export type DotAxis = typeof DOT_AXES[number];
+
+export type Dot = {
+  ts: string;
+  grader: string;
+  axes: Record<DotAxis, number>;
+  note?: string;
+};
+
+export function dotsPath(peer: string): string {
+  return path.join(DOTS_DIR, `${safeAgent(peer)}.jsonl`);
+}
+
+export function appendDot(peer: string, dot: Dot): void {
+  fs.mkdirSync(DOTS_DIR, { recursive: true });
+  fs.appendFileSync(dotsPath(peer), JSON.stringify(dot) + "\n", { mode: 0o600 });
+}
+
+export function readDots(peer: string): Dot[] {
+  try {
+    const raw = fs.readFileSync(dotsPath(peer), "utf8");
+    const out: Dot[] = [];
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const d = JSON.parse(line);
+        if (d && typeof d.grader === "string" && d.axes && typeof d.axes === "object") {
+          out.push(d as Dot);
+        }
+      } catch { /* skip malformed line */ }
+    }
+    return out;
+  } catch (e: any) {
+    if (e?.code === "ENOENT") return [];
+    throw e;
+  }
+}
+
+export function readAllDots(): Record<string, Dot[]> {
+  const out: Record<string, Dot[]> = {};
+  if (!fs.existsSync(DOTS_DIR)) return out;
+  for (const f of fs.readdirSync(DOTS_DIR)) {
+    if (!f.endsWith(".jsonl")) continue;
+    const peer = f.slice(0, -6);
+    out[peer] = readDots(peer);
+  }
+  return out;
+}
+
+// Believability: per-agent score in [0, 1]. Computed from the agent's
+// received dots — high scores received → high believability. Neutral
+// prior (0.5) for agents with no received dots. Used as a weight when
+// aggregating their grades of others.
+export function computeBelievability(allDots: Record<string, Dot[]> = readAllDots()): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [peer, dots] of Object.entries(allDots)) {
+    if (dots.length === 0) { out[peer] = 0.5; continue; }
+    let sum = 0, count = 0;
+    for (const d of dots) {
+      for (const a of DOT_AXES) {
+        const v = d.axes[a];
+        if (typeof v === "number" && Number.isFinite(v)) { sum += v; count++; }
+      }
+    }
+    out[peer] = count > 0 ? Math.max(0, Math.min(1, sum / count / 10)) : 0.5;
+  }
+  return out;
+}
+
+export type DotAggregate = {
+  count: number;
+  unweighted: Record<DotAxis, number>; // mean per axis
+  weighted: Record<DotAxis, number>;   // believability-weighted mean per axis
+  composite: number;                   // mean across axes of `weighted`, in [0, 10]
+};
+
+export function aggregateDots(peer: string, allDots?: Record<string, Dot[]>): DotAggregate {
+  const all = allDots ?? readAllDots();
+  const dots = all[peer] ?? [];
+  const believability = computeBelievability(all);
+  const empty: Record<DotAxis, number> = { clarity: 0, depth: 0, reliability: 0, speed: 0 };
+  if (dots.length === 0) {
+    return { count: 0, unweighted: { ...empty }, weighted: { ...empty }, composite: 0 };
+  }
+  const uw: Record<DotAxis, { sum: number; n: number }> = {
+    clarity: { sum: 0, n: 0 }, depth: { sum: 0, n: 0 },
+    reliability: { sum: 0, n: 0 }, speed: { sum: 0, n: 0 },
+  };
+  const wt: Record<DotAxis, { sum: number; w: number }> = {
+    clarity: { sum: 0, w: 0 }, depth: { sum: 0, w: 0 },
+    reliability: { sum: 0, w: 0 }, speed: { sum: 0, w: 0 },
+  };
+  for (const d of dots) {
+    const w = believability[d.grader] ?? 0.5;
+    for (const a of DOT_AXES) {
+      const v = d.axes[a];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        uw[a].sum += v; uw[a].n++;
+        wt[a].sum += v * w; wt[a].w += w;
+      }
+    }
+  }
+  const unweighted: Record<DotAxis, number> = { ...empty };
+  const weighted: Record<DotAxis, number> = { ...empty };
+  for (const a of DOT_AXES) {
+    unweighted[a] = uw[a].n > 0 ? uw[a].sum / uw[a].n : 0;
+    weighted[a] = wt[a].w > 0 ? wt[a].sum / wt[a].w : 0;
+  }
+  const composite = (weighted.clarity + weighted.depth + weighted.reliability + weighted.speed) / 4;
+  return { count: dots.length, unweighted, weighted, composite };
+}
+
+// ── Round-15h Concern-4: relay path BFS ─────────────────────────────────
+//
+// Returns the shortest path of agent names from `from` to `to` in the
+// topology graph. Empty array if from === to. null if no path (disconnected
+// graph, which the topology validators already refuse). For petersen the
+// max path length is 3 nodes (2 hops, diameter=2). Used by cmdRun to tell
+// agents how to reach non-neighbors via relay.
+export function relayPathTo(topo: Topology, from: string, to: string): string[] | null {
+  if (from === to) return [];
+  const adj: Record<string, string[]> = Object.create(null);
+  for (const a of topo.agents) adj[a] = [];
+  for (const [a, b] of topo.edges) {
+    if (a in adj) adj[a].push(b);
+    if (b in adj) adj[b].push(a);
+  }
+  if (!(from in adj) || !(to in adj)) return null;
+  const prev: Record<string, string | null> = { [from]: null };
+  const queue = [from];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (cur === to) {
+      const path: string[] = [];
+      let n: string | null = cur;
+      while (n != null) { path.unshift(n); n = prev[n]; }
+      return path;
+    }
+    for (const nb of adj[cur]) {
+      if (!(nb in prev)) { prev[nb] = cur; queue.push(nb); }
+    }
+  }
+  return null;
+}
+
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
   fs.mkdirSync(LOGS_DIR, { recursive: true });
   fs.mkdirSync(SOCKETS_DIR, { recursive: true });
+  fs.mkdirSync(ROLES_DIR, { recursive: true });
+  fs.mkdirSync(DOTS_DIR, { recursive: true });
 }
 
 // Per-agent path helpers. All sanitize the agent name the same way

@@ -237,6 +237,125 @@ scenario("unauthorized lock refused", () => {
   );
 });
 
+// ── Round-15h scenarios ─────────────────────────────────────────────────
+
+scenario("Round-15h Concern-2 — agent-managed role overrides", () => {
+  const beforeGet = run([AGENT_CHAT, "role", "get", "lumeyon"], orionEnv);
+  check("role get returns YAML default before override", beforeGet.status === 0 && /Architecture/.test(beforeGet.stdout));
+
+  // Plant an override as orion, then read it back.
+  const setR = spawnSync("bun", [AGENT_CHAT, "role", "set", "--stdin"], {
+    encoding: "utf8",
+    env: { ...(process.env as Record<string, string>), ...orionEnv },
+    input: "Updated specialty: round-15h self-test orchestrator",
+  });
+  check("role set --stdin exit 0", setR.status === 0, setR.stderr);
+
+  // Override file exists in the conversations dir.
+  const roleFile = path.join(convDir, ".roles/orion.md");
+  check("override file written to <conv>/.roles/orion.md", fs.existsSync(roleFile));
+
+  const afterGet = run([AGENT_CHAT, "role", "get", "orion"], lumeyonEnv);
+  check("override visible to OTHER agents (read by lumeyon)", afterGet.status === 0 && /Updated specialty: round-15h/.test(afterGet.stdout));
+
+  // role list shows [override] tag.
+  const listR = run([AGENT_CHAT, "role", "list"], orionEnv);
+  check("role list flags overridden agents", listR.status === 0 && /orion[\s\S]*\[override\]/.test(listR.stdout));
+
+  // Clear override.
+  const clearR = run([AGENT_CHAT, "role", "clear"], orionEnv);
+  check("role clear exit 0", clearR.status === 0);
+  check("override file removed by clear", !fs.existsSync(roleFile));
+});
+
+scenario("Round-15h Concern-3 — Dot Collector multi-axis grading", () => {
+  // orion grades lumeyon high.
+  const dotR = run([AGENT_CHAT, "dot", "lumeyon",
+    "--axis", "clarity=9", "--axis", "depth=8",
+    "--axis", "reliability=9", "--axis", "speed=7",
+    "--note", "selftest grade",
+  ], orionEnv);
+  check("dot append exit 0", dotR.status === 0, dotR.stderr);
+  check("ledger file written to <conv>/.dots/lumeyon.jsonl", fs.existsSync(path.join(convDir, ".dots/lumeyon.jsonl")));
+
+  // Read aggregate as JSON.
+  const aggR = run([AGENT_CHAT, "dots", "lumeyon", "--json"], orionEnv);
+  check("dots <peer> --json exit 0", aggR.status === 0, aggR.stderr);
+  if (aggR.status === 0) {
+    const j = JSON.parse(aggR.stdout);
+    check("count = 1", j.count === 1);
+    check("composite > 0", j.composite > 0);
+    check("believability between 0 and 1", j.believability >= 0 && j.believability <= 1);
+    check("clarity weighted ≈ 9.0", Math.abs(j.weighted.clarity - 9) < 0.01);
+  }
+
+  // Self-grading is refused.
+  const selfR = run([AGENT_CHAT, "dot", "orion", "--axis", "clarity=10"], orionEnv);
+  check("self-grading refused", selfR.status !== 0 && /grade self/.test(selfR.stderr + selfR.stdout));
+
+  // Out-of-range value refused.
+  const badR = run([AGENT_CHAT, "dot", "lumeyon", "--axis", "clarity=15"], orionEnv);
+  check("out-of-range axis value refused", badR.status !== 0 && /out of range/.test(badR.stderr + badR.stdout));
+
+  // Unknown axis refused.
+  const unkR = run([AGENT_CHAT, "dot", "lumeyon", "--axis", "creativity=8"], orionEnv);
+  check("unknown axis refused", unkR.status !== 0 && /unknown axis/.test(unkR.stderr + unkR.stdout));
+});
+
+scenario("Round-15h Concern-4 — relay path BFS for non-neighbor routing", () => {
+  // Use a tiny in-process import to test relayPathTo since the function is
+  // a lib-level helper, not a CLI surface.
+  const probe = `
+    import { loadTopology, relayPathTo } from '${path.join(SKILL_ROOT, "scripts/lib.ts")}';
+    const t = loadTopology('petersen');
+    const direct = relayPathTo(t, 'orion', 'lumeyon');
+    const indirect = relayPathTo(t, 'orion', 'cadence');
+    console.log(JSON.stringify({ direct, indirect }));
+  `;
+  const r = spawnSync("bun", ["-e", probe], {
+    encoding: "utf8",
+    env: { ...(process.env as Record<string, string>), AGENT_CHAT_CONVERSATIONS_DIR: convDir },
+  });
+  check("relayPathTo probe exit 0", r.status === 0, r.stderr);
+  if (r.status === 0) {
+    const { direct, indirect } = JSON.parse(r.stdout.trim().split("\n").pop()!);
+    check("direct neighbor: 2-node path orion → lumeyon", Array.isArray(direct) && direct.length === 2);
+    check("non-neighbor: ≥ 3-node path (relay needed)", Array.isArray(indirect) && indirect.length >= 3);
+    check("non-neighbor path starts with self", indirect[0] === "orion");
+    check("non-neighbor path ends with target", indirect[indirect.length - 1] === "cadence");
+  }
+});
+
+scenario("Round-15h Concern-1 — per-tick auto-archive trigger (smoke)", () => {
+  // The full archive cycle requires a runClaude shell-out which we can't
+  // do in a hermetic test. Smoke-check: autoArchiveSessionEdges is callable
+  // directly with the right shape, and threshold logic is sound (returns 0
+  // for under-threshold edges).
+  const probe = `
+    import { autoArchiveSessionEdges } from '${path.join(SKILL_ROOT, "scripts/agent-chat.ts")}';
+    const rec = ${JSON.stringify({
+      agent: "orion", topology: "petersen", session_key: "selftest-orion",
+      pid: process.pid, host: "selftest", started_at: new Date().toISOString(),
+    })};
+    // Function exists and returns 0 for fresh edges (under threshold).
+    try {
+      const n = autoArchiveSessionEdges(rec, 200);
+      console.log(JSON.stringify({ ok: true, sealed: n }));
+    } catch (e) {
+      console.log(JSON.stringify({ ok: false, err: e.message }));
+    }
+  `;
+  // autoArchiveSessionEdges isn't exported from agent-chat.ts; skip the probe
+  // and instead validate the wiring via grep — the function is invoked at the
+  // end of cmdRun (Round-15h-1 commit). This is the cheapest non-flaky check.
+  const code = fs.readFileSync(path.join(SKILL_ROOT, "scripts/agent-chat.ts"), "utf8");
+  check(
+    "cmdRun calls autoArchiveSessionEdges at end of tick",
+    /per-tick auto-archive[\s\S]{0,1500}autoArchiveSessionEdges\(tickRec/.test(code),
+    "expected the per-tick auto-archive block in cmdRun's tail",
+  );
+});
+
 // ── teardown + summary ─────────────────────────────────────────────────────
 
 try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch {}

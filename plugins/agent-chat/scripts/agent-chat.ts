@@ -34,6 +34,13 @@ import {
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
   computeDiameter, readScratch, writeScratch, scratchPath, SCRATCH_DIR,
+  // Round-15h Concern-2: agent-managed role overrides
+  readRoleOverride, writeRoleOverride, clearRoleOverride, rolePath, ROLES_DIR, ROLE_MAX_BYTES,
+  // Round-15h Concern-3: Dot Collector
+  appendDot, readDots, readAllDots, aggregateDots, computeBelievability,
+  DOT_AXES, DOTS_DIR, type Dot, type DotAxis, type DotAggregate,
+  // Round-15h Concern-4: relay path BFS
+  relayPathTo,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 // Round-15d-β: sidecar-client + liveness/heartbeat imports removed.
@@ -749,6 +756,162 @@ async function cmdGc(args: string[]): Promise<void> {
 // emitted under ephemeral-only). The doctor command now reports session
 // records on this host; future rounds may extend with ephemeral-aware
 // stuck-tick detection (e.g. probing scratchpad mtime + .turn age).
+// ── Round-15h Concern-2: agent-managed role overrides (CLI) ─────────────
+
+function cmdRole(args: string[]): void {
+  const sub = args[0];
+  if (sub === "get") {
+    const id = resolveIdentity();
+    const topo = loadTopology(id.topology);
+    const target = args[1] ?? id.name;
+    if (!topo.agents.includes(target)) {
+      die(`role get: unknown agent "${target}". valid: ${topo.agents.join(", ")}`, 65);
+    }
+    const role = topo.roles?.[target];
+    if (role) console.log(role);
+    else console.log(`(no role defined for ${target})`);
+    return;
+  }
+  if (sub === "set") {
+    const id = resolveIdentity();
+    let body = "";
+    const fromFileIdx = args.indexOf("--from-file");
+    if (fromFileIdx >= 0 && args[fromFileIdx + 1]) {
+      body = fs.readFileSync(args[fromFileIdx + 1], "utf8");
+    } else if (args.includes("--stdin")) {
+      body = fs.readFileSync(0, "utf8");
+    } else {
+      die(`role set: must pass --stdin or --from-file <path>`, 70);
+    }
+    body = body.trim();
+    if (!body) die(`role set: empty body refused (use \`role clear\` to remove)`, 70);
+    if (body.length > ROLE_MAX_BYTES) {
+      die(`role set: body too long (${body.length} > cap ${ROLE_MAX_BYTES} bytes)`, 70);
+    }
+    writeRoleOverride(id.name, body);
+    console.log(`✓ role override written for ${id.name} (${body.length} bytes) — peers will see it on their next cmdRun tick.`);
+    return;
+  }
+  if (sub === "clear") {
+    const id = resolveIdentity();
+    const did = clearRoleOverride(id.name);
+    console.log(did
+      ? `✓ role override cleared for ${id.name}; peers fall back to YAML default.`
+      : `(no role override existed for ${id.name})`);
+    return;
+  }
+  if (sub === "list") {
+    const id = resolveIdentity();
+    const topo = loadTopology(id.topology);
+    for (const a of topo.agents) {
+      const r = topo.roles?.[a];
+      const override = readRoleOverride(a) != null ? " [override]" : "";
+      const first = r ? r.split("\n")[0] : "(no role)";
+      console.log(`  ${a.padEnd(12)} ${first}${override}`);
+    }
+    return;
+  }
+  die(`usage: agent-chat.ts role <get|set|clear|list> [<agent>] [--stdin | --from-file <path>]`, 70);
+}
+
+// ── Round-15h Concern-3: Dot Collector (CLI) ────────────────────────────
+
+function cmdDot(args: string[]): void {
+  const peer = args[0];
+  if (!peer || peer.startsWith("--")) {
+    die(`usage: agent-chat.ts dot <peer> [--axis clarity=N --axis depth=N --axis reliability=N --axis speed=N] [--note "..."]\n` +
+        `       axes: clarity, depth, reliability, speed (each 1-10)`, 70);
+  }
+  const id = resolveIdentity();
+  const topo = loadTopology(id.topology);
+  if (!topo.agents.includes(peer)) {
+    die(`dot: unknown peer "${peer}". valid: ${topo.agents.join(", ")}`, 65);
+  }
+  if (peer === id.name) die(`dot: refuse to grade self (${id.name})`, 70);
+  const axes: Record<string, number> = {};
+  let note: string | undefined;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--axis" && args[i + 1]) {
+      const m = args[++i].match(/^(\w+)=(\d+(?:\.\d+)?)$/);
+      if (!m) die(`dot: bad --axis spec "${args[i]}" (want axis=N)`, 70);
+      const [, axis, v] = m;
+      if (!DOT_AXES.includes(axis as DotAxis)) {
+        die(`dot: unknown axis "${axis}". valid: ${DOT_AXES.join(", ")}`, 70);
+      }
+      const n = Number(v);
+      if (!(n >= 1 && n <= 10)) die(`dot: axis "${axis}" value ${n} out of range [1, 10]`, 70);
+      axes[axis] = n;
+    } else if (args[i] === "--note" && args[i + 1]) {
+      note = args[++i];
+    }
+  }
+  if (Object.keys(axes).length === 0) {
+    die(`dot: at least one --axis is required (axes: ${DOT_AXES.join(", ")})`, 70);
+  }
+  // Fill any unprovided axes with neutral (5) so aggregation has a number.
+  // This matches Dalio's DC where every dot covers every dimension; agents
+  // who only want to grade one axis can default the rest to 5 (no signal).
+  const fullAxes: Record<DotAxis, number> = { clarity: 5, depth: 5, reliability: 5, speed: 5 };
+  for (const a of DOT_AXES) if (axes[a] != null) fullAxes[a] = axes[a];
+  const dot: Dot = { ts: utcStamp(), grader: id.name, axes: fullAxes, note };
+  appendDot(peer, dot);
+  console.log(`✓ dot recorded: ${id.name} → ${peer}: ${DOT_AXES.map(a => `${a}=${fullAxes[a]}`).join(" ")}${note ? ` (${note})` : ""}`);
+}
+
+function cmdDots(args: string[]): void {
+  const id = resolveIdentity();
+  const topo = loadTopology(id.topology);
+  const all = readAllDots();
+  const believability = computeBelievability(all);
+  const wantJson = args.includes("--json");
+  const peerFilter = args.find((a) => !a.startsWith("--"));
+
+  if (peerFilter) {
+    if (!topo.agents.includes(peerFilter)) {
+      die(`dots: unknown peer "${peerFilter}"`, 65);
+    }
+    const agg = aggregateDots(peerFilter, all);
+    const dots = all[peerFilter] ?? [];
+    if (wantJson) {
+      console.log(JSON.stringify({ peer: peerFilter, believability: believability[peerFilter] ?? 0.5, ...agg, dots }, null, 2));
+      return;
+    }
+    console.log(`dots for ${peerFilter}:`);
+    console.log(`  count                ${agg.count}`);
+    console.log(`  believability        ${(believability[peerFilter] ?? 0.5).toFixed(2)}`);
+    console.log(`  composite (weighted) ${agg.composite.toFixed(2)} / 10`);
+    console.log(`  per-axis (weighted): ${DOT_AXES.map(a => `${a}=${agg.weighted[a].toFixed(2)}`).join("  ")}`);
+    console.log(`  per-axis (raw):      ${DOT_AXES.map(a => `${a}=${agg.unweighted[a].toFixed(2)}`).join("  ")}`);
+    if (dots.length > 0) {
+      console.log(`  recent (last 5):`);
+      for (const d of dots.slice(-5)) {
+        console.log(`    ${d.ts}  ${d.grader.padEnd(10)} ${DOT_AXES.map(a => `${a}=${d.axes[a]}`).join(" ")}${d.note ? `  — ${d.note}` : ""}`);
+      }
+    }
+    return;
+  }
+
+  // No peer arg: roster summary across all agents.
+  if (wantJson) {
+    const roster = topo.agents.map((a) => ({
+      agent: a,
+      believability: believability[a] ?? 0.5,
+      ...aggregateDots(a, all),
+    }));
+    console.log(JSON.stringify(roster, null, 2));
+    return;
+  }
+  console.log(`dot collector — network roster (composite is believability-weighted):\n`);
+  console.log(`  ${"agent".padEnd(12)} ${"dots".padStart(5)}  ${"belv".padStart(5)}  ${"comp".padStart(5)}  per-axis (weighted)`);
+  for (const a of topo.agents) {
+    const agg = aggregateDots(a, all);
+    const belv = (believability[a] ?? 0.5).toFixed(2);
+    const comp = agg.composite.toFixed(2);
+    const axesStr = DOT_AXES.map(ax => `${ax.slice(0, 3)}=${agg.weighted[ax].toFixed(1)}`).join(" ");
+    console.log(`  ${a.padEnd(12)} ${String(agg.count).padStart(5)}  ${belv.padStart(5)}  ${comp.padStart(5)}  ${axesStr}`);
+  }
+}
+
 async function cmdSelfTest(args: string[]): Promise<void> {
   // Round-15g: end-to-end smoke test for the installed plugin. Spawns the
   // plugin's own scripts in subprocesses against a tmp conversations dir
@@ -1311,17 +1474,42 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       const roleBlock = myRole
         ? `Your role as ${id.name} in ${id.topology}:\n\n${myRole}\n\n---\n\n`
         : "";
-      // Round-15f: peer roles (excluding self) — surface so the agent can
-      // make informed sub-relay decisions ("which neighbor specializes
-      // in this question?"). Only include roles for direct neighbors.
+      // Round-15h Concern-4: full network roster + relay paths. Pre-fix,
+      // only direct neighbors' roles were surfaced — agents had no idea
+      // what non-neighbors could do, so routing through relay was blind.
+      // Now we list every agent + role first-line + dot-collector composite
+      // score (Concern-3) + relay path (BFS via lib.relayPathTo). Diameter
+      // is small (petersen=2, ring=5, star=2) so this stays compact.
       const neighbors = edgesOf(topo, id.name);
-      const peerRolesLines: string[] = [];
-      for (const e of neighbors) {
-        const r = topo.roles?.[e.peer];
-        if (r) peerRolesLines.push(`  - ${e.peer}: ${r.split("\n")[0]}`);
+      const neighborSet = new Set(neighbors.map((e) => e.peer));
+      const allDots = readAllDots();
+      const believability = computeBelievability(allDots);
+      const rosterLines: string[] = [];
+      for (const a of topo.agents) {
+        if (a === id.name) continue;
+        const r = topo.roles?.[a];
+        const roleFirst = r ? r.split("\n")[0] : "(no role defined)";
+        const isNeighbor = neighborSet.has(a);
+        const agg = aggregateDots(a, allDots);
+        const dotInfo = agg.count > 0
+          ? `composite=${agg.composite.toFixed(1)}/10 (${agg.count} dot${agg.count === 1 ? "" : "s"}, belv=${(believability[a] ?? 0.5).toFixed(2)})`
+          : `composite=— (no dots yet, belv=${(believability[a] ?? 0.5).toFixed(2)})`;
+        let routing: string;
+        if (isNeighbor) {
+          routing = `direct neighbor — emit <dispatch peer="${a}">...</dispatch>`;
+        } else {
+          const path = relayPathTo(topo, id.name, a);
+          if (path && path.length >= 3) {
+            const hop = path[1];
+            routing = `${path.length - 1} hops via ${path.slice(1).join(" → ")} — relay through ${hop}`;
+          } else {
+            routing = `unreachable`;
+          }
+        }
+        rosterLines.push(`  - ${a.padEnd(10)} ${roleFirst}\n      ${dotInfo}\n      route: ${routing}`);
       }
-      const peerRolesBlock = peerRolesLines.length > 0
-        ? `Your direct neighbors in this topology and their specialties (you can sub-relay to any of them by emitting <dispatch peer="<name>">...</dispatch> in your response):\n\n${peerRolesLines.join("\n")}\n\n---\n\n`
+      const peerRolesBlock = rosterLines.length > 0
+        ? `Network roster — every agent in topology "${id.topology}" with role, peer-dot composite score, and how to reach them. Use <dispatch peer="<neighbor>">...</dispatch> for direct neighbors; for non-neighbors, dispatch to the named relay hop.\n\n${rosterLines.join("\n\n")}\n\n---\n\n`
         : "";
       prompt =
         roleBlock +
@@ -1359,8 +1547,19 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         `append <scratch>...</scratch> and/or <archive>sections: N\\nsummary: ...</archive> ` +
         `blocks AFTER the section. If you want to dispatch a sub-question to ` +
         `one of your direct neighbors (orchestrator pattern), append ` +
-        `<dispatch peer="NAME">your prompt to them</dispatch>. All blocks ` +
-        `are optional.`;
+        `<dispatch peer="NAME">your prompt to them</dispatch>. ` +
+        // Round-15h Concern-3: Dot Collector. Grade your peer's recent
+        // contribution along axes clarity / depth / reliability / speed
+        // (each 1-10). This builds the network's believability map so
+        // routing decisions can weight by demonstrated competence.
+        `If you want to grade ${edge.peer}'s recent contribution (Dot Collector — ` +
+        `Dalio-inspired multi-axis peer rating), append ` +
+        `<dot peer="${edge.peer}" clarity="N" depth="N" reliability="N" speed="N" note="why" /> ` +
+        `where N is 1-10 per axis. Self-grading is refused. ` +
+        `If you want to update your own role declaration so peers know your ` +
+        `current specialty (Concern-2), run \`agent-chat role set --stdin\` ` +
+        `out-of-band — not as a directive in this section. All directive ` +
+        `blocks above are OPTIONAL.`;
     } catch (err) {
       console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
       continue;
@@ -1454,6 +1653,44 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       dispatchSearch = dispatchSearch.replace(m[0], "");
     }
     stdout = dispatchSearch.trim();
+
+    // Round-15h Concern-3: extract self-closing <dot peer="..." clarity=N
+    // depth=N reliability=N speed=N note="..." /> directives. Each appends
+    // a record to <conv>/.dots/<peer>.jsonl. Self-grading refused (only
+    // peers grade peers). Unprovided axes default to 5 (neutral, no signal).
+    let dotSearch = stdout;
+    while (true) {
+      const m = dotSearch.match(/<dot\s+([^>]+?)\s*\/>/i);
+      if (!m) break;
+      const attrs = m[1];
+      const peerMatch = attrs.match(/peer=["']([a-z0-9_-]+)["']/i);
+      if (!peerMatch) { dotSearch = dotSearch.replace(m[0], ""); continue; }
+      const peer = peerMatch[1];
+      if (peer === id.name) {
+        console.error(`[agent-chat run] dot directive refused: cannot grade self (${id.name})`);
+      } else if (!topo.agents.includes(peer)) {
+        console.error(`[agent-chat run] dot directive refused: "${peer}" not in topology ${id.topology}`);
+      } else {
+        const axes: Record<DotAxis, number> = { clarity: 5, depth: 5, reliability: 5, speed: 5 };
+        for (const ax of DOT_AXES) {
+          const am = attrs.match(new RegExp(`${ax}=["']?(\\d+(?:\\.\\d+)?)["']?`, "i"));
+          if (am) {
+            const v = Number(am[1]);
+            if (v >= 1 && v <= 10) axes[ax] = v;
+          }
+        }
+        const noteMatch = attrs.match(/note=["']([^"']*?)["']/i);
+        try {
+          appendDot(peer, { ts: new Date().toISOString(), grader: id.name, axes, note: noteMatch?.[1] });
+          console.log(`[agent-chat run] dot recorded: ${id.name} → ${peer} (${DOT_AXES.map(a => `${a}=${axes[a]}`).join(" ")})`);
+        } catch (err) {
+          console.error(`[agent-chat run] dot append failed: ${(err as Error).message} (non-blocking)`);
+        }
+      }
+      dotSearch = dotSearch.replace(m[0], "");
+    }
+    stdout = dotSearch.trim();
+
     // Append the section + flip turn to peer + unlock.
     try {
       // Sanity: section must end with a "→ <next>" line so the turn flip
@@ -1648,6 +1885,9 @@ switch (cmd) {
   case "record-turn":  void cmdRecordTurn(rest); break;
   case "run":          void cmdRun(rest); break;
   case "self-test":    void cmdSelfTest(rest); break;
+  case "role":         cmdRole(rest); break;
+  case "dot":          cmdDot(rest); break;
+  case "dots":         cmdDots(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -1696,7 +1936,25 @@ switch (cmd) {
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +
       `      config.json layer, two-agent identity binding, edge canonicalization,\n` +
       `      lock+append+flip+unlock round-trip, and park semantics. Exits 0\n` +
-      `      on all-pass; agents driving via tmux can rely on the exit code.\n`,
+      `      on all-pass; agents driving via tmux can rely on the exit code.\n\n` +
+      `  role <get|set|clear|list> [<agent>] [--stdin | --from-file <path>]\n` +
+      `      Round-15h Concern-2: agent-managed role overrides. \`get [<agent>]\`\n` +
+      `      prints the active role (override > YAML default). \`set\` (with\n` +
+      `      --stdin or --from-file) writes <conv>/.roles/<self>.md. \`clear\`\n` +
+      `      removes the override. \`list\` shows every agent's first-line role\n` +
+      `      and which have overrides. Loaded by every cmdRun tick so peers\n` +
+      `      see updates immediately.\n\n` +
+      `  dot <peer> --axis <a>=<n> [--axis ...] [--note "..."]\n` +
+      `      Round-15h Concern-3: Dot Collector (Dalio-inspired). Append a\n` +
+      `      multi-axis grade for <peer> to <conv>/.dots/<peer>.jsonl. Axes:\n` +
+      `      clarity, depth, reliability, speed (each 1-10). Unprovided axes\n` +
+      `      default to 5 (neutral). Self-grading refused.\n\n` +
+      `  dots [<peer>] [--json]\n` +
+      `      Show aggregate dot stats. With <peer>: per-axis weighted +\n` +
+      `      unweighted means, composite, recent dots. Without: roster across\n` +
+      `      all agents. Composite is believability-weighted: each grader's\n` +
+      `      score weighed by their own believability (mean of received-dots\n` +
+      `      across axes / 10, neutral prior 0.5 for new agents).\n`,
     );
     break;
   default:
