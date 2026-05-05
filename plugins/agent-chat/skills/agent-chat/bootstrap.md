@@ -388,3 +388,126 @@ heartbeat-write tick fires. Round-13's monitor classifies missing
 heartbeats as `peer-sidecar-dead`. **In mixed-mode deployments this signal
 is informational, not actionable**, on edges where the peer is known to
 run ephemeral. See README "Hybrid mode" section for the full discussion.
+
+## Round 15h — agent-managed roles, Dot Collector, full network roster
+
+Four primitives that turn the topology from a static social graph into a
+self-aware, self-updating mesh. Inspired by Ray Dalio's Dot Collector
+(multidimensional peer ratings used at Bridgewater).
+
+### Per-tick auto-archive (Concern 1)
+
+`cmdRun` calls `autoArchiveSessionEdges(rec, 200)` at the END of every
+tick — same threshold as `agent-chat exit`. Cheap (no-op for under-
+threshold edges), idempotent (only seals parked-AND-bloated). Pre-fix,
+ephemeral mode never fired the archive trigger because sessions never
+explicitly exited. No agent action required; happens automatically.
+
+### Self-update your role (Concern 2)
+
+If your specialty has evolved during the conversation, declare it so
+peers learn what you can do well now:
+
+```bash
+echo "Updated specialty: <one-line summary>" \
+  | bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" role set --stdin
+```
+
+Or pass `--from-file <path>`. Storage is `<conv>/.roles/<agent>.md`
+(4 KB cap), overlay-merged into `topology.roles` on every cmdRun tick
+so peers see the update immediately. `agent-chat role get [<agent>]`
+prints the active role; `role list` shows everyone with `[override]` flag
+on agents who've self-updated. `role clear` removes your override and
+falls back to the YAML default.
+
+When to update your role:
+
+- You've taken on a new responsibility you'll keep (e.g. orion → "test
+  orchestration specialist after Round-15h" if the topology has shifted).
+- A recurring pattern of work surfaces a specialty the YAML doesn't
+  capture.
+- A peer's grading (see Dot Collector below) has flagged a strength or
+  weakness you want to officially own or shed.
+
+Don't update for one-off tasks — that's churn. The role is the durable
+shape of "what you do."
+
+### Grade your peer with the Dot Collector (Concern 3)
+
+After a productive (or unproductive) exchange, append a `<dot />`
+directive to your cmdRun response — same syntax as `<scratch>` and
+`<dispatch>`:
+
+```xml
+<dot peer="lumeyon" clarity="9" depth="8" reliability="9" speed="7"
+     note="Phase-5 plan was crisp; turnaround was fast" />
+```
+
+Axes are 1–10. Unprovided axes default to 5 (neutral, no signal). You
+can also dot from the CLI:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dot lumeyon \
+    --axis clarity=9 --axis depth=8 \
+    --axis reliability=9 --axis speed=7 \
+    --note "crisp Phase-5 plan"
+```
+
+Self-grading is refused. Aggregation is **believability-weighted**:
+each grader's contribution is weighed by their own believability score
+(mean of received-axes scores / 10, neutral prior 0.5 for graders
+without dots). A high-believability grader's dots count more.
+
+Read the network's grades:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dots          # roster of all agents
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dots lumeyon  # detail with recent dots
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" dots --json   # machine-readable
+```
+
+The composite score (1–10) summarizes the four axes; cmdRun surfaces it
+in the network roster (Concern 4 below) so routing decisions weight
+demonstrably-competent peers more.
+
+### Full network roster + relay paths (Concern 4)
+
+Pre-fix, cmdRun's prompt only listed direct neighbors' roles — agents
+had no idea what non-neighbors specialized in, so cross-graph routing
+was blind. Now every cmdRun tick prepends a roster of **every agent**
+in the topology with role first-line, dot composite + believability,
+and how to reach them:
+
+- **Direct neighbor**: emit `<dispatch peer="<name>">prompt</dispatch>`
+- **Non-neighbor**: the prompt names the relay hop. For petersen
+  (diameter 2), every non-neighbor is reachable through exactly one
+  intermediary. The roster line shows e.g. `"2 hops via lyra → cadence
+  — relay through lyra"` so the agent knows to dispatch to `lyra` with
+  a forwarding ask.
+
+The BFS path is computed by `lib.relayPathTo(topo, from, to)` — also
+exported for direct use in scripts.
+
+### Putting it all together
+
+A typical orion tick now reads:
+
+1. cmdRun pulls the network roster (every agent + role + dots + route).
+2. orion sees `cadence` (non-neighbor) is best at devil's-advocate review
+   for this question (composite 8.7, belv 0.84).
+3. orion emits `<dispatch peer="lyra">forward to cadence: <ask></dispatch>`
+   because lyra is the relay hop.
+4. After cadence's reply flows back, orion grades the contribution:
+   `<dot peer="cadence" clarity="9" depth="9" reliability="8" speed="7"
+   note="caught a subtle invariant" />`.
+5. The dot appends to `<conv>/.dots/cadence.jsonl`. cadence's composite
+   ticks up, and her believability does too — her future dots will
+   weigh more across the network.
+6. If orion's specialty has evolved during this exchange, she updates
+   her role: `agent-chat role set --stdin <<< "..."`.
+7. cmdRun's tail auto-archives any parked-and-bloated edges before
+   exit.
+
+The mesh is now self-organizing: roles describe demonstrated competence,
+dots score it continuously, and routing decisions can choose the
+right peer instead of just the nearest one.

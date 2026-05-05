@@ -6,7 +6,7 @@ import {
   splitForArchive, sectionMeta, timeRangeOf, validateSummary,
   extractTldr, extractKeywords, parseLockFile, processTag,
   archiveId, depthPolicy, renderSummaryStub, loadTopology,
-  parseUsersYaml, loadUsers,
+  parseUsersYaml, loadUsers, relayPathTo, type Topology,
 } from "../scripts/lib.ts";
 
 describe("parseTopologyYaml", () => {
@@ -1394,6 +1394,247 @@ describe("findLivePresence — multi-host safety (cadence F8, P0)", () => {
       if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
       else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── Round-15h ──────────────────────────────────────────────────────────
+
+describe("Round 15h Concern-4 — relayPathTo (BFS over topology graph)", () => {
+  const pair: Topology = {
+    name: "pair", description: "", agents: ["a", "b"],
+    edges: [["a", "b"]],
+  };
+  const ring5: Topology = {
+    name: "ring5", description: "",
+    agents: ["a", "b", "c", "d", "e"],
+    edges: [["a", "b"], ["b", "c"], ["c", "d"], ["d", "e"], ["a", "e"]],
+  };
+  const star: Topology = {
+    name: "star", description: "",
+    agents: ["hub", "x", "y", "z"],
+    edges: [["hub", "x"], ["hub", "y"], ["hub", "z"]],
+  };
+
+  test("self → self returns empty array", () => {
+    expect(relayPathTo(pair, "a", "a")).toEqual([]);
+  });
+
+  test("direct neighbors return 2-node path", () => {
+    expect(relayPathTo(pair, "a", "b")).toEqual(["a", "b"]);
+  });
+
+  test("ring-of-5: shortest path picks min hops (a → c via b)", () => {
+    expect(relayPathTo(ring5, "a", "c")).toEqual(["a", "b", "c"]);
+  });
+
+  test("ring-of-5: a → d takes 2 hops via e (the wrap edge closes the ring)", () => {
+    // ring5 edges: a-b, b-c, c-d, d-e, a-e. d's neighbors are c and e.
+    // a's neighbors are b and e. Shortest a → d goes a-e-d (2 hops, 3 nodes).
+    expect(relayPathTo(ring5, "a", "d")).toEqual(["a", "e", "d"]);
+  });
+
+  test("star: leaf → leaf goes through hub", () => {
+    expect(relayPathTo(star, "x", "z")).toEqual(["x", "hub", "z"]);
+  });
+
+  test("disconnected source returns null", () => {
+    const disjoint: Topology = {
+      name: "x", description: "",
+      agents: ["a", "b", "c"],
+      edges: [["a", "b"]],
+    };
+    expect(relayPathTo(disjoint, "a", "c")).toBeNull();
+  });
+
+  test("unknown agent name returns null (not crash)", () => {
+    expect(relayPathTo(pair, "a", "ghost")).toBeNull();
+    expect(relayPathTo(pair, "ghost", "a")).toBeNull();
+  });
+});
+
+describe("Round 15h Concern-3 — Dot Collector aggregation + believability", () => {
+  const fs15h = require("node:fs");
+  const path15h = require("node:path");
+  const os15h = require("node:os");
+
+  test("appendDot + readDots round-trip a single record", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-rt-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}rt`);
+      fresh.appendDot("alice", {
+        ts: "2026-05-05T00:00:00Z", grader: "bob",
+        axes: { clarity: 9, depth: 8, reliability: 7, speed: 6 },
+        note: "great work",
+      });
+      const dots = fresh.readDots("alice");
+      expect(dots.length).toBe(1);
+      expect(dots[0].grader).toBe("bob");
+      expect(dots[0].axes.clarity).toBe(9);
+      expect(dots[0].note).toBe("great work");
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("readDots tolerates malformed JSONL lines", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-bad-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}bad`);
+      fs15h.mkdirSync(path15h.join(tmp, ".dots"), { recursive: true });
+      const ledger = path15h.join(tmp, ".dots", "alice.jsonl");
+      const validLine = JSON.stringify({
+        ts: "x", grader: "bob",
+        axes: { clarity: 5, depth: 5, reliability: 5, speed: 5 },
+      });
+      fs15h.writeFileSync(ledger, [validLine, "{ this is not json", "", validLine, "{}"].join("\n"));
+      const dots = fresh.readDots("alice");
+      expect(dots.length).toBe(2);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("aggregateDots: weighted ≠ unweighted when graders have unequal believability", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-agg-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}agg`);
+      // alice: contradictory dots from bob (low) + carol (high). Then we
+      // pump carol's believability via received dots from dave; bob stays
+      // at neutral 0.5. Weighted mean for alice should pull toward carol.
+      fresh.appendDot("alice", { ts: "x", grader: "bob",
+        axes: { clarity: 3, depth: 3, reliability: 3, speed: 3 } });
+      fresh.appendDot("alice", { ts: "x", grader: "carol",
+        axes: { clarity: 9, depth: 9, reliability: 9, speed: 9 } });
+      fresh.appendDot("carol", { ts: "x", grader: "dave",
+        axes: { clarity: 10, depth: 10, reliability: 10, speed: 10 } });
+      const all = fresh.readAllDots();
+      const belv = fresh.computeBelievability(all);
+      expect(belv.carol).toBeGreaterThan(belv.bob ?? 0.5);
+      const agg = fresh.aggregateDots("alice", all);
+      expect(agg.count).toBe(2);
+      expect(Math.abs(agg.unweighted.clarity - 6)).toBeLessThan(0.01);
+      expect(agg.weighted.clarity).toBeGreaterThan(agg.unweighted.clarity);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("computeBelievability: empty ledger gives neutral 0.5", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-belv-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}belv`);
+      expect(fresh.computeBelievability({})).toEqual({});
+      expect(fresh.computeBelievability({ alice: [] }).alice).toBe(0.5);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("aggregateDots: zero dots gives count=0 + finite zeros (no NaN)", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-empty-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}empty`);
+      const agg = fresh.aggregateDots("nobody");
+      expect(agg.count).toBe(0);
+      expect(agg.composite).toBe(0);
+      for (const axis of fresh.DOT_AXES) {
+        expect(Number.isFinite(agg.weighted[axis])).toBe(true);
+        expect(Number.isFinite(agg.unweighted[axis])).toBe(true);
+      }
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Round 15h Concern-2 — role override storage + overlay merge", () => {
+  const fs15h = require("node:fs");
+  const path15h = require("node:path");
+  const os15h = require("node:os");
+
+  test("writeRoleOverride + readRoleOverride round-trip", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-role-rt-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}role-rt`);
+      expect(fresh.readRoleOverride("orion")).toBeNull();
+      fresh.writeRoleOverride("orion", "Updated specialty: testing");
+      expect(fresh.readRoleOverride("orion")).toBe("Updated specialty: testing");
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("clearRoleOverride: returns true on existing file, false otherwise", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-role-clear-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}role-clr`);
+      fresh.writeRoleOverride("alice", "x");
+      expect(fresh.clearRoleOverride("alice")).toBe(true);
+      expect(fresh.clearRoleOverride("alice")).toBe(false);
+      expect(fresh.readRoleOverride("alice")).toBeNull();
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("writeRoleOverride refuses bodies > ROLE_MAX_BYTES", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-role-cap-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}role-cap`);
+      const huge = "x".repeat(fresh.ROLE_MAX_BYTES + 1);
+      expect(() => fresh.writeRoleOverride("alice", huge)).toThrow(/too long/);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("loadTopology overlays role overrides on top of YAML defaults", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-role-overlay-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}role-ov`);
+      fresh.writeRoleOverride("orion", "Overridden: round-15h test orchestrator");
+      const topo = fresh.loadTopology("petersen");
+      expect(topo.roles?.orion).toBe("Overridden: round-15h test orchestrator");
+      expect(topo.roles?.lumeyon).toMatch(/Architecture/);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });
