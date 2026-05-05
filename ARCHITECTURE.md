@@ -1922,3 +1922,83 @@ consolidated cross-slice findings, verdict table, Round 15 scope, and
 deferred empirical questions. Per-slice deep dives stay in the
 `conversations/petersen/{lumeyon,carina,keystone}-orion/CONVO.md`
 files for receipt-density.
+
+## Round 15a — Hybrid mode (ephemeral + persistent on the same graph)
+
+The fix surface for the Round-13 stuck-turn case at its root cause: don't
+just *detect* stuck sessions, give the protocol a runtime model that
+can't get stuck because it doesn't stay alive between turns.
+
+### Decision: HYBRID (not "force ephemeral")
+
+Round-14's audit produced three convergent findings that drove this:
+
+1. **The cache-warm 270s pattern from Ruflo** (`/data/eyon/git/ruflo/plugins/ruflo-autopilot/skills/autopilot-loop/SKILL.md:18`) demonstrates that an ephemeral, self-rescheduling agent doesn't pay the cold-encode tax that naïve cron-driven runs would. ScheduleWakeup at 270 seconds keeps the prompt cache warm under Anthropic's 300s TTL.
+
+2. **The wire format already encodes "more work to do"** (lumeyon's Round-14 Finding 7): `.turn` pointing at me + `CONVO.md` last-section asking a question is sufficient signal for the next ephemeral tick to know what to respond to. We do not need Ruflo's task-list sidecar mechanism — our existing protocol primitive carries the information.
+
+3. **The recursive Round-13 receipt** (this round's keystone slice surfaced it during Round-14 ship): keystone's stale-monitor narrative — "old monitor binary missed Round-13's stuck-on-own-turn detector; cycled to fresh monitor; new monitor IMMEDIATELY fired stuck-on-own-turn on all three of my edges with `turn_age_s=6700+`" — is the validation receipt for Round-13's safety net, AND the load-bearing case for shipping ephemeral mode. The detector caught a peer's hung session that the persistent runtime model created. Ephemeral mode is the structural fix; the detector is the safety net for the persistent fallback.
+
+### What ships in 15a
+
+- `cmdRun` — single-tick CLI entry: read peer messages → respond if turn=me → flip turn → exit. Owned by lumeyon.
+- `safety.ts detectDestructive` — pre-flight regex pass that refuses risky operations (`rm -rf`, force-pushes, etc.) without explicit `--unsafe` override. Owned by lumeyon.
+- `loop-driver.ts` — ScheduleWakeup integration. The 270-second delay is a constant `CACHE_WARM_DELAY_SEC = 270` shared via `lib.ts` (single source of truth, same shared-module pattern Round-13 established for thresholds). Owned by lumeyon.
+- `record-turn` + `speaker` integration verification under `claude -p` shell-out. Owned by carina.
+- README "Quick Start" + "Hybrid mode" sections. ARCHITECTURE.md Round-15 narrative (this section). bootstrap.md ephemeral-mode operational checklist. Integration tests for mixed-mode round-trip + cache-warm self-iteration. Owned by keystone.
+
+### What ships in 15b (decoupled)
+
+- Plugin pivot: the dual-manifest layout (`.claude-plugin/plugin.json` + `.codex-plugin/plugin.json`) per Round-14 keystone Section G. ~60 LoC manifest fork; everything else shared. Requires Codex credits for empirical verification of the hook event taxonomy (Round-14 keystone Section C.4 open question).
+
+### Anti-pattern receipt: doc-vs-code drift, six rounds deep
+
+Round 15a Phase-4 cross-review surfaced **two more instances** of the same anti-pattern shape, bringing the count to six. The pattern is now structural enough to warrant a process-level invariant.
+
+| # | Round | Primitive | Drift |
+|---|---|---|---|
+| 1 | 12 | `bm25` ranking weights | Constants documented but not exported; archive-search and FTS-search drifted apart silently |
+| 2 | 13 | `sidecar_version` heartbeat field | Doc'd as required; missing on older sidecars meant the monitor classified them as healthy instead of stale |
+| 3 | 14 | File-checklist audit doc | Ruflo's autopilot-loop SKILL.md described "markdown checkboxes"; code reads JSON. Doc lies; code is truth |
+| 4 | 15a | `AGENT_CHAT_NO_LLM=1` env var | Doc'd as kill-switch; only suppressed warning, didn't gate the shell-out (lumeyon Phase-3 caught) |
+| 5 | 15a | `--once` cmdRun flag | Parsed into `opts.once` but never referenced — flag was documentation theater (lumeyon Phase-4 review of keystone caught) |
+| 6 | 15a | `loop-driver.ts:48` spawn path | Relative `"scripts/agent-chat.ts"` resolved against `process.cwd()` — broke production /loop usage from non-skill-root cwds (carina Phase-4 review of lumeyon caught) |
+
+Same shape every time: a load-bearing claim guarded by an under-specified primitive that **silently fails open** or runs against the wrong context, instead of loudly refusing. The fix in each case is single-digit LoC; the cost of catching it late is the entire test corpus run under the wrong assumption — or production breakage on the first dogfood.
+
+**This is not a "more discipline" problem.** Six rounds of receipts across three abstraction levels (numeric tuple length, env-var semantics, doc accuracy, flag wiring, path resolution) have ruled out reviewer fatigue as the root cause. It's a structural property of building over a wire format with multiple consumers — and it's why vanguard's verdict-rigor frame from Round 14 is now load-bearing project convention.
+
+The rigor frame, applied prophylactically: **verify the primitive matches the load-bearing claim**. Whether the primitive is a numeric tuple's length, a boolean's semantic meaning, a string's presence, a test fixture's fall-through, a doc's accuracy, a flag's wiring, or a path's resolution context — the failure mode is identical. The discipline isn't "look harder"; it's "add a falsifiable check at the same layer as the claim".
+
+Round-15c will carry `docs/anti-pattern-audit.md` as a precondition checklist for any new env var, constant, flag, or path-related primitive that's load-bearing for tests. The checklist requires a falsifiable "would this fail if the primitive's value/wiring/resolution drifted by N" pin before merge. Carina's revert-and-verify dance for the `AGENT_CHAT_NO_LLM=1` regression test (90s hang when fix reverted) is the template — adopted as the audit-rigor.md standard for testing fixes against load-bearing primitives.
+
+The Round-14 audit framing turned out to predict the Round-15a findings. That's the structural answer: the same rigor frame keeps working because the same anti-pattern keeps recurring.
+
+### Cross-cutting invariant #1 update — third carve-out
+
+Round 12 originally documented "filesystem-only, no SQLite" as cross-cutting invariant #1. Round 12 carved out `bun:sqlite` for FTS5 (the index is derived; filesystem stays authoritative). Round 14's audit produced no new SQLite carve-out.
+
+**Round 15a adds the third carve-out: per-agent ephemeral execution mode.** The protocol stays filesystem-mediated (CONVO.md / .turn / index.jsonl unchanged). What's new is the *agent process* lifecycle: previously assumed long-lived, now optionally ephemeral with cache-warm self-rescheduling. The carve-out is on the agent-runtime side, not the wire format.
+
+This invariant update is the structural answer to a class of bugs the persistent runtime invites (stuck-on-own-turn, monitor-binary-staleness, sidecar-pid-recycling). The fix isn't to keep patching the persistent model — it's to give callers a runtime mode that doesn't need patching because the bugs structurally can't apply.
+
+### Heartbeat semantics under ephemeral — informational, not a bug
+
+Round-13's heartbeat detector classifies missing heartbeats as
+`peer-sidecar-dead`. Ephemeral runs legitimately have no heartbeat — they
+exit before writing one. The monitor's stuck-detection signal IS correct
+in the persistent-peer worldview and informational in the mixed-mode
+worldview. Documented as expected behavior in README's Hybrid mode
+section.
+
+A future round may add a heartbeat-tombstone (a one-shot `.tombstone`
+file written by cmdRun on clean exit) to disambiguate "ephemeral run
+completed successfully" from "persistent peer's sidecar crashed." Out of
+scope for 15a; the tombstone would be additive and backward-compatible.
+
+### References
+
+- `docs/round-14-audit-summary.md` — source-of-truth for verdicts driving this round.
+- `docs/audit-rigor.md` — vanguard's verdict-classification frame, project convention.
+- `/data/eyon/git/ruflo/plugins/ruflo-autopilot/skills/autopilot-loop/SKILL.md:18` — cache-warm 270s pattern.
+- Round 13 §`agent-stuck-on-own-turn` — the detector this round's structural fix complements.

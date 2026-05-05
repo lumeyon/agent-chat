@@ -187,6 +187,12 @@ export async function runClaude(opts: RunClaudeOpts): Promise<RunClaudeResult> {
   if (process.env.AGENT_CHAT_INSIDE_LLM_CALL === "1") {
     return { stdout: null, stderr: "", code: null, reason: "reentrancy" };
   }
+  // Honor AGENT_CHAT_NO_LLM=1 so callers can run hermetically. Reuses the
+  // "not-found" discriminator; cmdRun + archive.auto already treat it as
+  // skip-this-LLM-call, no separate handler needed.
+  if (process.env.AGENT_CHAT_NO_LLM === "1") {
+    return { stdout: null, stderr: "AGENT_CHAT_NO_LLM=1", code: null, reason: "not-found" };
+  }
   const probe = ensureProbed();
   if (!probe.available || !probe.path) {
     return { stdout: null, stderr: probe.reason, code: null, reason: "not-found" };

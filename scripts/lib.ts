@@ -356,6 +356,17 @@ export const SOCKETS_DIR = path.join(CONVERSATIONS_DIR, ".sockets");
 // directory is created lazily on first write via writeFileAtomic's
 // mkdirSync — no entry needed in ensureControlDirs.
 
+// Round-15a: ScheduleWakeup delay tuned to keep Anthropic's prompt cache
+// warm. Cache TTL is 5 minutes; sleeping past 300s pays a full cache-miss
+// (the next wake re-reads the full conversation context uncached, slow +
+// expensive). 270s leaves 30s of margin for the wakeup latency itself.
+// Empirical source: Ruflo plugins/ruflo-autopilot/skills/autopilot-loop/SKILL.md:18
+// ("Always use delay 270s (under 300s cache TTL) to keep the prompt cache
+// warm between iterations"). Single home for the constant so any future
+// skill adopting the wakeup pattern reads the same value — same drift-
+// insurance pattern as Round-13's STUCK_REASONS.
+export const CACHE_WARM_DELAY_SEC = 270;
+
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });

@@ -209,6 +209,18 @@ describe("record-turn — negative cases (vanguard's design)", () => {
   afterEach(() => { rmTmp(tmp); });
 
   test("64: missing current_speaker → exit 64, message, nothing written", () => {
+    // Round-15a Phase-1 break-point pin (interactive mode). The ephemeral
+    // counterpart with `ephemeral: true` SessionRecord lives in
+    // tests/ephemeral.test.ts test #2 — pinning the SAME exit-64 invariant
+    // under ephemeral fixtures. Both tests stay green forever: Round-15c's
+    // Contract A adds cmdRun's pre-write of the synthetic SessionRecord +
+    // speaker file, but does NOT change record-turn's reject-on-missing-
+    // speaker behavior at agent-chat.ts:1238-1239. The fixture in test #2
+    // would have to change (invoke cmdRun rather than directly invoking
+    // record-turn with manually-skipped speaker file) for the exit-64
+    // assertion to flip — and that's what Round-15c's success-path test
+    // would do as a separate test. The exit-64 invariant pinned here and
+    // in ephemeral.test.ts #2 stays load-bearing across rounds.
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);
     // intentionally no writeCurrentSpeaker

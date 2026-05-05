@@ -27,7 +27,7 @@ import {
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
   utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
-  readTurn, writeTurnAtomic, resolveIdentity, loadUsers,
+  readTurn, writeTurnAtomic, resolveIdentity, loadUsers, parseSections,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
@@ -1369,6 +1369,185 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
   console.log(`record-turn: appended user+assistant pair on edge ${edge.id}; flipped to ${speaker}`);
 }
 
+// ----- run (Round-15a slice 1: ephemeral mode) -----------------------------
+//
+// `agent-chat run` is the ephemeral entry point: process one tick worth of
+// inbox work (any edge with .turn=<self>), exit. No sidecar startup, no
+// monitor. ScheduleWakeup re-fires the loop via scripts/loop-driver.ts.
+//
+// Cross-slice context: Round-14 audit Finding 7 (file-checklist
+// simplification) — we don't need a separate task list file. The
+// .turn=<self> + index.jsonl mtime ARE the "more work" signal. cmdRun
+// just walks edges, processes any with our turn, exits.
+//
+// Per Round-14 audit Finding 1 (registry-vs-execution split): identity is
+// already file-backed (`.sessions/<key>.json`); cmdRun reuses
+// resolveIdentity + edgesOf. The "agent" doesn't need to be a live process
+// — Ruflo's agent_terminate flips a status field; ours can do less, since
+// our session record already exists from `init` time.
+
+async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: number }> {
+  // cmdRun is single-tick by design — Round-14 Finding 7 endorses
+  // keeping the work loop bounded to one pass, with `loop-driver.ts`
+  // as the scheduling wrapper. Round-15a Phase-4 review caught the
+  // `--once` flag as parsed-but-unused (lumeyon CONCERN #1) — same
+  // anti-pattern shape that produced bm25-weights drift, missing-
+  // sidecar_version, file-checklist-doc-lies, NO_LLM-footgun. Phase-5
+  // resolution: drop the flag entirely so CLI surface matches code
+  // semantics. For self-scheduling, run `bun scripts/loop-driver.ts`.
+  const opts = { unsafe: false, peers: [] as string[] };
+  for (const a of args) {
+    if (a === "--unsafe") opts.unsafe = true;
+    else if (!a.startsWith("--")) opts.peers.push(a);
+  }
+  // Reentrancy guard: refuse if we're already inside an LLM call. The
+  // existing runClaude check at llm.ts:187 catches it, but a clearer
+  // error here saves the user a confusing trace.
+  if (process.env.AGENT_CHAT_INSIDE_LLM_CALL === "1") {
+    die(`refuse: AGENT_CHAT_INSIDE_LLM_CALL=1. cmdRun cannot recurse into a child LLM call.`, 64);
+  }
+  const id = resolveIdentity();
+  const topo = loadTopology(id.topology);
+  // Persistent-mode collision check: if a sidecar is live for this agent,
+  // ephemeral cmdRun would race against the sidecar's own work loop.
+  // Refuse loudly and point the user at the resolution path.
+  const sockPath = socketPathFor(id.name);
+  if (fs.existsSync(sockPath)) {
+    const r = await sidecarRequest<any>(id.name, "whoami", {}, { timeoutMs: 200 });
+    if (r.ok) {
+      die(
+        `refuse: sidecar already live for ${id.name} (UDS at ${sockPath}). ` +
+        `Ephemeral and persistent modes can't coexist on the same agent. ` +
+        `Run \`agent-chat exit\` first, or stay in persistent mode for the long-running flow.`,
+        66,
+      );
+    }
+  }
+  const all = edgesOf(topo, id.name);
+  const targetEdges = opts.peers.length > 0 ? all.filter((e) => opts.peers.includes(e.peer)) : all;
+  if (targetEdges.length === 0) {
+    console.error(`[agent-chat run] no target edges (peer filter: ${opts.peers.join(",") || "none"}).`);
+    return { workDone: false, pending: 0 };
+  }
+
+  // Lazy-import safety + runClaude — keeps cmdRun decoupled from optional deps.
+  const { detectDestructive } = await import("./safety.ts");
+  const { runClaude } = await import("./llm.ts");
+
+  let workDone = false;
+  let pending = 0;
+  for (const edge of targetEdges) {
+    const turn = readTurn(edge.turn);
+    if (turn !== id.name) {
+      // Not our turn on this edge; skip.
+      continue;
+    }
+    if (fs.existsSync(edge.lock)) {
+      // Locked by some session (us or peer); skip — don't fight the lock.
+      pending++;
+      continue;
+    }
+    // Compose continuation prompt: last few peer sections from CONVO.md.
+    let prompt = "";
+    try {
+      const convoText = fs.readFileSync(edge.convo, "utf8");
+      const { sections } = parseSections(convoText);
+      const tail = sections.slice(-4).join("\n\n");
+      prompt =
+        `You are agent "${id.name}" in topology "${id.topology}", currently in conversation with "${edge.peer}".\n\n` +
+        `Recent conversation tail (last 4 sections):\n\n${tail}\n\n` +
+        `Compose your response as a single Markdown section beginning with the canonical header ` +
+        `"## ${id.name} — <topic> (UTC <stamp>)" and ending with "→ ${edge.peer}" or "→ parked". ` +
+        `Output the section verbatim, no preamble.`;
+    } catch (err) {
+      console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
+      continue;
+    }
+    // Pre-flight safety scan. detectDestructive returns first match; refuse
+    // unless --unsafe. Mid-prose `rm -rf` in legitimate help-text discussion
+    // is a known false-positive class — `--unsafe` is the explicit override.
+    const safetyHit = detectDestructive(prompt);
+    if (safetyHit && !opts.unsafe) {
+      console.error(
+        `[agent-chat run] refused on edge ${edge.id}: pattern '${safetyHit.pattern}' detected (matched: ${JSON.stringify(safetyHit.match)}). ` +
+        `Pass --unsafe to override.`,
+      );
+      pending++;
+      continue;
+    }
+    // Shell out to runClaude for the actual work. AGENT_CHAT_INSIDE_LLM_CALL
+    // gets set by runClaude's internal env mgmt; downstream turn.ts shell-outs
+    // (lock/flip/unlock) check that flag and would refuse — so we must do
+    // the lock+flip BEFORE invoking runClaude (otherwise re-entry blocks).
+    // Simpler shape: lock the edge, run claude, on success append section
+    // and flip+unlock; on failure, unlock and skip.
+    const lockResult = require("node:child_process").spawnSync(
+      process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "lock", edge.peer],
+      { encoding: "utf8" },
+    );
+    if (lockResult.status !== 0) {
+      console.error(`[agent-chat run] lock failed for ${edge.id}: ${lockResult.stderr}`);
+      pending++;
+      continue;
+    }
+    let r;
+    try {
+      r = await runClaude({ prompt, timeoutMs: 90_000 });
+    } catch (err) {
+      console.error(`[agent-chat run] runClaude threw on ${edge.id}: ${(err as Error).message}`);
+      try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
+      continue;
+    }
+    if (r.reason !== "ok" || !r.stdout) {
+      console.error(`[agent-chat run] runClaude ${r.reason} on ${edge.id} (${r.code ?? "no-code"}); skipping.`);
+      try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
+      continue;
+    }
+    // Append the section + flip turn to peer + unlock.
+    try {
+      // Sanity: section must end with a "→ <next>" line so the turn flip
+      // matches the section semantics. If runClaude omitted it, append
+      // "→ <peer>" on a new line.
+      const tail = r.stdout.trimEnd();
+      const hasArrow = /\n→\s+\S+\s*$/.test(tail);
+      const sectionText = hasArrow ? tail + "\n" : tail + `\n\n→ ${edge.peer}\n`;
+      fs.appendFileSync(edge.convo, "\n---\n\n" + sectionText);
+      const flipResult = require("node:child_process").spawnSync(
+        process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "flip", edge.peer, edge.peer],
+        { encoding: "utf8" },
+      );
+      if (flipResult.status !== 0) {
+        console.error(`[agent-chat run] flip failed for ${edge.id}: ${flipResult.stderr}`);
+      }
+      try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
+      console.log(`[agent-chat run] processed ${edge.id} → flipped to ${edge.peer}`);
+      workDone = true;
+    } catch (err) {
+      console.error(`[agent-chat run] append/flip failed for ${edge.id}: ${(err as Error).message}`);
+      try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
+    }
+  }
+  // Post-flight liveness hint per orion's open-Q1 refinement: if any peer
+  // has a stale heartbeat, log a one-line hint about --persistent mode.
+  // Liveness check is opt-in (silent if no heartbeats present).
+  try {
+    const { listHeartbeatRecords } = await import("./liveness.ts");
+    const records = listHeartbeatRecords();
+    const peerNames = new Set(targetEdges.map((e) => e.peer));
+    for (const r of records) {
+      if (!peerNames.has(r.agent)) continue;
+      if (r.status === "stale" || r.status === "dead") {
+        const ageS = r.ageMs == null ? "?" : Math.round(r.ageMs / 1000);
+        console.error(
+          `[agent-chat run] hint: peer ${r.agent} hasn't beat in ${ageS}s (${r.status}). ` +
+          `Consider \`--persistent\` mode if you expect them to be live.`,
+        );
+      }
+    }
+  } catch { /* liveness module not available; skip hint */ }
+  return { workDone, pending };
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -1381,6 +1560,7 @@ switch (cmd) {
   case "whoami":       void cmdWhoami(rest); break;
   case "speaker":      cmdSpeaker(rest); break;
   case "record-turn":  void cmdRecordTurn(rest); break;
+  case "run":          void cmdRun(rest); break;
   case undefined:
   case "--help":
   case "-h":

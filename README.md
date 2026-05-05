@@ -24,6 +24,9 @@ back and forth using a `.turn` sentinel. The natural question was: *what if
 this worked for ten agents on a graph instead of two?* The answer is this
 repo.
 
+You don't need to learn the protocol to use it. Once `agent-chat init`
+runs, just type as the user — the skill captures every turn into the right
+edge automatically and the monitor wakes you up when peers reply.
 
 ---
 
@@ -285,6 +288,152 @@ bun $SKILL/scripts/search.ts expand arch_C_… --children     # walk down to chi
 Most lookups stop at `grep`. Only `expand` when the SUMMARY.md's
 *Expand for details about:* footer says the thing you actually want is
 in the body.
+
+---
+
+## Hybrid mode — persistent and ephemeral sessions on the same graph
+
+agent-chat ships two execution modes that interoperate transparently. Both
+write to the same `CONVO.md` / `.turn` / `index.jsonl` files; **peers do
+NOT know which mode the other side is running.** This is the load-bearing
+invariant of hybrid mode — the wire format is the protocol; runtime model
+is a private session choice.
+
+### Persistent mode (today's default)
+
+The mode every prior round shipped. `agent-chat init` launches a
+long-lived sidecar + monitor; the agent reads notifications from the live
+Monitor task; sessions can run for hours. Best for **interactive work
+where the agent is paying attention** — collaborative reviews, multi-step
+debugging, anything with rapid back-and-forth turns.
+
+```bash
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init keystone petersen
+# sidecar + monitor up; agent waits for monitor notifications.
+```
+
+### Ephemeral mode (`agent-chat run`)
+
+A single-tick execution model: spawn an agent process, do exactly one
+turn's worth of work (read peer messages → respond → flip turn), exit.
+Best for **batch jobs, cron-driven sweeps, low-resource environments,
+and resumable orchestration where staying loaded is wasteful**.
+
+```bash
+# Single tick across every edge where the floor is on me:
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run
+
+# Single tick, scoped to one or more specific peers:
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run <peer> [<peer>...]
+
+# Single tick that may include destructive operations (cleanup workers, gc agents):
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run --unsafe <peer>
+```
+
+For self-scheduling (cache-warm continuation between ticks via Claude
+Code's `ScheduleWakeup`), use the `loop-driver.ts` wrapper:
+
+```bash
+bun ~/.claude/skills/agent-chat/scripts/loop-driver.ts
+# Runs one cmdRun tick, then schedules the next tick 270s later if work
+# is still pending. Intended to run UNDER /loop skill context (or any
+# harness that handles ScheduleWakeup directives).
+```
+
+The 270-second delay is deliberate, copied from Ruflo's autopilot pattern
+(`/data/eyon/git/ruflo/plugins/ruflo-autopilot/skills/autopilot-loop/SKILL.md:18`):
+
+> "Always use delay 270s (under 300s cache TTL) to keep the prompt cache
+> warm between iterations."
+
+Anthropic's prompt cache has a 300-second TTL; rescheduling at 270s keeps
+the cache warm so each subsequent ephemeral tick gets a cache hit instead
+of a cold prompt encode. This is the structural answer to the
+"stuck-on-own-turn" failure mode the persistent monitor caught in
+Round-13 — ephemeral sessions can't get stuck because they don't stay
+alive long enough.
+
+### When to use which
+
+| Scenario | Mode |
+|---|---|
+| Interactive collaborative work, multi-step debugging | persistent |
+| You're typing turns yourself, want immediate notifications | persistent |
+| Cron-driven sweeps, batch reviewers, weekend agents | ephemeral |
+| Low-resource hosts (no idle daemon budget) | ephemeral |
+| Edges that flow rarely (~hours between turns) | ephemeral |
+| Edges where the floor sits with you for >5min routinely | ephemeral |
+
+**Mixing modes is supported and useful**: a 10-agent petersen graph can
+have 5 persistent agents (the active reviewers) + 5 ephemeral agents
+(scheduled background workers). The protocol doesn't change. Cross-mode
+turn-flips work because the wire format is the same.
+
+### Multi-user under ephemeral
+
+The transparency invariant is unchanged across modes: **the speaker on
+the dispatched edge is the same human who triggered the parent dispatch.**
+
+Concretely: `boss` types in their terminal → `orion` (persistent) decides
+to dispatch `keystone` ephemerally for the boss-keystone edge → the
+recorded turn on `boss-keystone/CONVO.md` shows `boss` as the speaker,
+not `orion`. The orchestrator is invisible at the wire level; the user-
+facing transcript is indistinguishable from boss having had a direct
+keystone session.
+
+**v1 limitation (Round-15a ships):** AI-to-AI ephemeral dispatch works
+end-to-end. Human-to-AI ephemeral × `record-turn` (the case above)
+returns exit `64` ("no current speaker") because the parent orchestrator
+must pre-write a synthetic `SessionRecord` + `current_speaker.json` on
+behalf of the dispatched child, and that pre-write step (Contract A in
+the design notes) is **deferred to Round-15c**. For Round-15a, treat
+hybrid mode as best-fit for AI-AI ephemeral dispatch where the human
+stays in the persistent session.
+
+### Heartbeat semantics under ephemeral
+
+Round-13's heartbeat detector classifies missing heartbeats as
+`peer-sidecar-dead`. Ephemeral runs **legitimately have no heartbeat** —
+they don't stay alive long enough to write one. This is expected, not a
+bug. The monitor's stuck-detection signal is correct *in the persistent-
+peer worldview* and informational *in the mixed-mode worldview*. Future
+rounds may add a heartbeat-tombstone written by `cmdRun` to disambiguate
+"ephemeral run completed successfully" from "persistent peer's sidecar
+crashed." For now: read peer-sidecar-dead notifications on edges with a
+known-ephemeral peer as informational.
+
+### Coexistence
+
+`agent-chat run` refuses to start if a live sidecar already exists for
+the agent — preventing accidental double-loading on the same agent
+identity. To switch modes, run `agent-chat exit` first to clear the
+persistent state.
+
+`agent-chat run` also honors the reentrancy guard: it refuses if
+`AGENT_CHAT_INSIDE_LLM_CALL=1` (running inside a parent LLM call's
+subagent context). This is the same guard cmdInit + cmdRecordTurn share
+from Round-12; it prevents recursive turn writes that would corrupt the
+parent's audit trail.
+
+### Verification
+
+The hybrid-mode invariants live in three regression suites:
+
+- `tests/cmd-run.test.ts` — `agent-chat run` flag parsing, sidecar-
+  collision refusal, reentrancy guard, the work loop's lock+flip
+  contract, and the safety pre-flight gate (`--unsafe` override).
+- `tests/safety.test.ts` — `safety.ts detectDestructive` regex coverage
+  for `rm -rf`, force-pushes, secret-token shapes, and the false-positive
+  carve-outs that drove the `--unsafe` flag.
+- `tests/ephemeral.test.ts` — `cmdRun` lifecycle no-op under
+  `AGENT_CHAT_NO_LLM=1`, the exit-64 regression-pin (Round-15c kickoff:
+  this test flips to a success assertion when Contract A lands and
+  cmdRun pre-writes the synthetic SessionRecord + speaker file), the
+  exit-66 human-only-speakers gate (rejects AI-as-speaker forgeries),
+  and parallel session-key isolation on interactive fixtures.
+
+Run them with `bun test tests/cmd-run.test.ts tests/safety.test.ts
+tests/ephemeral.test.ts`.
 
 ---
 

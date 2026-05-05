@@ -314,3 +314,70 @@ in the body. If the summary already has it, you're done.
 - Locks are advisory file presence, not OS-level locks — they are durable
   across crashes but not bulletproof against two processes that ignore them.
   Don't double-invoke an agent against the same edge.
+
+## Ephemeral mode (`agent-chat run`) — Round 15a
+
+An alternative to the persistent sidecar+monitor model. A single `agent-chat
+run` invocation does exactly one tick of work — read peer messages → respond
+if the floor is on me → flip turn → exit — and either terminates (if
+`--once`) or self-reschedules via Claude Code's ScheduleWakeup at 270s
+(stays under the 300s prompt-cache TTL).
+
+### When to call
+
+```bash
+# Single-tick: useful for cron-driven sweeps, manual one-shots, batch jobs.
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run --once <peer>
+
+# Scheduled loop: respond on this edge until parked or terminated.
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run
+```
+
+The scheduled loop survives the LLM session's exit (Claude Code's
+ScheduleWakeup outlives the in-process runtime). Each subsequent tick
+launches a fresh process; no shared memory, no daemon, no monitor required.
+
+### Reentrancy guard
+
+`cmdRun` refuses if `AGENT_CHAT_INSIDE_LLM_CALL=1` — same guard `cmdInit` and
+`cmdRecordTurn` honor (Round 12). This prevents recursive turn writes that
+would corrupt the parent LLM call's audit trail when an agent's subagent
+spawn invokes cmdRun against the parent's edge.
+
+### Coexistence with persistent sessions
+
+`cmdRun` refuses to start when a live sidecar exists for the agent. The
+collision check is UDS-probe-based: if `<conversations>/.sockets/<agent>.sock`
+exists AND a `whoami` request succeeds within 200ms, cmdRun refuses with a
+"sidecar already live" error. A stale socket file alone (no live process
+behind it) does NOT refuse — the live-liveness probe is the authoritative
+signal. To switch from persistent → ephemeral:
+
+```bash
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts exit   # stop sidecar + monitor
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts run    # start ephemeral loop
+```
+
+Mixing modes across DIFFERENT agents on the same graph is fully supported.
+A 10-agent petersen can have 5 persistent + 5 ephemeral; cross-mode turn
+flips work because the wire format is identical.
+
+### Safety pre-flight
+
+`cmdRun` runs `safety.ts detectDestructive` against the prompt before LLM
+shell-out and refuses on hits (`rm -rf /`, force-pushes, credential probes,
+etc.). Override with `--unsafe` when the agent's role legitimately needs
+destructive operations (cleanup workers, gc agents). The destructive-pattern
+blocklist is lifted from Ruflo's `wasm-kernel/src/gates.rs:29-43` (TS regex
+translations; cross-repo greppable by pattern name). False-positive
+mid-prose mentions (e.g. discussing `rm -rf` in chat) are the documented
+trade against false-negatives; tightening the regex to require shell-context
+is queued for Round-15b.
+
+### Heartbeat semantics
+
+Ephemeral runs do NOT write heartbeats — they exit before the persistent
+heartbeat-write tick fires. Round-13's monitor classifies missing
+heartbeats as `peer-sidecar-dead`. **In mixed-mode deployments this signal
+is informational, not actionable**, on edges where the peer is known to
+run ephemeral. See README "Hybrid mode" section for the full discussion.

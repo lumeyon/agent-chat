@@ -255,7 +255,7 @@ function tick() {
       const peerHbAlive = peerHb.status === "fresh";
       if (!peerHbAlive && !cur.peerSidecarDeadEmitted) {
         const ageStr = peerHb.ageMs != null ? `${Math.round(peerHb.ageMs / 1000)}s` : "n/a";
-        console.log(`${now} edge=${e.id} peer=${e.peer} stuck=peer-sidecar-dead heartbeat_age=${ageStr} status=${peerHb.status} — peer's sidecar appears dead; their turn won't progress without manual intervention`);
+        console.log(`${now} edge=${e.id} peer=${e.peer} stuck=peer-sidecar-dead heartbeat_age=${ageStr} status=${peerHb.status} — peer's sidecar appears dead OR they may be running in ephemeral mode (cmdRun) OR be a human peer (no sidecar). Verify with \`agent-chat who\` before assuming a stall; their turn won't progress without manual intervention if the sidecar really is dead`);
         cur.peerSidecarDeadEmitted = true;
       } else if (peerHbAlive) {
         // FUTURE: re-arm not exercised in --once mode (each invocation is a

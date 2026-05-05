@@ -34,8 +34,25 @@ import {
   type IndexEntry,
 } from "./lib.ts";
 import { runClaude, isLlmEnabled } from "./llm.ts";
+import { scanSecrets } from "./safety.ts";
 
 const DEFAULT_FRESH_TAIL = 4;
+
+// Round-15a slice 1: surface (don't refuse) likely-secret strings in BODY.md
+// before sealing. Refusing would leave the secret in the active CONVO.md
+// indefinitely, which is worse than archiving it. Log only pattern names —
+// never the matched substring — so the warning itself doesn't widen exposure.
+function warnIfSecretsInBody(body: string, archiveId: string): void {
+  const hits = scanSecrets(body);
+  if (hits.length === 0) return;
+  const counts = new Map<string, number>();
+  for (const h of hits) counts.set(h.pattern, (counts.get(h.pattern) ?? 0) + 1);
+  const summary = [...counts].map(([p, n]) => `${p}×${n}`).join(", ");
+  console.error(
+    `[archive] WARNING: BODY.md for ${archiveId} contains likely-secret patterns (${summary}). ` +
+    `Sealed anyway (refusing wouldn't unsay them). Review the BODY.md and rotate any real credentials.`,
+  );
+}
 
 function die(msg: string): never { console.error(msg); process.exit(2); }
 
@@ -223,6 +240,7 @@ switch (op) {
       // Write BODY.md verbatim (the sealed source of truth). fsync before
       // the destructive CONVO.md truncation so a power loss between the
       // BODY write and the truncation cannot lose the archive content.
+      warnIfSecretsInBody(body, aid);
       const bodyPath = path.join(adir, "BODY.md");
       const bfd = fs.openSync(bodyPath, "w");
       try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
@@ -327,6 +345,7 @@ switch (op) {
       fs.mkdirSync(adir, { recursive: true });
 
       // BODY.md — verbatim, fsync'd before any destructive op.
+      warnIfSecretsInBody(body, aid);
       const bodyPath = path.join(adir, "BODY.md");
       const bfd = fs.openSync(bodyPath, "w");
       try { fs.writeFileSync(bfd, body); fs.fsyncSync(bfd); }
