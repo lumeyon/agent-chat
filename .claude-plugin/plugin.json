@@ -1,0 +1,42 @@
+{
+  "name": "agent-chat",
+  "version": "0.1.0",
+  "description": "Multi-agent collaboration for Claude Code via filesystem-mediated turn-taking. N agents on an arbitrary graph (Petersen, ring, star, pair) write turns to per-edge CONVO.md files with atomic .turn sentinels. Lossless DAG-based archive layer keeps long conversations cheap to re-read. Hybrid mode (Round 15a) supports both persistent sessions and ephemeral `agent-chat run` dispatch with cache-warm ScheduleWakeup loops.",
+  "author": {
+    "name": "tickcode",
+    "email": "tickcode@gmail.com"
+  },
+  "homepage": "https://github.com/lumeyon/agent-chat",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumeyon/agent-chat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lumeyon/agent-chat/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "claude-code",
+    "agent-orchestration",
+    "filesystem-protocol",
+    "turn-taking",
+    "petersen-graph",
+    "lossless-archive",
+    "ephemeral-dispatch",
+    "schedule-wakeup",
+    "dag-summary"
+  ],
+  "category": "development",
+  "tags": [
+    "automation",
+    "ai-agents",
+    "coordination",
+    "audit-trail",
+    "multi-user"
+  ],
+  "engines": {
+    "claudeCode": ">=2.0.0",
+    "node": ">=20.0.0"
+  }
+}

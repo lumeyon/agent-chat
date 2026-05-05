@@ -129,18 +129,45 @@ fold into the same lossless-claw archive layer as everything else, so
 [bun]: https://bun.sh
 [tsx]: https://github.com/privatenumber/tsx
 
-### 1. Install as a Claude Code skill
+### 1. Install (three options)
+
+**Option A — Claude Code marketplace (Round 15b, recommended):**
+
+```bash
+claude code plugin marketplace add lumeyon/agent-chat
+```
+
+Claude Code auto-installs from the repo's `marketplace.json` + reads
+`.claude-plugin/plugin.json`. Symmetric for Codex once empirical work
+completes (see `docs/round-15b-codex-probe.md` for status):
+
+```bash
+codex plugin marketplace add lumeyon/agent-chat
+```
+
+**Option B — Direct symlink (the original install path):**
 
 ```bash
 git clone https://github.com/lumeyon/agent-chat.git ~/git/agent-chat
 ln -s ~/git/agent-chat ~/.claude/skills/agent-chat
 ```
 
-That's it. Claude Code auto-discovers skills under `~/.claude/skills/`.
-The repo is the skill — no copy step, no build step, no install command.
+Claude Code auto-discovers skills under `~/.claude/skills/`. The repo is
+the skill — no copy step, no build step, no install command.
 
-For per-project use, symlink it into the project's `.claude/skills/`
+For per-project use, symlink into the project's `.claude/skills/`
 directory instead.
+
+**Option C — From the marketplace directly into a project:**
+
+```bash
+cd /path/to/your/project
+codex plugin marketplace add lumeyon/agent-chat --sparse .agents/plugins
+```
+
+The `--sparse` flag drops the plugin into a project-local plugin tree
+rather than the user-global one. Useful for per-project agent-chat
+deployments with distinct topologies.
 
 ### 2. Tell each session who it is — in plain English
 

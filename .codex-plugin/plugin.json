@@ -1,0 +1,35 @@
+{
+  "name": "agent-chat",
+  "version": "0.1.0",
+  "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on an arbitrary graph (Petersen, ring, star, pair) write turns to per-edge CONVO.md files with atomic .turn sentinels. Lossless DAG-based archive layer keeps long conversations cheap to re-read. Round-15b: Codex-side plugin manifest. The wire protocol is identical to the Claude Code variant — agents in different runtimes can collaborate on the same graph. NOTE: hook event taxonomy + slash-command registration require empirical Codex probe (see docs/round-15b-codex-probe.md).",
+  "author": {
+    "name": "tickcode",
+    "email": "tickcode@gmail.com"
+  },
+  "homepage": "https://github.com/lumeyon/agent-chat",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumeyon/agent-chat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lumeyon/agent-chat/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "codex",
+    "agent-orchestration",
+    "filesystem-protocol",
+    "turn-taking",
+    "petersen-graph",
+    "lossless-archive",
+    "cross-runtime"
+  ],
+  "category": "development",
+  "tags": [
+    "automation",
+    "ai-agents",
+    "coordination",
+    "audit-trail"
+  ]
+}

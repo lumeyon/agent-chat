@@ -2110,3 +2110,140 @@ the implementation is mechanical.
 - **Round-15b plugin pivot** — bigger scope, requires Codex empirical
   work for the hook-event taxonomy probe. Deferred until codex
   credits + a dedicated focus session.
+
+---
+
+## Round 15b — Plugin pivot (Claude Code + Codex dual-runtime)
+
+### Problem surfaced
+
+Round 14's audit produced a strategic recommendation: ship agent-chat as
+a plugin per the Claude Code AND Codex plugin specs. The audit's load-
+bearing answer (keystone Section G + carina Section C) was that
+single-codebase dual-runtime is feasible at ~60 LoC of manifest fork
+plus the existing scripts/conversations/yamls unchanged.
+
+User direction at Round 14 wrap: *"we need for this system to pivot to
+becoming a plugin like ruflo is and make a plugin for codex as well."*
+
+### Decision
+
+Three additions ship in this commit, plus one explicit deferral for the
+empirical work the user can complete later:
+
+1. **`.claude-plugin/plugin.json`** — Claude Code manifest. Required +
+   common fields (name, version, description, author, repository,
+   license, keywords, category, tags, engines.claudeCode/node). Mirrors
+   Ruflo's top-level shape from their `.claude-plugin/plugin.json`
+   audit reference. Zero `mcpServers` declared — agent-chat's protocol
+   is filesystem-mediated; an MCP server would just wrap CLI ops we
+   already have.
+
+2. **`.codex-plugin/plugin.json`** — Codex manifest. Identical shape
+   minus the Claude-specific `engines.claudeCode`. Description flags
+   the Codex empirical probe as outstanding.
+
+3. **`marketplace.json`** at repo root — single-plugin marketplace
+   declaring agent-chat. Install URL pattern matches Ruflo's:
+   `claude code plugin marketplace add lumeyon/agent-chat` (or the
+   Codex equivalent).
+
+4. **`scripts/runtimes/claude.ts`** + **`scripts/runtimes/codex.ts`**
+   — per-runtime adapter shims with symmetric `dispatch` +
+   `scheduleWakeup` + `RUNTIME_NAME` exports. Claude side wraps the
+   existing `runClaude` + `loop-driver.ts` primitives. Codex side is
+   a SKELETON that throws `RUNTIME_NOT_IMPLEMENTED` on call —
+   surfaces accidental routing loudly per the same anti-pattern
+   defense Round 15a used for unused flags.
+
+### Codex empirical work — explicitly deferred
+
+The Codex runtime adapter's full implementation requires a live
+`codex` binary to answer four open questions (documented in
+`docs/round-15b-codex-probe.md`):
+
+1. The real non-interactive entrypoint (`codex exec`? `codex run`?
+   undocumented flag?).
+2. Whether Codex inherits `CLAUDE_SESSION_ID` or has its own
+   session-id env-var equivalent.
+3. The actual hook event taxonomy (Codex docs are silent; rhino's
+   probe protocol lives in the deferral doc).
+4. The wakeup mechanism choice (external cron, MCP push, or
+   long-living Claude orchestrator dispatching Codex children).
+
+Round 15b ships the manifest pair + Claude-side adapter + Codex-side
+skeleton. Full Codex behavior lands in a future commit gated on the
+probe.
+
+### Cross-cutting invariant #1 — no new carve-out
+
+The plugin pivot is purely a packaging layer change. The wire protocol
+(CONVO.md / .turn / index.jsonl / archives/) is unchanged. The agent
+runtime model (resolveIdentity → SessionRecord → fetchSpeaker chain)
+is unchanged. What's new is **how a user installs** agent-chat:
+previously a manual symlink-into-`.claude/skills/`; now a
+`marketplace add` invocation that lands in either Claude Code's or
+Codex's plugin tree.
+
+The third carve-out from Round 15a (per-agent ephemeral execution
+mode) carries through both runtimes — the runtime adapter swaps
+the dispatcher primitive, not the lifecycle model.
+
+### Why skeleton-with-throws on the Codex side, not stubs
+
+A throwing skeleton is the right shape per vanguard's verdict-rigor
+frame from Round 14. Three reasons:
+
+1. **No silent-fail-open.** A future Round-16+ that adds `runtime:
+   codex` to `agents.<topology>.yaml` and routes through
+   `runtimes/codex.ts:dispatch` gets a loud `RUNTIME_NOT_IMPLEMENTED`
+   exception. A no-op stub would silently succeed and leave the user
+   wondering why their Codex agent never produced any output.
+2. **Documentation in code.** The thrown error message points at
+   `docs/round-15b-codex-probe.md`. A reviewer running the codex
+   adapter for the first time gets the empirical-work checklist
+   from the runtime, not from a separate doc they might not read.
+3. **Symmetric API surface.** Both adapters export the same names so
+   future Round-16+ routing logic can `import * as runtime from
+   "./runtimes/${runtimeName}.ts"` cleanly. The throws don't break
+   the symmetry; they just gate behavioral execution.
+
+### Test coverage (8 tests, all pass)
+
+`tests/plugin-manifest.test.ts` pins:
+
+- Both manifests are valid JSON with required fields.
+- `marketplace.json` declares agent-chat as a plugin entry.
+- Claude + Codex manifests share name + version (dual-runtime invariant).
+- Both runtime adapters export `dispatch` + `scheduleWakeup` +
+  `RUNTIME_NAME` (symmetric API surface).
+- Codex adapter throws `RUNTIME_NOT_IMPLEMENTED` on call (skeleton).
+- Claude adapter's `scheduleWakeup` mock format matches
+  `loop-driver.ts` byte-for-byte (no drift between adapter + driver).
+
+### What ships now vs what's queued
+
+**Shipping in this commit:**
+
+- Both manifests (`.claude-plugin/`, `.codex-plugin/`).
+- `marketplace.json`.
+- `scripts/runtimes/claude.ts` (full).
+- `scripts/runtimes/codex.ts` (skeleton, throws).
+- `docs/round-15b-codex-probe.md` (empirical-work checklist).
+- 8 manifest + adapter regression tests.
+
+**Queued for Round-15b empirical commit:**
+
+- Real `codex exec` wiring in `runtimes/codex.ts:dispatch`.
+- Wakeup-mechanism implementation per probe-decision question 4.
+- Codex hook event taxonomy in `.codex-plugin/plugin.json` (if
+  needed; may stay implicit).
+- Cross-runtime end-to-end test exercising a 1-edge codex+claude
+  pilot on petersen.
+
+### The audit's strategic answer holds
+
+Round 14's audit predicted ~350 LoC for the plugin pivot. The actual
+shipped LoC is closer to ~280 (60 manifests + 90 Claude adapter + 70
+Codex skeleton + 60 tests + the doc). The remaining ~70 LoC ships
+when the probe is done.

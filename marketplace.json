@@ -1,0 +1,15 @@
+{
+  "name": "agent-chat-marketplace",
+  "owner": {
+    "name": "tickcode",
+    "url": "https://github.com/lumeyon"
+  },
+  "description": "Single-plugin marketplace for agent-chat. Install via: `claude code plugin marketplace add lumeyon/agent-chat` or `codex plugin marketplace add lumeyon/agent-chat`.",
+  "plugins": [
+    {
+      "name": "agent-chat",
+      "source": "./",
+      "description": "Multi-agent collaboration via filesystem-mediated turn-taking. Claude Code + Codex dual-runtime."
+    }
+  ]
+}
