@@ -195,9 +195,10 @@ enable currently requires a manual `~/.codex/config.toml` entry:
 enabled = true
 ```
 
-The runtime adapter itself works once the plugin is enabled. The
-empirical findings on Codex's install lifecycle live as comments at
-the top of `scripts/runtimes/codex.ts`.
+The runtime adapter itself (`codex exec` wrapping) works once the
+plugin is enabled. See [`docs/codex-install.md`](docs/codex-install.md)
+for the full empirical findings (schema diff, the workaround rationale,
+the smoke-test path).
 
 **Option B — Direct symlink (legacy, pre-plugin path):**
 
