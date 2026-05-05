@@ -338,6 +338,13 @@ export type SessionRecord = {
   // the OLD edge before routing the next turn to the NEW edge. Optional so
   // legacy session records keep working unchanged.
   last_recorded_speaker?: string;
+  // Round-15c (Contract A): synthetic SessionRecord pre-written by a
+  // dispatcher (cmdRun --speaker, future human-AI ephemeral flows) before
+  // spawning a `claude -p` ephemeral child. Distinguishes a synthetic
+  // dispatcher-owned record from a stalled real session so cmdGc + the
+  // monitor + doctor can classify it correctly. Optional; legacy records
+  // omit; default false.
+  ephemeral?: boolean;
 };
 
 export const SESSIONS_DIR = path.join(CONVERSATIONS_DIR, ".sessions");
@@ -626,6 +633,63 @@ export function deleteSessionRecord(rec: SessionRecord): void {
       if (cur.session_key === rec.session_key) fs.unlinkSync(p);
     }
   } catch {}
+}
+
+// Round-15c (Contract A): Pre-write synthetic identity state for a
+// dispatched ephemeral child so its in-process `agent-chat record-turn`
+// invocation can resolve speaker without a live sidecar. Returns the
+// synthetic session key (export as CLAUDE_SESSION_ID into the child's
+// env) plus a cleanup() function that unlinks the pre-written files.
+//
+// Carina's Phase-1 break-point analysis: under ephemeral mode,
+// `cmdRecordTurn:1238` calls `fetchSpeaker(id.name, key)` which fails
+// (no sidecar → no UDS, no speaker file → null), exit 64. This helper
+// is the file-side primitive that closes the gap.
+//
+// Usage:
+//   const { sessionKey, cleanup } = prepareEphemeralIdentity({
+//     agent: "keystone", speaker: "boss", parent: orionRecord,
+//   });
+//   process.env.CLAUDE_SESSION_ID = sessionKey;
+//   try { await runClaude({ ... }); } finally { cleanup(); }
+//
+// The synthetic record carries `ephemeral: true` so cmdGc + monitor +
+// doctor can distinguish it from a stalled real session. `parent` is
+// the dispatcher's SessionRecord — its pid + starttime are inherited
+// (the parent is alive while the child runs; pid-recycle defense via
+// processIsOriginal works against the parent's identity).
+export function prepareEphemeralIdentity(input: {
+  agent: string;
+  speaker: string;
+  parent: SessionRecord;
+}): { sessionKey: string; cleanup: () => void } {
+  ensureControlDirs();
+  // Generate a fresh session key. Use crypto.randomUUID() so the key is
+  // distinct from any live session and from any ppid-derived key.
+  const sessionKey = `eph:${crypto.randomUUID()}`;
+  const synthetic: SessionRecord = {
+    agent: input.agent,
+    topology: input.parent.topology,
+    session_key: sessionKey,
+    claude_session_id: sessionKey,
+    host: input.parent.host,
+    pid: input.parent.pid,
+    pid_starttime: input.parent.pid_starttime,
+    started_at: utcStamp(),
+    cwd: input.parent.cwd,
+    ephemeral: true,
+  };
+  writeSessionRecord(synthetic);
+  writeCurrentSpeaker(sessionKey, input.speaker);
+  const cleanup = (): void => {
+    try { fs.unlinkSync(sessionFile(sessionKey)); } catch {}
+    try { fs.unlinkSync(currentSpeakerPath(sessionKey)); } catch {}
+    // NOTE: presenceFile is keyed by agent name, not session key — and
+    // the parent dispatcher may have its own presence record for the
+    // same agent. Don't unlink presence here; let cmdGc's dead-pid
+    // sweep handle any orphan presence file for synthetic records.
+  };
+  return { sessionKey, cleanup };
 }
 
 export function listSessions(): SessionRecord[] {

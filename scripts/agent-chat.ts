@@ -32,7 +32,7 @@ import {
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
   LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
-  writeCurrentSpeaker, resolveDefaultSpeaker,
+  writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 import { sidecarRequest } from "./sidecar-client.ts";
@@ -1395,9 +1395,11 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   // sidecar_version, file-checklist-doc-lies, NO_LLM-footgun. Phase-5
   // resolution: drop the flag entirely so CLI surface matches code
   // semantics. For self-scheduling, run `bun scripts/loop-driver.ts`.
-  const opts = { unsafe: false, peers: [] as string[] };
-  for (const a of args) {
+  const opts = { unsafe: false, peers: [] as string[], speaker: null as string | null };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
     if (a === "--unsafe") opts.unsafe = true;
+    else if (a === "--speaker") opts.speaker = args[++i] ?? null;
     else if (!a.startsWith("--")) opts.peers.push(a);
   }
   // Reentrancy guard: refuse if we're already inside an LLM call. The
@@ -1433,6 +1435,31 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   // Lazy-import safety + runClaude — keeps cmdRun decoupled from optional deps.
   const { detectDestructive } = await import("./safety.ts");
   const { runClaude } = await import("./llm.ts");
+
+  // Round-15c (Contract A): if --speaker was passed, pre-write a
+  // synthetic SessionRecord + current_speaker.json so any in-process
+  // record-turn invocation by the dispatched ephemeral child resolves
+  // the speaker correctly. Validate the speaker against users.yaml
+  // BEFORE pre-writing — same defense as cmdRecordTurn's gate.
+  let ephemeralCleanup: (() => void) | null = null;
+  if (opts.speaker) {
+    const users = loadUsers().map((u) => u.name);
+    if (!users.includes(opts.speaker)) {
+      die(`refuse: --speaker "${opts.speaker}" is not in users.yaml. Speaker must be a registered human user.`, 65);
+    }
+    // Read parent SessionRecord for inheritance (pid, host, etc.). The
+    // dispatcher must have run `agent-chat init` so a SessionRecord
+    // exists.
+    const parentKeyRaw = currentSessionKey();
+    const parent = readSessionRecord(parentKeyRaw);
+    if (!parent) {
+      die(`refuse: --speaker "${opts.speaker}" requires a live parent SessionRecord (run agent-chat init first).`, 64);
+    }
+    const eph = prepareEphemeralIdentity({ agent: id.name, speaker: opts.speaker, parent });
+    process.env.CLAUDE_SESSION_ID = eph.sessionKey;
+    ephemeralCleanup = eph.cleanup;
+    console.error(`[agent-chat run] ephemeral speaker="${opts.speaker}" session_key=${eph.sessionKey} (Contract A pre-write)`);
+  }
 
   let workDone = false;
   let pending = 0;
@@ -1545,6 +1572,15 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       }
     }
   } catch { /* liveness module not available; skip hint */ }
+  // Round-15c (Contract A): clean up the synthetic ephemeral identity if
+  // we pre-wrote one. Idempotent — safe even if the work loop crashed
+  // mid-iteration (the cleanup just unlinks files that may or may not
+  // exist).
+  if (ephemeralCleanup) {
+    try { ephemeralCleanup(); } catch (err) {
+      console.error(`[agent-chat run] ephemeral cleanup failed: ${(err as Error).message} (cmdGc dead-pid sweep will catch orphans)`);
+    }
+  }
   return { workDone, pending };
 }
 

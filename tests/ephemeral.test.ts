@@ -219,4 +219,67 @@ describe("ephemeral mode — Round-15a slice 2 (carina Phase-3, post-pivot)", ()
     expect(readTurn(tmp, "boss-keystone")).toBe("boss");
     expect(readTurn(tmp, "boss-rhino")).toBe("boss");
   });
+
+  // Round-15c — Contract A: prepareEphemeralIdentity helper test.
+  //
+  // The complement to Test #2's regression-pin: when the dispatcher
+  // pre-writes synthetic state via prepareEphemeralIdentity(), the
+  // dispatched ephemeral child's record-turn DOES succeed. This test
+  // exercises the helper directly (no cmdRun shell-out) so we pin the
+  // primitive behavior without depending on the cmdRun --speaker
+  // integration end-to-end.
+  test("5. prepareEphemeralIdentity round-trip — record-turn under synthetic fixture succeeds (Contract A)", async () => {
+    const { prepareEphemeralIdentity } = await import("../scripts/lib.ts");
+    const parentKey = fakeSessionId("orion-parent");
+    writeInteractiveSessionRecord(tmp, parentKey, "orion");
+    const parentRec = JSON.parse(fs.readFileSync(
+      path.join(tmp, ".sessions", `${parentKey.replace(/[^A-Za-z0-9_:.-]/g, "_")}.json`), "utf8",
+    ));
+
+    // Pre-condition: we set AGENT_CHAT_CONVERSATIONS_DIR so the helper
+    // writes into our tmp dir. The helper resolves CONVERSATIONS_DIR at
+    // module-load time, so we re-import a fresh copy for this test.
+    const prevDir = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      // Fresh import to pick up the env-overridden CONVERSATIONS_DIR.
+      const lib = await import(`../scripts/lib.ts?t=${Date.now()}`);
+      const { sessionKey, cleanup } = lib.prepareEphemeralIdentity({
+        agent: "keystone",
+        speaker: "boss",
+        parent: parentRec,
+      });
+
+      // The synthetic SessionRecord exists with ephemeral: true.
+      const sessFile = path.join(tmp, ".sessions", `${sessionKey.replace(/[^A-Za-z0-9_:.-]/g, "_")}.json`);
+      expect(fs.existsSync(sessFile)).toBe(true);
+      const synth = JSON.parse(fs.readFileSync(sessFile, "utf8"));
+      expect(synth.ephemeral).toBe(true);
+      expect(synth.agent).toBe("keystone");
+
+      // The synthetic current_speaker file points at boss.
+      const speakerFile = path.join(tmp, ".sessions", `${sessionKey.replace(/[^A-Za-z0-9_:.-]/g, "_")}.current_speaker.json`);
+      expect(fs.existsSync(speakerFile)).toBe(true);
+      const speaker = JSON.parse(fs.readFileSync(speakerFile, "utf8"));
+      expect(speaker.name).toBe("boss");
+
+      // Now invoke record-turn against this synthetic state — the SUCCESS
+      // path that Test #2's regression-pin is the inverse of.
+      const env = sessionEnv(tmp, "keystone", TOPO, sessionKey);
+      const r = runScript("agent-chat.ts", [
+        "record-turn", "--user", "test prompt", "--assistant", "test reply",
+      ], env, { allowFail: true });
+      expect(r.exitCode).toBe(0);
+      // Edge dir created on the boss-keystone edge (alphabetical).
+      expect(fs.existsSync(path.join(tmp, TOPO, "boss-keystone", "CONVO.md"))).toBe(true);
+
+      // Cleanup unlinks both files.
+      cleanup();
+      expect(fs.existsSync(sessFile)).toBe(false);
+      expect(fs.existsSync(speakerFile)).toBe(false);
+    } finally {
+      if (prevDir == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevDir;
+    }
+  });
 });

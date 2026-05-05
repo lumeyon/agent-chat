@@ -2002,3 +2002,111 @@ scope for 15a; the tombstone would be additive and backward-compatible.
 - `docs/audit-rigor.md` — vanguard's verdict-classification frame, project convention.
 - `/data/eyon/git/ruflo/plugins/ruflo-autopilot/skills/autopilot-loop/SKILL.md:18` — cache-warm 270s pattern.
 - Round 13 §`agent-stuck-on-own-turn` — the detector this round's structural fix complements.
+
+---
+
+## Round 15c — Contract A: human-AI ephemeral × record-turn
+
+### Problem surfaced
+
+Carina's Round-15a Phase-1 break-point analysis pinned a real gap at
+`agent-chat.ts:1238-1239`: under ephemeral mode, `cmdRecordTurn` calls
+`fetchSpeaker(id.name, key)` which fails because (a) no sidecar exists
+for the dispatched ephemeral peer (UDS unreachable) and (b) no
+`<key>.current_speaker.json` was pre-written by the parent dispatcher.
+Result: exit 64, "no current speaker", silent feature gap.
+
+`resolveDefaultSpeaker` is correctly env-pure, but it's only called by
+`cmdInit`, never by `cmdRecordTurn`. So the env fallback never fires
+for an ephemeral child. Carina's break-point became Round-15a Test #2
+as a permanent regression-pin (deliberately, to lock the failure mode
+loud); Round-15c carries the structural fix.
+
+### Decision
+
+Add a file-side helper `prepareEphemeralIdentity(agent, speaker, parent)`
+to `lib.ts` that pre-writes a synthetic `SessionRecord` (with
+`ephemeral: true`) plus a `<key>.current_speaker.json` under a fresh
+session key, returns the key plus an idempotent `cleanup()` function.
+
+Add a `--speaker <name>` flag to `cmdRun` that, when set, calls
+`prepareEphemeralIdentity` BEFORE invoking `runClaude`, exports
+`CLAUDE_SESSION_ID=<synthetic-key>` so the spawned `claude -p` child
+inherits, and calls `cleanup()` after the work loop completes.
+
+Validation: `--speaker` is gated against `users.yaml` membership (same
+defense as `cmdRecordTurn`'s human-only check); refusing with exit 65
+for unknown speakers and exit 64 for missing parent SessionRecord.
+
+### Why Contract A and not B/C
+
+Carina's Phase-1 evaluated three options:
+- **A (file-based pre-write)** — what shipped. Reuses existing speaker
+  lifecycle. Symmetric with interactive sessions. No new failure modes
+  for keystone (slice-3 docs) to document. Forces dispatcher to handle
+  GC for ephemeral runs (which the existing dead-pid sweep already
+  covers).
+- **B (env-based)** — extend `fetchSpeaker` with a `$AGENT_CHAT_USER`
+  env fallback. Concern: that env var already has a defined semantic
+  in `resolveDefaultSpeaker` (init-time human assertion); reusing at
+  record-turn time creates ambiguity.
+- **C (arg-based)** — `record-turn --speaker <name>` flag. Forge-able
+  by any caller; mitigated by users.yaml validation but adds CLI
+  surface.
+
+A wins on security posture (mode 0600 on the speaker file matches the
+existing Round-11 invariant) and architectural cohesion (one resolution
+chain, not two).
+
+### What ships in 15c
+
+- `lib.ts prepareEphemeralIdentity(...)` helper. ~40 LoC including
+  comment block citing carina's break-point analysis.
+- `lib.ts SessionRecord.ephemeral?: boolean` field (Round-15c
+  documentation field; Round-15a noted but unused).
+- `agent-chat.ts cmdRun --speaker <name>` flag wiring. ~20 LoC.
+  Validates speaker against users.yaml; exits 65/64 on misuse.
+- `tests/ephemeral.test.ts test #5` — Contract A round-trip success
+  path. Exercises `prepareEphemeralIdentity` directly + verifies
+  cleanup() works. The complement to Test #2's regression-pin: same
+  exit-64 invariant, but now there's a separate success-path test
+  pinning the inverse.
+
+### What did NOT change
+
+- Test #2's exit-64 regression-pin stays. Round-15a's discipline was
+  that the bare failure mode must remain locked loud — Round-15c does
+  NOT flip Test #2's assertion. Instead it adds Test #5 as the
+  separate success-path test. Both tests stay green forever.
+- `cmdRecordTurn` itself — no behavioral change. The fix is in the
+  caller (cmdRun pre-writes synthetic state); the resolver code path
+  is unchanged. This is the right separation: cmdRecordTurn's
+  reject-on-missing-speaker behavior at line 1238-1239 is the load-
+  bearing invariant Test #2 pins; cmdRun's pre-write closes the gap
+  by ensuring the speaker IS present when the dispatched child runs.
+
+### Round-15c was solo-integrated
+
+After Round-15a's full team-protocol round-trip (5 phases, 3 peer
+slices, 3 cross-reviews, ~14 fix-list items at Phase-5), Round-15c's
+spec was concrete enough from carina's Phase-1 + Round-15a Phase-4
+discussion that the user authorized solo integration to ship the
+remaining decoupled work in series. Same pattern Round-12 + Round-13
+used at Phase-5 integration; the team-protocol gets used where
+parallelism + cross-review yield real value (planning, implementation,
+review of sibling slices), not for tasks where the spec is locked and
+the implementation is mechanical.
+
+### Open follow-ups
+
+- **Lyra-L3 hermeticity** (`tests/lib.test.ts:301`): test was written
+  assuming `.agent-name` would win resolution; resolveIdentity's
+  documented order puts per-session record first. Keystone's leaning
+  fix at Round-15a Phase-4: option (a) — `resolveIdentity` accepts
+  an opt-in `ignoreSessionRecord` param. Out of scope for 15c v1; the
+  failure is benign (test-only) and the fix is independent.
+- **`docs/anti-pattern-audit.md`** — Round-15a's six-rounds-deep
+  receipt. Out of scope here; queued for the next docs pass.
+- **Round-15b plugin pivot** — bigger scope, requires Codex empirical
+  work for the hook-event taxonomy probe. Deferred until codex
+  credits + a dedicated focus session.
