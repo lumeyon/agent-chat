@@ -1604,10 +1604,17 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         `Dalio-inspired multi-axis peer rating), append ` +
         `<dot peer="${edge.peer}" clarity="N" depth="N" reliability="N" speed="N" note="why" /> ` +
         `where N is 1-10 per axis. Self-grading is refused. ` +
-        `If you want to update your own role declaration so peers know your ` +
-        `current specialty (Concern-2), run \`agent-chat role set --stdin\` ` +
-        `out-of-band — not as a directive in this section. All directive ` +
-        `blocks above are OPTIONAL.`;
+        // Round-15k Item-7: <role> directive — self-update your specialty
+        // declaration so peers learn what you do well now. Body is the new
+        // role text (overwrites any existing override); empty body clears
+        // the override and reverts to YAML default. Capped at 4 KB. Use
+        // sparingly — the role is the durable shape of "what you do," not
+        // a status line for the current task.
+        `If your specialty has evolved during recent ticks and you want peers ` +
+        `to learn it, append <role>updated specialty: <one-line summary></role>. ` +
+        `Use this only when your durable shape has changed — not for one-off ` +
+        `tasks. Empty body clears the override. ` +
+        `All directive blocks above are OPTIONAL.`;
     } catch (err) {
       console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
       continue;
@@ -1682,6 +1689,35 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         }
       }
       stdout = stdout.replace(archiveMatch[0], "").trim();
+    }
+    // Round-15k Item-7: <role> directive — agent self-updates their role
+    // declaration. Symmetric with <scratch>/<archive>/<dispatch>/<dot/>;
+    // body is the new role text (overwrites any existing override). Honors
+    // ROLE_MAX_BYTES cap; bodies that exceed the cap are refused with a
+    // log line so the next tick's prompt re-surfaces the gap to the agent.
+    const roleMatch = stdout.match(/<role>([\s\S]*?)<\/role>/);
+    if (roleMatch) {
+      const body = roleMatch[1].trim();
+      if (body.length === 0) {
+        // Empty body = clear override (revert to YAML default).
+        try {
+          if (clearRoleOverride(id.name)) {
+            console.log(`[agent-chat run] role override cleared for ${id.name} (reverts to YAML default).`);
+          }
+        } catch (err) {
+          console.error(`[agent-chat run] role clear failed: ${(err as Error).message}`);
+        }
+      } else if (body.length > ROLE_MAX_BYTES) {
+        console.error(`[agent-chat run] <role> directive refused: body ${body.length} bytes > cap ${ROLE_MAX_BYTES}; keep it short.`);
+      } else {
+        try {
+          writeRoleOverride(id.name, body);
+          console.log(`[agent-chat run] role override updated for ${id.name} (${body.length} bytes) — peers will see it next tick.`);
+        } catch (err) {
+          console.error(`[agent-chat run] role write failed: ${(err as Error).message}`);
+        }
+      }
+      stdout = stdout.replace(roleMatch[0], "").trim();
     }
     // Round-15f: extract all <dispatch peer="..."> blocks. Validate each
     // peer is an actual neighbor of mine in this topology before queuing
