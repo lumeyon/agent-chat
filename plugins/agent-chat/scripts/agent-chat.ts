@@ -1614,6 +1614,23 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       console.error(`[agent-chat run] ephemeral cleanup failed: ${(err as Error).message} (cmdGc dead-pid sweep will catch orphans)`);
     }
   }
+  // Round-15h Concern-1: per-tick auto-archive. Ephemeral mode means most
+  // sessions never explicitly `agent-chat exit`, so the exit-time auto-
+  // archive that's been the only sealing trigger never fires. Run the
+  // same sweep at the END of every cmdRun tick — cheap (no-op for edges
+  // below threshold), idempotent (autoArchiveSessionEdges only seals
+  // parked-AND-bloated edges), and defensive against indefinite growth.
+  // Synthesized-identity ticks (Contract A) skip this — they have no
+  // persistent SessionRecord on disk; the cleanup above unlinked it.
+  try {
+    const tickRec = readSessionRecord(currentSessionKey());
+    if (tickRec) {
+      const n = autoArchiveSessionEdges(tickRec, 200);
+      if (n > 0) console.error(`[agent-chat run] per-tick auto-archive: sealed ${n} parked edge(s)`);
+    }
+  } catch (err) {
+    console.error(`[agent-chat run] per-tick auto-archive failed: ${(err as Error).message} (non-blocking)`);
+  }
   return { workDone, pending };
 }
 
