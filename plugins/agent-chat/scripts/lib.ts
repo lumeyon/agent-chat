@@ -95,13 +95,19 @@ export const SKILL_ROOT = path.resolve(
   "..",
 );
 
-// Conversations directory: defaults to <skill>/conversations, but tests
-// (and anyone wanting per-project isolation) can override via env var.
+// Conversations directory: defaults to ~/.claude/data/agent-chat/conversations
+// so state is user-global and shared across projects (and across plugin-cache
+// version dirs). Tests and per-project isolation can override via env var.
 // Topology yaml files always live under SKILL_ROOT — only runtime state
 // (CONVO.md, .turn, archives, .sessions, .presence) follows this override.
+//
+// Why user-global rather than <skill>/conversations: a plugin install resolves
+// SKILL_ROOT to ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/, so
+// every version bump would orphan all prior wire-state. And two installs (cache
+// vs. legacy ~/.claude/skills) would talk past each other on different files.
 export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
   ? path.resolve(process.env.AGENT_CHAT_CONVERSATIONS_DIR)
-  : path.join(SKILL_ROOT, "conversations");
+  : path.join(os.homedir(), ".claude", "data", "agent-chat", "conversations");
 
 // Tiny YAML parser for our limited schema:
 //   topology: <name>
