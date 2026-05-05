@@ -764,23 +764,76 @@ export function readAllDots(): Record<string, Dot[]> {
 }
 
 // Believability: per-agent score in [0, 1]. Computed from the agent's
-// received dots — high scores received → high believability. Neutral
-// prior (0.5) for agents with no received dots. Used as a weight when
-// aggregating their grades of others.
+// received dots — high scores received → high believability. Used as
+// a weight when aggregating their grades of others.
+//
+// Round-15k Item-6: fixed-point iteration. Pre-fix, computeBelievability
+// was a one-pass unweighted-mean computation: every grader contributed
+// equally regardless of their own believability. That meant a low-quality
+// grader (cadence's harshness, or worse: a misaligned agent's high noise)
+// pulled receivers down by the same amount as a high-quality grader's
+// signal. Worse: the function returned via early-continue with the 0.5
+// prior, so an agent who had received zero dots had no way to "catch up"
+// once grading started — their first grader weighted at 1.0 in the
+// unweighted mean, distorting the network.
+//
+// Now: iterate. Initialize all agents at the 0.5 prior. On each pass,
+// recompute every agent's believability as the believability-WEIGHTED
+// mean of their received-axes scores (using the previous pass's weights).
+// Iterate until convergence (max delta < 0.001) or MAX_ITERS hit. This
+// is structurally what Dalio's DC does — the "believable" people's
+// votes count more, recursively. Bounded: 5-10 iterations on a 10-agent
+// petersen, sub-millisecond cost.
+//
+// Edge cases: agents with zero received dots stay at 0.5 (neutral prior)
+// and never appear in another agent's weighting denominator. New agents
+// joining mid-conversation start at 0.5 and converge as their first dots
+// land. Cycles in the grade graph are fine — fixed-point iteration handles
+// them by converging to the eigenvector of the (normalized) weighting matrix.
+const BELIEVABILITY_MAX_ITERS = 20;
+const BELIEVABILITY_CONVERGE_THRESHOLD = 0.001;
+
 export function computeBelievability(allDots: Record<string, Dot[]> = readAllDots()): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [peer, dots] of Object.entries(allDots)) {
-    if (dots.length === 0) { out[peer] = 0.5; continue; }
-    let sum = 0, count = 0;
-    for (const d of dots) {
-      for (const a of DOT_AXES) {
-        const v = d.axes[a];
-        if (typeof v === "number" && Number.isFinite(v)) { sum += v; count++; }
+  const peers = Object.keys(allDots);
+  if (peers.length === 0) return {};
+
+  // Initialize: every agent at 0.5 neutral prior.
+  let belv: Record<string, number> = {};
+  for (const p of peers) belv[p] = 0.5;
+
+  for (let iter = 0; iter < BELIEVABILITY_MAX_ITERS; iter++) {
+    const next: Record<string, number> = {};
+    let maxDelta = 0;
+
+    for (const [peer, dots] of Object.entries(allDots)) {
+      if (dots.length === 0) {
+        next[peer] = 0.5;
+        continue;
       }
+      // Believability-weighted mean of received axes.
+      let weightedSum = 0, weightSum = 0;
+      for (const d of dots) {
+        const graderBelv = belv[d.grader] ?? 0.5;
+        for (const a of DOT_AXES) {
+          const v = d.axes[a];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            weightedSum += v * graderBelv;
+            weightSum += graderBelv;
+          }
+        }
+      }
+      const score = weightSum > 0
+        ? Math.max(0, Math.min(1, (weightedSum / weightSum) / 10))
+        : 0.5;
+      next[peer] = score;
+      const delta = Math.abs(score - (belv[peer] ?? 0.5));
+      if (delta > maxDelta) maxDelta = delta;
     }
-    out[peer] = count > 0 ? Math.max(0, Math.min(1, sum / count / 10)) : 0.5;
+
+    belv = next;
+    if (maxDelta < BELIEVABILITY_CONVERGE_THRESHOLD) break;
   }
-  return out;
+  return belv;
 }
 
 export type DotAggregate = {

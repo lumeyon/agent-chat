@@ -1565,6 +1565,50 @@ describe("Round 15h Concern-3 — Dot Collector aggregation + believability", ()
     }
   });
 
+  test("Round-15k Item-6: computeBelievability converges via fixed-point iteration", async () => {
+    const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-belv-fp-"));
+    const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    process.env.AGENT_CHAT_CONVERSATIONS_DIR = tmp;
+    try {
+      const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}fp`);
+      // Construct a 3-agent scenario where fixed-point matters:
+      //   alice ← carol (HIGH, 9s)
+      //   bob   ← carol (LOW, 2s)
+      //   carol ← alice + bob (alice gives 9, bob gives 2)
+      // With one-pass (pre-fix), carol's believability is mean([alice's 9,
+      // bob's 2]) / 10 = 0.55 — bob's noise pulls carol down equally.
+      // With fixed-point, alice's high believability (from receiving high
+      // grades) outweighs bob's low one when computing carol — so carol
+      // converges higher than 0.55.
+      fresh.appendDot("alice", { ts: "x", grader: "carol",
+        axes: { clarity: 9, depth: 9, reliability: 9, speed: 9 } });
+      fresh.appendDot("bob", { ts: "x", grader: "carol",
+        axes: { clarity: 2, depth: 2, reliability: 2, speed: 2 } });
+      fresh.appendDot("carol", { ts: "x", grader: "alice",
+        axes: { clarity: 9, depth: 9, reliability: 9, speed: 9 } });
+      fresh.appendDot("carol", { ts: "x", grader: "bob",
+        axes: { clarity: 2, depth: 2, reliability: 2, speed: 2 } });
+      const belv = fresh.computeBelievability();
+      // Sanity bounds.
+      expect(belv.alice).toBeGreaterThan(0); expect(belv.alice).toBeLessThanOrEqual(1);
+      expect(belv.bob).toBeGreaterThan(0); expect(belv.bob).toBeLessThanOrEqual(1);
+      expect(belv.carol).toBeGreaterThan(0); expect(belv.carol).toBeLessThanOrEqual(1);
+      // Alice (received only 9s from carol) should have high believability.
+      expect(belv.alice).toBeGreaterThan(0.7);
+      // Bob (received only 2s from carol) should have low.
+      expect(belv.bob).toBeLessThan(0.3);
+      // Carol (received 9 from alice + 2 from bob) — the load-bearing test:
+      // with fixed-point weighting, alice's vote (high believability) counts
+      // more than bob's (low) when computing carol. So carol > 0.55 (the
+      // unweighted-mean answer). Pre-fix this would have been ~0.55.
+      expect(belv.carol).toBeGreaterThan(0.55);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+      else process.env.AGENT_CHAT_CONVERSATIONS_DIR = prevEnv;
+      fs15h.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test("computeBelievability: empty ledger gives neutral 0.5", async () => {
     const tmp = fs15h.mkdtempSync(path15h.join(os15h.tmpdir(), "ac-dots-belv-"));
     const prevEnv = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
