@@ -7,13 +7,8 @@
     "email": "tickcode@gmail.com"
   },
   "homepage": "https://github.com/lumeyon/agent-chat",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lumeyon/agent-chat.git"
-  },
-  "bugs": {
-    "url": "https://github.com/lumeyon/agent-chat/issues"
-  },
+  "repository": "https://github.com/lumeyon/agent-chat.git",
+  "bugs": "https://github.com/lumeyon/agent-chat/issues",
   "license": "MIT",
   "keywords": [
     "multi-agent",
