@@ -309,8 +309,15 @@ in the body. If the summary already has it, you're done.
 - All paths in the scripts resolve **relative to the skill directory**, so
   the entire `agent-chat/` folder can be moved into a project's
   `.claude/skills/` and continue to work without edits.
-- The conversations directory is `<skill>/conversations/<topology>/<edge-id>/`.
-  Edge ids are alphabetical: `lumeyon-orion`, not `orion-lumeyon`.
+- The conversations directory defaults to `~/.claude/data/agent-chat/conversations/<topology>/<edge-id>/`
+  (user-global, shared across projects + plugin versions + Claude/Codex
+  runtimes). Edge ids are alphabetical: `lumeyon-orion`, not `orion-lumeyon`.
+  Override resolution order: `$AGENT_CHAT_CONVERSATIONS_DIR` env var beats
+  `~/.claude/data/agent-chat/config.json` `conversations_dir` field beats the
+  default. Run `bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" doctor --paths`
+  to see which won. The config.json surface lets the Claude-Code plugin and
+  the future Codex plugin point at the same shared dir without per-shell env
+  vars.
 - Locks are advisory file presence, not OS-level locks — they are durable
   across crashes but not bulletproof against two processes that ignore them.
   Don't double-invoke an agent against the same edge.

@@ -751,8 +751,35 @@ async function cmdGc(args: string[]): Promise<void> {
 // stuck-tick detection (e.g. probing scratchpad mtime + .turn age).
 async function cmdDoctor(args: string[]): Promise<void> {
   const sub = args[0];
+  if (sub === "--paths") {
+    const { CONVERSATIONS_DIR, SKILL_ROOT, CONFIG_PATH, CONFIG } = require("./lib.ts");
+    const envOverride = process.env.AGENT_CHAT_CONVERSATIONS_DIR;
+    const cfgOverride = CONFIG?.conversations_dir;
+    const source = envOverride
+      ? `env:AGENT_CHAT_CONVERSATIONS_DIR`
+      : cfgOverride
+        ? `config:${CONFIG_PATH}`
+        : `default`;
+    if (args.includes("--json")) {
+      console.log(JSON.stringify({
+        skill_root: SKILL_ROOT,
+        conversations_dir: CONVERSATIONS_DIR,
+        conversations_dir_source: source,
+        config_path: CONFIG_PATH,
+        config_present: fs.existsSync(CONFIG_PATH),
+      }, null, 2));
+    } else {
+      console.log(`doctor --paths:`);
+      console.log(`  skill_root         = ${SKILL_ROOT}`);
+      console.log(`  conversations_dir  = ${CONVERSATIONS_DIR}`);
+      console.log(`  source             = ${source}`);
+      console.log(`  config_path        = ${CONFIG_PATH}`);
+      console.log(`  config_present     = ${fs.existsSync(CONFIG_PATH)}`);
+    }
+    return;
+  }
   if (sub !== "--liveness") {
-    die("usage: agent-chat.ts doctor --liveness [--json]");
+    die("usage: agent-chat.ts doctor --liveness [--json] | doctor --paths [--json]");
   }
   const wantJson = args.includes("--json");
   const sessions = listSessions().filter((r) => r.host === os.hostname());

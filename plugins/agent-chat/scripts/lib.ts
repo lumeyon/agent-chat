@@ -95,9 +95,57 @@ export const SKILL_ROOT = path.resolve(
   "..",
 );
 
-// Conversations directory: defaults to ~/.claude/data/agent-chat/conversations
-// so state is user-global and shared across projects (and across plugin-cache
-// version dirs). Tests and per-project isolation can override via env var.
+// Plugin config: ~/.claude/data/agent-chat/config.json. Read once at module
+// load. Used to let the Claude-Code plugin and the (future) Codex plugin point
+// at the SAME conversations dir without each user fiddling with env vars in
+// every shell. The file is optional; if absent, defaults apply.
+//
+// Schema (fields are all optional):
+//   {
+//     "conversations_dir": "/absolute/path/for/shared/state"
+//   }
+export type AgentChatConfig = { conversations_dir?: string };
+export const CONFIG_PATH = path.join(
+  os.homedir(),
+  ".claude",
+  "data",
+  "agent-chat",
+  "config.json",
+);
+
+function loadConfig(): AgentChatConfig {
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      console.warn(`[agent-chat] config at ${CONFIG_PATH}: expected object, ignoring`);
+      return {};
+    }
+    const cfg: AgentChatConfig = {};
+    if (parsed.conversations_dir != null) {
+      if (typeof parsed.conversations_dir !== "string" || !path.isAbsolute(parsed.conversations_dir)) {
+        console.warn(`[agent-chat] config.conversations_dir must be an absolute path string, ignoring`);
+      } else {
+        cfg.conversations_dir = parsed.conversations_dir;
+      }
+    }
+    return cfg;
+  } catch (e: any) {
+    if (e?.code === "ENOENT") return {};
+    console.warn(`[agent-chat] failed to read config at ${CONFIG_PATH}: ${e?.message ?? e}`);
+    return {};
+  }
+}
+
+export const CONFIG: AgentChatConfig = loadConfig();
+
+// Conversations directory: user-global by default so state is shared across
+// projects, plugin-cache version dirs, AND across runtimes (Claude + Codex
+// plugins read the same config.json). Resolution order:
+//   1. $AGENT_CHAT_CONVERSATIONS_DIR env var (highest — tests & per-shell)
+//   2. config.json `conversations_dir` field (cross-runtime sharing)
+//   3. ~/.claude/data/agent-chat/conversations/ (default)
+//
 // Topology yaml files always live under SKILL_ROOT — only runtime state
 // (CONVO.md, .turn, archives, .sessions, .presence) follows this override.
 //
@@ -107,7 +155,9 @@ export const SKILL_ROOT = path.resolve(
 // vs. legacy ~/.claude/skills) would talk past each other on different files.
 export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
   ? path.resolve(process.env.AGENT_CHAT_CONVERSATIONS_DIR)
-  : path.join(os.homedir(), ".claude", "data", "agent-chat", "conversations");
+  : CONFIG.conversations_dir
+    ? path.resolve(CONFIG.conversations_dir)
+    : path.join(os.homedir(), ".claude", "data", "agent-chat", "conversations");
 
 // Tiny YAML parser for our limited schema:
 //   topology: <name>
