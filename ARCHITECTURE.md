@@ -2307,3 +2307,128 @@ Honest scope accounting: completing the full Round-15d (additive primitives + pe
 - **Round-15d-β is mostly mechanical** — deletion of well-isolated modules + refactor of dispatcher functions. Lower architectural risk; higher LoC churn.
 
 The sequencing also matches the audit-rigor frame from Round-14: each commit has falsifiable invariants. α's invariant is "scratchpad + sub-relay primitives don't break existing behavior"; β's is "ephemeral-only is sufficient for all existing use cases."
+
+---
+
+## Round 15d-β — persistent-mode deletion
+
+User directive at Round-15c wrap: *"Ephemeral will be not just the
+default but the only way going forward."* Round-15d-α shipped the
+additive primitives (scratchpad, sub-relay, agent-managed memory
+directives, topology diameter); Round-15d-β closes the loop by
+deleting the persistent-mode infrastructure that the new primitives
+made obsolete.
+
+### What was deleted
+
+- **`scripts/sidecar.ts`** (~1100 LoC) — long-running per-agent UDS
+  daemon. Inotify-driven `fs.watch`, in-memory diff cache, 8-method
+  IPC dispatcher (whoami / time / peek / last-section / unread /
+  since-last-spoke / health / shutdown / speaker), heartbeat emitter,
+  auto-compaction trigger.
+- **`scripts/monitor.ts`** (~360 LoC) — long-running multi-edge
+  watcher with stuck-on-own-turn detection. Polling-based fallback
+  to fs.watch; archive-hint emission; startup-pending pass.
+- **`scripts/sidecar-client.ts`** (~70 LoC) — async UDS client used
+  by `turn.ts peek`, `agent-chat.ts cmdInit/cmdExit/cmdWho/cmdWhoami/
+  cmdRun/fetchSpeaker`.
+- **`scripts/liveness.ts`** (~280 LoC) — heartbeat schema, parser,
+  classifier, `StuckReason` union, `STUCK_TURN_TIMEOUT_MS`,
+  `HEARTBEAT_STALE_MS`, `HEARTBEAT_DEAD_MS`. Round-13 work that
+  formalized stuck-agent detection across the persistent-mode peer
+  liveness invariant.
+- **`tests/sidecar.test.ts`, `tests/monitor.test.ts`,
+  `tests/monitor-liveness.test.ts`, `tests/heartbeat.test.ts`,
+  `tests/doctor-liveness.test.ts`, `tests/gc-aggressive.test.ts`** —
+  ~1800 LoC of tests for the deleted infrastructure.
+- **Speaker tests** — two `describe` blocks in `tests/speaker.test.ts`
+  that exercised sidecar UDS Bug-1-class regression cases (round-3
+  monitor_pid fix applied to current_speaker; pulsar's mandated
+  cache-invalidation invariant). Retired with the sidecar.
+
+### What was refactored
+
+- **`scripts/agent-chat.ts cmdInit`** — sidecar + monitor launches
+  removed. `--no-sidecar` and `--no-monitor` flags accepted for
+  backward-compat but parsed-and-ignored. The "NEXT STEP — deliver
+  notifications to chat" instructional block now points at
+  `agent-chat run` and `loop-driver.ts` instead of the Monitor-tool
+  invocation pattern.
+- **`scripts/agent-chat.ts cmdExit`** — `stopSidecar` and `stopMonitor`
+  calls removed. Heartbeat unlink kept as a no-op-on-absent for
+  legacy artifact cleanup.
+- **`scripts/agent-chat.ts cmdWho`** — sidecar/monitor pid columns
+  removed; output is just agent + host:pid + topology + started_at.
+- **`scripts/agent-chat.ts cmdGc`** — sidecar pidfile reaper +
+  socket reaper folded into a "legacy artifacts" sweep gated on
+  `--aggressive`. Heartbeat directory inlined since liveness.ts
+  no longer exports it.
+- **`scripts/agent-chat.ts cmdDoctor`** — heartbeat-driven liveness
+  check removed (heartbeats no longer exist). The CLI surface is
+  preserved but reports session records on this host. Future rounds
+  may reintroduce ephemeral-aware stuck-tick detection (e.g. probing
+  scratchpad mtime + .turn age).
+- **`scripts/agent-chat.ts cmdRun`** — sidecar collision check
+  removed (no sidecar to collide with). Post-flight heartbeat
+  liveness hint removed.
+- **`scripts/agent-chat.ts fetchSpeaker`** — sidecar UDS fast-path
+  removed; file-direct `readCurrentSpeaker` is the only path now.
+- **`scripts/turn.ts peek`** — sidecar UDS fast-path removed;
+  file-direct only. The 3-statSync + 2-readFileSync cost is
+  negligible compared to a typical cmdRun tick.
+
+### What was preserved
+
+- Wire protocol: `CONVO.md`, `.turn`, `.turn.lock`, `index.jsonl`,
+  `archives/`, `current_speaker.json`. Unchanged.
+- Identity: `SessionRecord`, `current_speaker`, `resolveIdentity`,
+  `prepareEphemeralIdentity` (Round-15c Contract A). Unchanged.
+- Lock/turn primitives: `turn.ts init/flip/park/lock/unlock/recover`.
+  Unchanged.
+- Archive layer: `archive.ts`, `condense.ts`, `search.ts`, `fts.ts`,
+  `llm.ts`, `subagent.ts`, `expansion-policy.ts`. Unchanged.
+- Multi-user: `agents.users.yaml`, `record-turn`, speaker resolution.
+  Unchanged.
+- Safety: `safety.ts`. Unchanged.
+- Round-15d-α primitives: scratchpad, sub-relay activation, topology
+  diameter, agent-managed archive directives. Carry through
+  unchanged.
+
+### Net codebase delta
+
+~2900 LoC deleted across 7 files (sidecar.ts, monitor.ts,
+sidecar-client.ts, liveness.ts, plus 6 test files + 2 retired
+describe-blocks in speaker.test.ts). Plus ~150 LoC of refactor
+in agent-chat.ts + turn.ts.
+
+Test state after deletion: 334 pass / 0 fail / 2 skip (1058 expects
+across 19 files). Down from the pre-deletion 414 pass — the delta
+matches the deleted test files. **Zero regressions in retained
+tests.**
+
+### What's queued for the doc rewrite (next round)
+
+- README.md sections referencing sidecar / monitor / heartbeat /
+  --no-sidecar / --no-monitor are outdated. Banner at top of README
+  notes this; full rewrite is Round-15e.
+- bootstrap.md operational checklist references the deleted
+  infrastructure; full rewrite is Round-15e.
+- SKILL.md mentions sidecar UDS methods that no longer exist; full
+  rewrite is Round-15e.
+
+### Open follow-ups (Round-15e+)
+
+- Doc rewrite (README + bootstrap + SKILL).
+- Wire agent-authored archive directives into `archive.ts auto`
+  via `--seal-count N --agent-summary` flags (Round-15d-α captures
+  the directive but defers execution).
+- `scripts/scratch-condense.ts` for scratchpad DAG archival when
+  approaching the 8KB cap.
+- Tick extension via `--until-signal` + `</tick>` stdout marker.
+- `--interactive` 1-3s cadence mode for real-time deliberation.
+- Stuck-recovery in loop-driver via auto-redispatch on stuck-tick
+  detection.
+- Lyra-L3 hermeticity bug at `tests/lib.test.ts:301` (resolveIdentity
+  ignoreSessionRecord opt-in).
+- `docs/anti-pattern-audit.md` precondition checklist (six-rounds-deep
+  receipt from Round-15a).

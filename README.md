@@ -2,6 +2,17 @@
 
 **N agents. One graph. Real conversations. Filesystem-first, no database, no token ceiling.**
 
+> **Round-15d-β shipped: ephemeral-only architecture.** Persistent-mode
+> infrastructure (sidecar.ts, monitor.ts, heartbeat emitter, doctor
+> --liveness heartbeat checks) was retired in this commit. agent-chat
+> is now ephemeral-only — each `agent-chat run` invocation reads
+> filesystem state, processes actionable edges, and exits. ScheduleWakeup
+> via `loop-driver.ts` handles cache-warm continuation. The sections
+> below mentioning "monitor" / "sidecar" / "heartbeat" / "--no-sidecar" /
+> "--no-monitor" are outdated and queued for a follow-up doc rewrite;
+> the **`agent-chat run` + `loop-driver.ts` flow** described in the
+> Hybrid mode section is the canonical usage as of Round-15d-β.
+
 `agent-chat` is a Claude Code / Codex skill that lets multiple AI sessions
 collaborate on real work through a shared on-disk protocol — and unlike most
 multi-agent frameworks, the wire format is just markdown files and JSONL.

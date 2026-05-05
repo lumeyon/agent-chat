@@ -264,74 +264,12 @@ describe("speaker CLI — slice 2 concurrent writes", () => {
   });
 });
 
-describe("speaker — sidecar Bug-1-class regression", () => {
-  // PULSAR'S MANDATED TEST (named verbatim per slice-2 audit):
-  //   "whoami reflects current_speaker written AFTER sidecar spawn"
-  //
-  // Mirrors the round-3 fix for monitor_pid: sidecar caches at boot, then
-  // we update the file post-boot, then we expect the next dispatch to read
-  // the new value. Before the fix this would return null (stale cache);
-  // after the fix it returns the post-spawn value.
-
-  let child: ChildProcessWithoutNullStreams | null = null;
-  const cleanup = async () => {
-    if (!child) return;
-    try { child.kill("SIGTERM"); } catch {}
-    await new Promise<void>((res) => child!.on("exit", () => res()));
-    child = null;
-  };
-  afterEach(async () => { await cleanup(); });
-
-  test("whoami reflects current_speaker written AFTER sidecar spawn", async () => {
-    child = spawnScript("sidecar.ts", [], ORION_ENV) as ChildProcessWithoutNullStreams;
-    const socketPath = path.join(CONVO_DIR, ".sockets", "orion.sock");
-    await waitForSocket(socketPath);
-
-    // Pre-flight: at sidecar boot there's no speaker file. whoami should
-    // report current_speaker: null and NOT throw / NOT cache the null.
-    const r0 = await rawRequest(socketPath, { id: 1, method: "whoami" });
-    expect(r0.ok).toBe(true);
-    expect(r0.result.current_speaker).toBeNull();
-
-    // Now write the speaker file AFTER sidecar boot — this is the exact
-    // shape of the round-3 monitor_pid bug, applied to current_speaker.
-    runScript("agent-chat.ts", ["speaker", "carina"], ORION_ENV);
-    expect(fs.existsSync(speakerFile(SESSION_KEY))).toBe(true);
-
-    // The dispatch MUST re-read the file each call. Without the fix this
-    // returned the cached null.
-    const r1 = await rawRequest(socketPath, { id: 2, method: "whoami" });
-    expect(r1.ok).toBe(true);
-    expect(r1.result.current_speaker).not.toBeNull();
-    expect(r1.result.current_speaker.name).toBe("carina");
-
-    // Switch the speaker. Dispatch must reflect the new value.
-    runScript("agent-chat.ts", ["speaker", "lumeyon"], ORION_ENV);
-    const r2 = await rawRequest(socketPath, { id: 3, method: "whoami" });
-    expect(r2.ok).toBe(true);
-    expect(r2.result.current_speaker.name).toBe("lumeyon");
-
-    // Clear the speaker. Dispatch must reflect null again.
-    runScript("agent-chat.ts", ["speaker", "--clear"], ORION_ENV);
-    const r3 = await rawRequest(socketPath, { id: 4, method: "whoami" });
-    expect(r3.ok).toBe(true);
-    expect(r3.result.current_speaker).toBeNull();
-  }, 8000);
-
-  test("dedicated speaker UDS method returns the same view as whoami.current_speaker", async () => {
-    child = spawnScript("sidecar.ts", [], ORION_ENV) as ChildProcessWithoutNullStreams;
-    const socketPath = path.join(CONVO_DIR, ".sockets", "orion.sock");
-    await waitForSocket(socketPath);
-
-    runScript("agent-chat.ts", ["speaker", "carina"], ORION_ENV);
-
-    const wResp = await rawRequest(socketPath, { id: 1, method: "whoami" });
-    const sResp = await rawRequest(socketPath, { id: 2, method: "speaker" });
-    expect(wResp.ok).toBe(true);
-    expect(sResp.ok).toBe(true);
-    expect(sResp.result.current_speaker).toEqual(wResp.result.current_speaker);
-  }, 8000);
-});
+// Round-15d-β: "speaker — sidecar Bug-1-class regression" describe block
+// removed entirely. The sidecar no longer exists; the cache-invalidation
+// invariant it tested (file written after sidecar boot must be visible
+// on next dispatch) doesn't apply to file-direct reads. The original
+// pulsar slice-2 audit test was load-bearing while the sidecar shipped;
+// retired with the deletion of sidecar.ts in this commit.
 
 describe("speaker — gc orphan reclamation", () => {
   test("orphan current_speaker.json (no matching session record) is reclaimed by gc", () => {
@@ -522,29 +460,8 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
     expect(newSpeaker.name).toBe("boss");
   });
 
-  test("7. sidecar Bug-1 regression — whoami reflects auto-resolved speaker after init", async () => {
-    // Pulsar's standard regression-test discipline: pin that the sidecar's
-    // whoami.current_speaker reflects the auto-resolved value AFTER init's
-    // wx write completes. The Bug-1-class concern is that sidecar might
-    // cache current_speaker.json at boot; mandate read-on-every-dispatch.
-    const env = envWith({ AGENT_CHAT_USER: "boss", USER: "" });
-    // This time we DO let init spawn the sidecar (not --no-sidecar).
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-monitor"], env);
-    expect(r.exitCode).toBe(0);
-    expect(r.stderr).toMatch(/speaker auto-resolved to boss/);
-
-    // Verify auto-write landed.
-    expect(fs.existsSync(speakerFile(SESSION_KEY))).toBe(true);
-
-    // Wait briefly for sidecar UDS to come up, then query whoami.
-    const socketPath = path.join(CONVO_DIR, ".sockets", "carina.sock");
-    await waitForSocket(socketPath);
-    const resp = await rawRequest(socketPath, { id: 1, method: "whoami" });
-    expect(resp.ok).toBe(true);
-    expect(resp.result.current_speaker).not.toBeNull();
-    expect(resp.result.current_speaker.name).toBe("boss");
-
-    // Cleanup: graceful shutdown of the spawned sidecar via UDS.
-    try { await rawRequest(socketPath, { id: 99, method: "shutdown" }); } catch {}
-  }, 8000);
+  // Round-15d-β: Test #7 ("sidecar Bug-1 regression — whoami reflects
+  // auto-resolved speaker after init") removed. The sidecar no longer
+  // exists; the cache-invalidation invariant it pinned doesn't apply
+  // under ephemeral file-direct reads.
 });

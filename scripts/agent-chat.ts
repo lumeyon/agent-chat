@@ -36,8 +36,15 @@ import {
   computeDiameter, readScratch, writeScratch, scratchPath, SCRATCH_DIR,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
-import { sidecarRequest } from "./sidecar-client.ts";
-import { HEARTBEATS_DIR, heartbeatPath } from "./liveness.ts";
+// Round-15d-β: sidecar-client + liveness/heartbeat imports removed.
+// Persistent-mode infrastructure deleted in this commit.
+// Round-15d-β: liveness.ts deleted. Legacy heartbeat-file cleanup is
+// inlined where needed (see cmdGc). New ephemeral sessions don't
+// emit heartbeats, so this is just legacy artifact reclamation.
+function heartbeatPath(agent: string): string {
+  const safe = agent.replace(/[^A-Za-z0-9_-]/g, "_");
+  return path.join(CONVERSATIONS_DIR, ".heartbeats", `${safe}.heartbeat`);
+}
 
 function die(msg: string, code = 2): never { console.error(msg); process.exit(code); }
 
@@ -100,115 +107,18 @@ function pickTopologyDefault(): string | null {
   return null;
 }
 
-function startMonitor(rec: SessionRecord): { pid: number; starttime: number | null } | undefined {
-  // Background-launch the per-session monitor. It inherits the session-file
-  // identity via $CLAUDE_SESSION_ID/PPID, so no env override needed. Stdout
-  // redirected to a per-agent log so notifications don't disappear.
-  // LOGS_DIR roots on CONVERSATIONS_DIR so AGENT_CHAT_CONVERSATIONS_DIR
-  // overrides redirect log writes (carina/cadence P1 — pre-fix this used
-  // path.join(SKILL_ROOT, "conversations", ".logs") and silently wrote into
-  // the source tree even when the env-var-aware harness expected hermeticity).
-  fs.mkdirSync(LOGS_DIR, { recursive: true });
-  const logPath = logPathFor(rec.agent, "monitor");
-  try {
-    const out = fs.openSync(logPath, "a");
-    // bun executable comes from the same runtime that's running this script.
-    const runtime = process.execPath;
-    // Pass the session key explicitly so the monitor's `resolveIdentity`
-    // call hits the same record even when run as a child with a different
-    // PPID. We use $CLAUDE_SESSION_ID to carry it.
-    const env = {
-      ...process.env,
-      CLAUDE_SESSION_ID: rec.claude_session_id ?? rec.session_key,
-    };
-    const child = child_process.spawn(runtime, [path.join(SKILL_ROOT, "scripts", "monitor.ts")], {
-      detached: true,
-      stdio: ["ignore", out, out],
-      env,
-      cwd: SKILL_ROOT,
-    });
-    child.unref();
-    fs.closeSync(out);
-    if (!child.pid) return undefined;
-    // Capture the kernel start_time of the spawned monitor so a later `exit`
-    // / `gc` can confirm the recorded pid still belongs to OUR monitor and
-    // hasn't been recycled to an unrelated process. Done synchronously here
-    // so the call is in the parent's window before any pid-recycle could
-    // happen.
-    const starttime = pidStarttime(child.pid);
-    return { pid: child.pid, starttime };
-  } catch (err) {
-    console.error(`[agent-chat] could not auto-launch monitor: ${(err as Error).message}`);
-    return undefined;
-  }
-}
-
-function stopMonitor(pid: number | undefined, starttime: number | null | undefined): void {
-  // processIsOriginal returns false when the pid was recycled to a different
-  // process. Without this check, `exit` could SIGTERM an unrelated process
-  // that happens to have the recycled pid (cadence Q2).
-  if (!pid || !processIsOriginal(pid, starttime)) return;
-  try { process.kill(pid, "SIGTERM"); } catch {}
-}
-
-// Background-launch the per-agent sidecar daemon. Mirrors startMonitor but
-// spawns scripts/sidecar.ts. The sidecar opens a UDS for fast-path queries
-// and (in slice 3+) runs the inotify-driven watcher. Co-exists with monitor.ts
-// — both can run simultaneously without deadlock or double-emit (the monitor
-// owns chat-notification stdout; the sidecar owns IPC + log).
-function startSidecar(rec: SessionRecord): { pid: number; starttime: number | null } | undefined {
-  fs.mkdirSync(LOGS_DIR, { recursive: true });
-  fs.mkdirSync(SOCKETS_DIR, { recursive: true });
-  const logPath = logPathFor(rec.agent, "sidecar");
-  try {
-    const out = fs.openSync(logPath, "a");
-    const runtime = process.execPath;
-    const env = {
-      ...process.env,
-      CLAUDE_SESSION_ID: rec.claude_session_id ?? rec.session_key,
-    };
-    const child = child_process.spawn(runtime, [path.join(SKILL_ROOT, "scripts", "sidecar.ts")], {
-      detached: true,
-      stdio: ["ignore", out, out],
-      env,
-      cwd: SKILL_ROOT,
-    });
-    child.unref();
-    fs.closeSync(out);
-    if (!child.pid) return undefined;
-    const starttime = pidStarttime(child.pid);
-    return { pid: child.pid, starttime };
-  } catch (err) {
-    console.error(`[agent-chat] could not auto-launch sidecar: ${(err as Error).message}`);
-    return undefined;
-  }
-}
-
-// Graceful sidecar shutdown via UDS, falling back to SIGTERM. The sidecar's
-// `shutdown` method replies first, then exits — but if the UDS is wedged
-// we still want to land a signal so the daemon doesn't outlive its session.
-async function stopSidecar(rec: SessionRecord): Promise<void> {
-  const pid = rec.sidecar_pid;
-  const starttime = rec.sidecar_pid_starttime;
-  if (!pid || !processIsOriginal(pid, starttime)) return;
-  // Try graceful shutdown first.
-  try {
-    const r = await Promise.race([
-      sidecarRequest(rec.agent, "shutdown", {}, { timeoutMs: 500 }),
-      new Promise<{ ok: false; error: { code: string; message: string } }>((res) =>
-        setTimeout(() => res({ ok: false, error: { code: "E_TIMEOUT", message: "graceful timeout" } }), 500),
-      ),
-    ]);
-    if (r.ok) {
-      // Give the sidecar a moment to actually exit after responding.
-      await new Promise((res) => setTimeout(res, 150));
-    }
-  } catch {}
-  // Final SIGTERM if it's still alive.
-  if (processIsOriginal(pid, starttime)) {
-    try { process.kill(pid, "SIGTERM"); } catch {}
-  }
-}
+// Round-15d-β: startMonitor / stopMonitor / startSidecar / stopSidecar
+// removed. agent-chat is now ephemeral-only — no long-running daemons.
+// Each `agent-chat run` invocation is a single tick that reads filesystem
+// state, processes its actionable edges, and exits. Persistent-mode
+// monitor + sidecar lifecycle previously launched here is gone.
+//
+// Backward-compat note on legacy SessionRecord fields: the
+// `monitor_pid` / `monitor_pid_starttime` / `sidecar_pid` /
+// `sidecar_pid_starttime` fields remain in the SessionRecord type so
+// older session files continue to read cleanly, but nothing reads or
+// writes them as of Round-15d-β. They're effectively documentation of
+// historical layout. cmdGc's stale-session sweep simply ignores them.
 
 // ----- subcommands ---------------------------------------------------------
 
@@ -328,22 +238,17 @@ function cmdInit(args: string[]): void {
     tty,
   };
 
-  // Auto-launch sidecar BEFORE monitor so the sidecar's UDS is up by the time
-  // anything else queries it. Default-on; --no-sidecar opts out.
-  if (!noSidecar) {
-    const s = startSidecar(rec);
-    if (s) {
-      rec.sidecar_pid = s.pid;
-      rec.sidecar_pid_starttime = s.starttime ?? undefined;
-    }
-  }
-  // Auto-launch monitor unless --no-monitor.
-  if (!noMonitor) {
-    const m = startMonitor(rec);
-    if (m) {
-      rec.monitor_pid = m.pid;
-      rec.monitor_pid_starttime = m.starttime ?? undefined;
-    }
+  // Round-15d-β: sidecar + monitor lifecycle removed. agent-chat is now
+  // ephemeral-only — no long-running daemons. Each agent dispatch is a
+  // single `agent-chat run` tick that reads filesystem state, processes
+  // its actionable edges, and exits. ScheduleWakeup (via loop-driver.ts)
+  // handles cache-warm continuation. The flags `--no-sidecar` and
+  // `--no-monitor` are accepted for backward-compat but no longer have
+  // an effect (deprecation deferred to the next breaking-changes round).
+  if (!noSidecar || !noMonitor) {
+    // explicitly suppress the unused-var lint without changing the CLI
+    // surface. Deprecation accept: the flags exist so existing scripts
+    // / docs / muscle memory don't break, but they're parsed-and-ignored.
   }
 
   // Write session + presence records. The session file is keyed by
@@ -453,34 +358,22 @@ function cmdInit(args: string[]): void {
   console.log(`  session_key: ${sessionKey}`);
   console.log(`  pid:         ${rec.pid}`);
   console.log(`  cwd:         ${cwd}`);
-  if (rec.monitor_pid) {
-    console.log(`  monitor:     pid ${rec.monitor_pid} (background; writes to ${logPathFor(name, "monitor")})`);
-  } else {
-    console.log(`  monitor:     not launched (--no-monitor)`);
-  }
-  if (rec.sidecar_pid) {
-    console.log(`  sidecar:     pid ${rec.sidecar_pid} (background; UDS ${socketPathFor(name)}, log ${logPathFor(name, "sidecar")})`);
-  } else if (noSidecar) {
-    console.log(`  sidecar:     not launched (--no-sidecar)`);
-  } else {
-    console.log(`  sidecar:     not launched (spawn failed)`);
-  }
+  console.log(`  runtime:     ephemeral (Round-15d-β; no sidecar/monitor daemon)`);
   // Print neighbors so the user immediately sees who they can talk to.
   const edges = edgesOf(topo, name);
   console.log(`  neighbors (${edges.length}): ${edges.map((e) => e.peer).join(", ")}`);
-  // CRITICAL: notification delivery. The background monitor writes to a
-  // file; that file is invisible to Claude Code's chat unless something
-  // tails it via the Monitor tool. Print explicit instructions so the
-  // agent knows the next step.
+  // Round-15d-β: ephemeral-only notification model. To process pending
+  // turns: `agent-chat run` (single tick + exit) or `loop-driver.ts`
+  // (cache-warm self-rescheduling via ScheduleWakeup).
   if (process.env.CLAUDECODE === "1") {
-    const monitorScript = path.join(SKILL_ROOT, "scripts", "monitor.ts");
+    const loopScript = path.join(SKILL_ROOT, "scripts", "loop-driver.ts");
     console.log("");
-    console.log("NEXT STEP — deliver notifications to chat:");
-    console.log("  Invoke Claude Code's Monitor tool with persistent: true on:");
-    console.log(`    bun ${monitorScript}`);
-    console.log("  Each turn-flip / park / CONVO.md change becomes a chat notification.");
-    console.log("  Without this step, monitor events go ONLY to the log file and");
-    console.log("  you (the agent) will not be told when peers respond.");
+    console.log("NEXT STEP — process pending work:");
+    console.log("  Single tick (process actionable edges, exit):");
+    console.log(`    bun ${path.join(SKILL_ROOT, "scripts", "agent-chat.ts")} run`);
+    console.log("  Cache-warm self-rescheduling loop (270s ticks):");
+    console.log(`    bun ${loopScript}`);
+    console.log("  Both modes read .turn files directly — no background daemons needed.");
   }
 }
 
@@ -549,21 +442,10 @@ async function cmdExit(args: string[]): Promise<void> {
     const n = autoArchiveSessionEdges(rec, threshold);
     if (n > 0) console.log(`✓ auto-archived ${n} parked edge(s) before exit`);
   }
-  // Stop sidecar BEFORE monitor so the sidecar's graceful shutdown can land
-  // before anything else changes state. The sidecar self-cleans its socket +
-  // pidfile on graceful exit; if it didn't (kill -9 mid-shutdown), gc reclaims.
-  await stopSidecar(rec);
-  stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
-  // Also drop any current_speaker.json — it's session-scoped live state, not
-  // durable identity. cadence slice-2 round flagged this lifecycle: clean
-  // exit means no consumer should see a stale speaker. safeUnlink (not
-  // unlinkSync) tolerates a peer race per cadence's F4-class concern.
+  // Round-15d-β: ephemeral-only — no sidecar / monitor to stop. Drop the
+  // session-scoped current_speaker.json so consumers don't see a stale
+  // speaker after exit (cadence slice-2 lifecycle invariant).
   safeUnlink(currentSpeakerPath(key));
-  // Round-13 slice 1: drop the sidecar's heartbeat sentinel. The sidecar's
-  // own SIGTERM handler should already have unlinked, but this is
-  // defense-in-depth against killed-9 sidecars whose handler never ran.
-  // safeUnlink tolerates the already-gone case.
-  safeUnlink(heartbeatPath(rec.agent));
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
 }
@@ -579,13 +461,7 @@ function cmdWho(_args: string[]): void {
   if (live.length) {
     console.log(`live (${live.length}):`);
     for (const r of live.sort((a, b) => a.agent.localeCompare(b.agent))) {
-      const monStatus = r.monitor_pid
-        ? (processIsOriginal(r.monitor_pid, r.monitor_pid_starttime) ? `mon=${r.monitor_pid}` : `mon=GONE`)
-        : "mon=-";
-      const sideStatus = r.sidecar_pid
-        ? (processIsOriginal(r.sidecar_pid, r.sidecar_pid_starttime) ? `side=${r.sidecar_pid}` : `side=GONE`)
-        : "side=-";
-      console.log(`  ${r.agent.padEnd(10)} @ ${r.host}:${r.pid}  topo=${r.topology}  ${monStatus}  ${sideStatus}  started=${r.started_at}`);
+      console.log(`  ${r.agent.padEnd(10)} @ ${r.host}:${r.pid}  topo=${r.topology}  started=${r.started_at}`);
     }
   }
   if (stale.length) {
@@ -630,32 +506,18 @@ async function cmdGc(args: string[]): Promise<void> {
     // filesystem — we have no authority to GC them. See cadence F8 (P0 #2).
     if (rec.host !== myHost) continue;
     if (!processIsOriginal(rec.pid, rec.pid_starttime)) {
-      const monStillThere = rec.monitor_pid && processIsOriginal(rec.monitor_pid, rec.monitor_pid_starttime);
-      stopMonitor(rec.monitor_pid, rec.monitor_pid_starttime);
-      // Same defense for the sidecar: kill if still original, then unlink
-      // its socket + pidfile so a future init doesn't see a stale lockout.
-      const sideStillThere = rec.sidecar_pid && processIsOriginal(rec.sidecar_pid, rec.sidecar_pid_starttime);
-      if (sideStillThere) {
-        try { process.kill(rec.sidecar_pid!, "SIGTERM"); } catch {}
-      }
+      // Round-15d-β: ephemeral-only — no sidecar/monitor processes to stop.
+      // Stale per-session artifacts (current_speaker.json) get cleared
+      // alongside the session record; legacy heartbeat / socket / pidfile
+      // cleanups are best-effort no-ops for old-format sessions still on
+      // disk from pre-15d-β installs.
+      try { safeUnlink(currentSpeakerPath(rec.session_key)); } catch {}
+      // Defense-in-depth: legacy artifacts from pre-15d-β sessions.
       try { safeUnlink(socketPathFor(rec.agent)); } catch {}
       try { safeUnlink(pidFilePath(rec.agent, "sidecar")); } catch {}
-      // Slice-2 (multi-user): drop the stale current_speaker.json next to
-      // the session record. Folded into the session-pass per cadence's
-      // recommendation — keeps the "session is dead" decision colocated and
-      // inherits Major #1 (safeUnlink ENOENT-tolerant) and Major #2
-      // (multi-host skip via the foreign-host continue above) for free.
-      try { safeUnlink(currentSpeakerPath(rec.session_key)); } catch {}
-      // Round-13 slice 1: drop the stale heartbeat sentinel for the same
-      // reasons. Heartbeat is per-agent (not per-session_key), so this
-      // unlink is keyed on rec.agent. Defense-in-depth against killed-9
-      // sidecars whose own SIGTERM unlink never ran.
       try { safeUnlink(heartbeatPath(rec.agent)); } catch {}
       deleteSessionRecord(rec);
-      const sideAnnotation = rec.sidecar_pid
-        ? `; sidecar pid ${rec.sidecar_pid} ${sideStillThere ? "killed" : "already gone"}`
-        : "";
-      console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} gone${rec.monitor_pid ? `; monitor pid ${rec.monitor_pid} ${monStillThere ? "killed" : "already gone"}` : ""}${sideAnnotation})`);
+      console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} gone)`);
       removed++;
     }
   }
@@ -817,48 +679,27 @@ async function cmdGc(args: string[]): Promise<void> {
   // the explicit cross-session opt-in (orion's Phase-1.5 answer).
   const aggressive = args.includes("--aggressive");
   if (aggressive) {
-    // Reap stale heartbeats: agent has no live session record on this host.
-    if (fs.existsSync(HEARTBEATS_DIR)) {
-      const liveAgents = new Set(
-        listSessions()
-          .filter((r) => r.host === myHost && processIsOriginal(r.pid, r.pid_starttime))
-          .map((r) => r.agent),
-      );
-      for (const f of fs.readdirSync(HEARTBEATS_DIR)) {
+    // Round-15d-β: heartbeat / socket reapers are now legacy cleanup paths
+    // for pre-15d-β installs. The current ephemeral architecture writes
+    // neither heartbeats nor sockets, but old-format artifacts may still
+    // be on disk and this sweep clears them.
+    const heartbeatsDir = path.join(CONVERSATIONS_DIR, ".heartbeats");
+    if (fs.existsSync(heartbeatsDir)) {
+      for (const f of fs.readdirSync(heartbeatsDir)) {
         if (!f.endsWith(".heartbeat")) continue;
-        const agent = f.replace(/\.heartbeat$/, "");
-        if (liveAgents.has(agent)) continue;
-        // Defensive: also classify the heartbeat itself — if its recorded
-        // host differs from mine, leave it alone (foreign-host owner).
-        const hbPath = path.join(HEARTBEATS_DIR, f);
-        try {
-          const text = fs.readFileSync(hbPath, "utf8");
-          const m = text.match(/host=(\S+)/);
-          if (m && m[1] !== myHost) continue;
-        } catch { /* unparseable: treat as ours, reap */ }
-        if (safeUnlink(hbPath)) {
-          console.log(`gc: removed stale heartbeat for ${agent} (no live session)`);
+        const sp = path.join(heartbeatsDir, f);
+        if (safeUnlink(sp)) {
+          console.log(`gc: removed legacy heartbeat ${f} (Round-15d-β no longer writes these)`);
           removed++;
         }
       }
     }
-    // Reap orphan sockets that have no matching session record on this host.
-    // (The sidecar-pidfile pass above catches the dead-pidfile case; this
-    // pass catches the rarer "socket present, no pidfile" tail.)
     if (fs.existsSync(SOCKETS_DIR)) {
-      const liveAgents = new Set(
-        listSessions()
-          .filter((r) => r.host === myHost && processIsOriginal(r.pid, r.pid_starttime))
-          .map((r) => r.agent),
-      );
       for (const f of fs.readdirSync(SOCKETS_DIR)) {
-        const m = f.match(/^([A-Za-z0-9_-]+)\.sock$/);
-        if (!m) continue;
-        const agent = m[1];
-        if (liveAgents.has(agent)) continue;
+        if (!f.endsWith(".sock")) continue;
         const sp = path.join(SOCKETS_DIR, f);
         if (safeUnlink(sp)) {
-          console.log(`gc: removed orphan socket for ${agent}`);
+          console.log(`gc: removed legacy socket ${f} (Round-15d-β no longer creates these)`);
           removed++;
         }
       }
@@ -903,140 +744,51 @@ async function cmdGc(args: string[]): Promise<void> {
   if (!removed) console.log("gc: nothing to remove.");
 }
 
-// Round 13 slice 3 (keystone): offline liveness check. Reads the heartbeat
-// files and cross-references with session records, classifies each agent's
-// state, and emits a grep-friendly diagnostic. Used by humans + by CI/cron
-// to debug "why is the live monitor not firing?" — the same diagnostic
-// shape carina's online monitor emits, but without requiring the monitor to
-// be the source.
+// Round-15d-β: cmdDoctor preserved as a CLI surface for backward-compat
+// but the heartbeat-driven liveness check is gone (heartbeats no longer
+// emitted under ephemeral-only). The doctor command now reports session
+// records on this host; future rounds may extend with ephemeral-aware
+// stuck-tick detection (e.g. probing scratchpad mtime + .turn age).
 async function cmdDoctor(args: string[]): Promise<void> {
   const sub = args[0];
   if (sub !== "--liveness") {
     die("usage: agent-chat.ts doctor --liveness [--json]");
   }
   const wantJson = args.includes("--json");
-  const { listHeartbeatRecords, HEARTBEAT_STALE_MS, HEARTBEAT_DEAD_MS } = await import("./liveness.ts");
-  const records = listHeartbeatRecords();
-  // Host-bounded sweep: foreign-host sessions (on shared filesystem) are
-  // intentionally excluded — heartbeats and presence files are per-host
-  // state, and a different machine's records can't be liveness-checked
-  // from this one. Matches the gc / cmdGc invariant.
   const sessions = listSessions().filter((r) => r.host === os.hostname());
-  // Cross-reference: every session should have a heartbeat; every heartbeat
-  // should have a matching session.
-  const sessionAgents = new Set(sessions.filter((r) => processIsOriginal(r.pid, r.pid_starttime)).map((r) => r.agent));
-  const heartbeatAgents = new Set(records.map((r) => r.agent));
-  const orphanHeartbeats = records.filter((r) => !sessionAgents.has(r.agent));
-  const missingHeartbeats: string[] = [];
-  for (const r of sessions) {
-    if (!processIsOriginal(r.pid, r.pid_starttime)) continue;
-    if (!heartbeatAgents.has(r.agent)) missingHeartbeats.push(r.agent);
-  }
-
-  // Diagnostic emission. Two flavors of diagnostic — different intent,
-  // different grep prefix:
-  //
-  //  1. `stuck-offline=<StuckReason>` — uses carina's shared StuckReason
-  //     vocabulary (peer-sidecar-dead, local-sidecar-dead,
-  //     agent-stuck-on-own-turn) for the SAME conditions her online monitor
-  //     emits as `stuck=<reason>`. Round-13 cross-slice contract: same
-  //     vocabulary across both prefixes so log scrapers can grep either or
-  //     both. Round-13 doctor only computes peer-sidecar-dead from heartbeat
-  //     state — local-sidecar-dead and agent-stuck-on-own-turn need
-  //     edge-walk + turn-mtime checks that carina's slice-2 owns; doctor
-  //     surfaces them via the live monitor when it fires.
-  //  2. `liveness-issue=<kind>` — doctor-only diagnostics for shapes the
-  //     online monitor doesn't emit (orphan-heartbeat, missing-heartbeat,
-  //     unparseable). These are operational hygiene problems that don't
-  //     fit the StuckReason vocabulary; they'd be noise in the chat
-  //     notification stream but matter offline.
-  type DiagnosticLine = { agent: string; status: string; prefix: "stuck-offline" | "liveness-issue"; reason: string; raw: any };
-  const diags: DiagnosticLine[] = [];
-  for (const r of records) {
-    if (r.status === "fresh") continue;
-    if (r.status === "dead") {
-      diags.push({ agent: r.agent, status: r.status, prefix: "stuck-offline", reason: `peer-sidecar-dead ${r.reason}`, raw: r });
-    } else if (r.status === "stale") {
-      // stale heartbeats are sidecar-dead-imminent — surface under the same
-      // peer-sidecar-dead reason since the operational response is the same
-      // (carina's monitor will escalate from stale → dead at the threshold).
-      diags.push({ agent: r.agent, status: r.status, prefix: "stuck-offline", reason: `peer-sidecar-dead ${r.reason}`, raw: r });
-    } else if (r.status === "unparseable") {
-      diags.push({ agent: r.agent, status: r.status, prefix: "liveness-issue", reason: `unparseable-heartbeat ${r.reason}`, raw: r });
-    }
-  }
-  for (const r of orphanHeartbeats) {
-    if (sessionAgents.has(r.agent)) continue;
-    diags.push({
-      agent: r.agent,
-      status: "orphan",
-      prefix: "liveness-issue",
-      reason: "orphan-heartbeat (no matching session record on this host)",
-      raw: r,
-    });
-  }
-  for (const agent of missingHeartbeats) {
-    diags.push({
-      agent,
-      status: "missing-heartbeat",
-      prefix: "liveness-issue",
-      reason: "missing-heartbeat (live session without a heartbeat file)",
-      raw: { agent },
-    });
-  }
-
+  const live = sessions.filter((r) => processIsOriginal(r.pid, r.pid_starttime));
+  const stale = sessions.filter((r) => !processIsOriginal(r.pid, r.pid_starttime));
   if (wantJson) {
     console.log(JSON.stringify({
-      heartbeats: records,
       sessions: sessions.map((r) => ({
         agent: r.agent, pid: r.pid,
         live: processIsOriginal(r.pid, r.pid_starttime),
       })),
-      diagnostics: diags,
-      thresholds: { stale_ms: HEARTBEAT_STALE_MS, dead_ms: HEARTBEAT_DEAD_MS },
+      live_count: live.length,
+      stale_count: stale.length,
+      runtime: "ephemeral-only (Round-15d-β; no sidecar heartbeats)",
     }, null, 2));
   } else {
-    if (records.length === 0) {
-      console.log("doctor --liveness: no heartbeat files on this host");
-    } else {
-      console.log(`doctor --liveness: ${records.length} heartbeat(s), ${sessions.length} session(s)`);
-      for (const r of records) {
-        const age = r.ageMs == null ? "?" : `${Math.round(r.ageMs / 1000)}s`;
-        console.log(`  ${r.agent.padEnd(12)} status=${r.status.padEnd(12)} age=${age.padStart(6)}  ${r.reason ?? ""}`);
-      }
-      if (diags.length) {
-        console.log("");
-        const ts = new Date().toISOString();
-        for (const d of diags) {
-          console.log(`${ts} ${d.prefix}=${d.reason} agent=${d.agent} status=${d.status}`);
-        }
-      } else {
-        console.log("");
-        console.log("all agents fresh; no stuck-offline diagnostics");
-      }
+    console.log(`doctor --liveness (Round-15d-β; ephemeral-only):`);
+    console.log(`  ${live.length} live session(s), ${stale.length} stale`);
+    for (const r of live) {
+      console.log(`  ${r.agent.padEnd(12)} status=live         pid=${r.pid}  started=${r.started_at}`);
+    }
+    for (const r of stale) {
+      console.log(`  ${r.agent.padEnd(12)} status=stale        pid=${r.pid} (gone) — run \`agent-chat gc\``);
     }
   }
-  // Exit code 0 only if all heartbeats are fresh AND no orphans/missing.
-  process.exit(diags.length === 0 ? 0 : 1);
+  process.exit(stale.length === 0 ? 0 : 1);
 }
 
 async function cmdWhoami(_args: string[]): Promise<void> {
   const key = currentSessionKey();
   const rec = readSessionRecord(key);
   if (rec) {
-    // Fast-path through sidecar when running (saves a session-file read on
-    // every invocation). Falls back to the file-direct line on any error.
-    // current_speaker comes from the sidecar's response when available
-    // (sidecar reads the file fresh each dispatch — Bug 1 generalization),
-    // or file-direct via readCurrentSpeaker on the fallback path.
-    const r = await sidecarRequest<any>(rec.agent, "whoami", {}, { timeoutMs: 200 });
-    if (r.ok) {
-      const speaker = r.result.current_speaker?.name ?? readCurrentSpeaker(key)?.name ?? "-";
-      console.log(`${r.result.agent}@${r.result.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${r.result.sidecar_pid}  speaker=${speaker}  uptime=${r.result.uptime_ms}ms`);
-      return;
-    }
+    // Round-15d-β: ephemeral-only — no sidecar UDS to fast-path through.
+    // Read directly from the SessionRecord + speaker file.
     const speaker = readCurrentSpeaker(key)?.name ?? "-";
-    console.log(`${rec.agent}@${rec.topology}  session_key=${key}  pid=${rec.pid}  monitor=${rec.monitor_pid ?? "-"}  sidecar=${rec.sidecar_pid ?? "-"}  speaker=${speaker}`);
+    console.log(`${rec.agent}@${rec.topology}  session_key=${key}  pid=${rec.pid}  speaker=${speaker}`);
     return;
   }
   // Fall through to env / .agent-name resolution to give a useful answer.
@@ -1136,19 +888,11 @@ function recordedTurnsLedger(edgeDir: string): string {
   return path.join(edgeDir, "recorded_turns.jsonl");
 }
 
-// Read current_speaker via sidecar fast-path (carina's `speaker` UDS method)
-// with file-direct fallback (carina's lib-exported `readCurrentSpeaker`).
-// Returns the speaker name or null. Renamed from the obvious `readSpeaker`
-// to avoid shadowing the lib-exported sync helper of the same name.
-async function fetchSpeaker(agent: string, key: string): Promise<string | null> {
-  // Sidecar `speaker` UDS method returns `{ current_speaker: {name, set_at} | null }`
-  // — the field is nested under `current_speaker`. Pre-fix, this read
-  // `r.result.name` (always undefined) and silently fell through to the
-  // file-direct path on every call, defeating the dedicated UDS optimization
-  // that motivated shipping the method in slice 2. Caught at Phase-4
-  // cross-review by carina (multi-user rollout).
-  const r = await sidecarRequest<any>(agent, "speaker", {}, { timeoutMs: 200 });
-  if (r.ok && r.result?.current_speaker?.name) return r.result.current_speaker.name as string;
+// Read current_speaker for a given session_key. Round-15d-β: ephemeral-
+// only — file-direct only (no sidecar UDS fast-path). The lib-exported
+// readCurrentSpeaker handles the read; this helper preserves the async
+// signature for backward-compat with cmdRecordTurn callers.
+async function fetchSpeaker(_agent: string, key: string): Promise<string | null> {
   return readCurrentSpeaker(key)?.name ?? null;
 }
 
@@ -1426,21 +1170,9 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   }
   const id = resolveIdentity();
   const topo = loadTopology(id.topology);
-  // Persistent-mode collision check: if a sidecar is live for this agent,
-  // ephemeral cmdRun would race against the sidecar's own work loop.
-  // Refuse loudly and point the user at the resolution path.
-  const sockPath = socketPathFor(id.name);
-  if (fs.existsSync(sockPath)) {
-    const r = await sidecarRequest<any>(id.name, "whoami", {}, { timeoutMs: 200 });
-    if (r.ok) {
-      die(
-        `refuse: sidecar already live for ${id.name} (UDS at ${sockPath}). ` +
-        `Ephemeral and persistent modes can't coexist on the same agent. ` +
-        `Run \`agent-chat exit\` first, or stay in persistent mode for the long-running flow.`,
-        66,
-      );
-    }
-  }
+  // Round-15d-β: ephemeral-only — no sidecar exists, so no collision check
+  // is needed. Stale .sockets/<agent>.sock files from pre-15d-β installs
+  // are tolerated; they're cleaned up by `agent-chat gc`.
   const all = edgesOf(topo, id.name);
   const targetEdges = opts.peers.length > 0 ? all.filter((e) => opts.peers.includes(e.peer)) : all;
   if (targetEdges.length === 0) {
@@ -1696,24 +1428,10 @@ ${archiveDirective.summary}
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
     }
   }
-  // Post-flight liveness hint per orion's open-Q1 refinement: if any peer
-  // has a stale heartbeat, log a one-line hint about --persistent mode.
-  // Liveness check is opt-in (silent if no heartbeats present).
-  try {
-    const { listHeartbeatRecords } = await import("./liveness.ts");
-    const records = listHeartbeatRecords();
-    const peerNames = new Set(targetEdges.map((e) => e.peer));
-    for (const r of records) {
-      if (!peerNames.has(r.agent)) continue;
-      if (r.status === "stale" || r.status === "dead") {
-        const ageS = r.ageMs == null ? "?" : Math.round(r.ageMs / 1000);
-        console.error(
-          `[agent-chat run] hint: peer ${r.agent} hasn't beat in ${ageS}s (${r.status}). ` +
-          `Consider \`--persistent\` mode if you expect them to be live.`,
-        );
-      }
-    }
-  } catch { /* liveness module not available; skip hint */ }
+  // Round-15d-β: post-flight heartbeat liveness hint removed (heartbeats
+  // are no longer emitted under ephemeral-only). Stuck-tick detection
+  // moves to the loop-driver scratchpad/turn-mtime probe in a future
+  // round; for now, silent.
   // Round-15c (Contract A): clean up the synthetic ephemeral identity if
   // we pre-wrote one. Idempotent — safe even if the work loop crashed
   // mid-iteration (the cleanup just unlinks files that may or may not
