@@ -7,12 +7,25 @@ ephemeral-only: identity is file-backed, and work is processed by explicit
 
 ## Step 0 — find the install
 
-Before running commands, set `AGENT_CHAT_DIR` to the installed plugin root:
+Before running commands, set `AGENT_CHAT_DIR` to the installed plugin root.
+The probe walks the runtime-conventional install paths in order: Claude
+Code plugin cache → legacy `~/.claude/skills/` symlink → Codex marketplace
+clone. If `$CLAUDE_PLUGIN_ROOT` or `$CODEX_PLUGIN_ROOT` is already exported
+by the runtime, that wins.
 
 ```bash
-export AGENT_CHAT_DIR="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1)}"
+# 1. Honor any runtime-provided plugin root.
+export AGENT_CHAT_DIR="${CLAUDE_PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-}}"
+# 2. Claude Code plugin cache (most common after `/plugin install`).
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1)"
+# 3. Legacy direct-symlink path (`~/git/agent-chat → ~/.claude/skills/agent-chat`).
 [ -z "$AGENT_CHAT_DIR" ] && [ -d ~/.claude/skills/agent-chat ] && AGENT_CHAT_DIR=~/.claude/skills/agent-chat
-[ -z "$AGENT_CHAT_DIR" ] && echo "ERROR: agent-chat not installed" && return 1
+# 4. Codex marketplace clone (after `codex plugin marketplace add lumeyon/agent-chat`).
+#    Note: requires the manual `config.toml` enable step until Codex automates
+#    per-plugin enable — see docs/codex-install.md.
+[ -z "$AGENT_CHAT_DIR" ] && [ -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat ] \
+  && AGENT_CHAT_DIR=~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat
+[ -z "$AGENT_CHAT_DIR" ] && echo "ERROR: agent-chat not installed (see docs/codex-install.md for Codex)" && return 1
 ```
 
 ## Step 1 — claim identity
