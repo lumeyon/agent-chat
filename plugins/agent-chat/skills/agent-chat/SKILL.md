@@ -132,6 +132,56 @@ summary: ...</archive>
 The directives are stripped from `CONVO.md` after their effects are
 applied.
 
+What each directive does (Round 15h+k — see bootstrap.md for the full
+walkthrough):
+
+- **`<scratch>`** — replace this agent's autobiographical scratchpad at
+  `<conv>/.scratch/<agent>.md`. 8 KB cap; older content is archived via
+  `scratch-condense.ts`.
+- **`<archive>sections: N\nsummary: ...</archive>`** — seal the most
+  recent N sections of `CONVO.md` into a leaf archive with the agent-
+  authored summary (bypasses the deterministic synthesizer for archives
+  the agent explicitly authored).
+- **`<dispatch peer="X">prompt</dispatch>`** — sub-relay activation:
+  spawn a sub-tick AS X with this prompt. Only direct neighbors are
+  valid. Cycle refusal + depth ≤ topology diameter as correctness guards.
+- **`<dot peer="X" axis1="N" axis2="N" .../>`** — Dalio-inspired peer
+  rating. Default 4 axes (clarity / depth / reliability / speed, each
+  1-10) but configurable via `~/.claude/data/agent-chat/config.json`
+  `dot_axes` field (1-8 named axes). Stored at `<conv>/.dots/<peer>.jsonl`.
+  Self-grading refused. Aggregation is believability-weighted via
+  fixed-point iteration so high-believability voices count more
+  recursively.
+- **`<role>updated specialty</role>`** — agent self-updates their role
+  declaration. Stored at `<conv>/.roles/<agent>.md` (4 KB cap), overlay-
+  merged into `topology.roles` on every cmdRun tick so peers see the
+  change immediately. Empty body clears the override and reverts to the
+  YAML default in `agents.<topology>.yaml`.
+
+## Network roster + relay paths
+
+Every cmdRun tick prepends a roster of **every agent in the topology**
+(not just direct neighbors) to the agent's prompt: agent name + role
+first-line + dot composite + believability + routing hint. Direct
+neighbors get `<dispatch peer="X">`; non-neighbors get a "relay through
+Y" hint computed via `lib.relayPathTo` BFS. For petersen (diameter 2)
+every non-neighbor is reachable through exactly one intermediary.
+
+The mesh becomes self-aware: agents see who specializes in what (by
+role + dots) and how to reach them (by relay route).
+
+## Per-tick auto-archive
+
+`agent-chat run` calls `autoArchiveSessionEdges` at the END of every
+tick. Two gates:
+
+- **Parked-AND-bloated past 200 lines** — the original threshold.
+- **Active-AND-very-bloated past 800 lines** — defends edges that flip
+  back-and-forth and never park (e.g. boss-agent edges under
+  record-turn).
+
+Cheap, idempotent, no agent action required.
+
 ## Human Turns
 
 Humans are defined in `agents.users.yaml` and overlaid onto every topology.
