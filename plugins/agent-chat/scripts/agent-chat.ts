@@ -809,6 +809,25 @@ async function cmdWatch(args: string[]): Promise<void> {
   await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
 }
 
+async function cmdAutowatch(args: string[]): Promise<void> {
+  // Codex/Claude autonomous watcher. Unlike cmdWatch/notify.ts, this is not
+  // notification-only: it runs the existing single-tick cmdRun path whenever
+  // a watched edge flips to this agent.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/autowatch.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
+async function cmdAutowatchService(args: string[]): Promise<void> {
+  // Installs the plugin-owned watcher as a user systemd service. This is the
+  // durable Codex-plugin path for no-human-in-the-loop agent operation.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/install-autowatch-systemd.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
 async function cmdIntegrationTest(args: string[]): Promise<void> {
   // Round-15j-A: end-to-end pipeline smoke. Spawns a real claude -p
   // through cmdRun against a synthetic two-agent setup, asserts the
@@ -1901,6 +1920,8 @@ switch (cmd) {
   case "llm-smoke":    void cmdLlmSmoke(rest); break;
   case "integration-test": void cmdIntegrationTest(rest); break;
   case "watch":        void cmdWatch(rest); break;
+  case "autowatch":    void cmdAutowatch(rest); break;
+  case "autowatch-service": void cmdAutowatchService(rest); break;
   case "role":         cmdRole(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
@@ -1980,7 +2001,15 @@ switch (cmd) {
       `      unweighted means, composite, recent dots. Without: roster across\n` +
       `      all agents. Composite is believability-weighted: each grader's\n` +
       `      score weighed by their own believability (mean of received-dots\n` +
-      `      across axes / 10, neutral prior 0.5 for new agents).\n`,
+      `      across axes / 10, neutral prior 0.5 for new agents).\n\n` +
+      `  watch\n` +
+      `      Notification-only watcher. Emits stdout when peer edges flip to\n` +
+      `      this agent; useful in runtimes with a Monitor-style tool.\n\n` +
+      `  autowatch <agent> <topology> [--peer <peer>] [--runtime claude|codex]\n` +
+      `      Autonomous plugin watcher. Polls graph turn sentinels and invokes\n` +
+      `      'agent-chat run <peer...>' whenever .turn equals <agent>.\n\n` +
+      `  autowatch-service <agent> <topology> [--peer <peer>] [--runtime codex]\n` +
+      `      Install a restarting user systemd service that runs autowatch.\n`,
     );
     break;
   default:

@@ -97,11 +97,39 @@ Each line streams back through Monitor as a notification. The watcher also
 does a 5s reconcile-poll for FUSE/NFS gaps where `fs.watch` events can be
 silently dropped.
 
-**Codex side**: `agent-chat watch` is wired identically (`agent-chat.ts`
-delegates to `notify.ts`), but Codex's equivalent of Claude Code's Monitor
-tool has not been empirically probed yet. For now, Codex sessions either
-poll or run the watcher in a background terminal and `tail -f` the stdout
-stream.
+`agent-chat watch` is wired identically (`agent-chat.ts` delegates to
+`notify.ts`) for runtimes that can consume stdout notifications. It is
+observer-only: it never writes the graph and never invokes an LLM.
+
+## Step 1b — install autonomous Codex watcher
+
+For a 100% agentic team, use the Codex-side plugin watcher instead of a
+notification stream. It observes the same `.turn` files and invokes the
+existing `agent-chat run` path whenever the graph hands the floor to this
+agent.
+
+Run directly:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch <name> <topology> --runtime codex
+```
+
+Install as a restarting user service:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch-service <name> <topology> --runtime codex
+```
+
+The watcher checks `<conv>/.presence/<name>.json` before every tick. If
+an interactive session for the same agent is live, autowatch exits
+instead of writing as that agent. Stop the interactive session first, or
+pass `--allow-presence-conflict` only for an intentional takeover.
+
+Constrain to a peer while bringing up a mixed-runtime edge:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch-service lumeyon petersen --peer orion --runtime codex
+```
 
 ## Step 2 — process pending work
 

@@ -9,6 +9,7 @@
 import { test, expect, describe } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import { SKILL_ROOT } from "../scripts/lib.ts";
 
 describe("Round 15b — plugin manifest validity", () => {
@@ -38,6 +39,8 @@ describe("Round 15b — plugin manifest validity", () => {
     expect(typeof m.version).toBe("string");
     expect(typeof m.description).toBe("string");
     expect(m.license).toBe("MIT");
+    expect(m.skills).toBe("./skills/");
+    expect(typeof m.repository).toBe("string");
   });
 
   test("marketplace.json (repo root) declares agent-chat as a plugin entry", () => {
@@ -48,6 +51,19 @@ describe("Round 15b — plugin manifest validity", () => {
     const ac = m.plugins.find((p: any) => p.name === "agent-chat");
     expect(ac).toBeDefined();
     expect(ac?.source).toBe("./plugins/agent-chat");
+  });
+
+  test("Codex marketplace declares agent-chat with object source + policy", () => {
+    const p = path.join(REPO_ROOT, ".agents/plugins/marketplace.json");
+    expect(fs.existsSync(p)).toBe(true);
+    const m = JSON.parse(fs.readFileSync(p, "utf8"));
+    expect(m.name).toBe("agent-chat-marketplace");
+    expect(Array.isArray(m.plugins)).toBe(true);
+    const ac = m.plugins.find((p: any) => p.name === "agent-chat");
+    expect(ac).toBeDefined();
+    expect(ac?.source).toEqual({ source: "local", path: "./plugins/agent-chat" });
+    expect(ac?.policy?.installation).toBe("AVAILABLE");
+    expect(ac?.category).toBe("Coding");
   });
 
   test("SKILL.md exists at skills/agent-chat/SKILL.md (inside plugin)", () => {
@@ -105,6 +121,53 @@ describe("Round 15b — runtime adapter signatures", () => {
       console.log = origLog;
       if (prevMock == null) delete process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP;
       else process.env.AGENT_CHAT_LOOP_MOCK_WAKEUP = prevMock;
+    }
+  });
+
+  test("scripts/runtimes/codex.ts dispatch uses explicit autonomous exec flags by default", async () => {
+    const m = await import("../scripts/runtimes/codex.ts");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agent-chat-fake-codex-"));
+    const fakeCodex = path.join(tmp, "codex");
+    const argvFile = path.join(tmp, "argv.txt");
+    fs.writeFileSync(fakeCodex, [
+      "#!/usr/bin/env bash",
+      "printf '%s\\n' \"$@\" > \"$FAKE_CODEX_ARGV\"",
+      "printf '## lumeyon — fake codex ok (UTC 2026-05-06T00:00:00Z)\\n\\nbody\\n\\n→ orion\\n'",
+      "",
+    ].join("\n"));
+    fs.chmodSync(fakeCodex, 0o755);
+
+    const prevNoLlm = process.env.AGENT_CHAT_NO_LLM;
+    const prevInside = process.env.AGENT_CHAT_INSIDE_LLM_CALL;
+    const prevSandboxed = process.env.AGENT_CHAT_CODEX_SANDBOXED;
+    const prevCodexBin = process.env.AGENT_CHAT_CODEX_BIN;
+    const prevFakeArgv = process.env.FAKE_CODEX_ARGV;
+    process.env.AGENT_CHAT_CODEX_BIN = fakeCodex;
+    process.env.FAKE_CODEX_ARGV = argvFile;
+    delete process.env.AGENT_CHAT_NO_LLM;
+    delete process.env.AGENT_CHAT_INSIDE_LLM_CALL;
+    delete process.env.AGENT_CHAT_CODEX_SANDBOXED;
+    try {
+      const r = await m.dispatch({ prompt: "hello", timeoutMs: 5000 });
+      expect(r.reason).toBe("ok");
+      expect(r.stdout).toContain("fake codex ok");
+      expect(fs.readFileSync(argvFile, "utf8").trim().split("\n")).toEqual([
+        "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "hello",
+      ]);
+    } finally {
+      if (prevNoLlm == null) delete process.env.AGENT_CHAT_NO_LLM;
+      else process.env.AGENT_CHAT_NO_LLM = prevNoLlm;
+      if (prevInside == null) delete process.env.AGENT_CHAT_INSIDE_LLM_CALL;
+      else process.env.AGENT_CHAT_INSIDE_LLM_CALL = prevInside;
+      if (prevSandboxed == null) delete process.env.AGENT_CHAT_CODEX_SANDBOXED;
+      else process.env.AGENT_CHAT_CODEX_SANDBOXED = prevSandboxed;
+      if (prevCodexBin == null) delete process.env.AGENT_CHAT_CODEX_BIN;
+      else process.env.AGENT_CHAT_CODEX_BIN = prevCodexBin;
+      if (prevFakeArgv == null) delete process.env.FAKE_CODEX_ARGV;
+      else process.env.FAKE_CODEX_ARGV = prevFakeArgv;
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 

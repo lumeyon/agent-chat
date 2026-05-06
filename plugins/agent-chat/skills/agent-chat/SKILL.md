@@ -34,6 +34,9 @@ plugins/agent-chat/
     condense.ts         # fold same-depth archive summaries
     search.ts           # grep / describe / expand / list
     loop-driver.ts      # one tick + ScheduleWakeup or --interactive loop
+    notify.ts           # notification-only turn watcher
+    autowatch.ts        # autonomous watcher that invokes run ticks
+    install-autowatch-systemd.ts # user systemd service installer
     llm.ts              # Claude shell-out helper
     runtimes/claude.ts  # Claude adapter
     runtimes/codex.ts   # Codex adapter
@@ -93,6 +96,24 @@ Run an interactive loop:
 ```bash
 bun "$AGENT_CHAT_DIR/scripts/loop-driver.ts" --interactive
 ```
+
+Run without a human in the loop through the plugin-owned watcher:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch <name> <topology> --runtime codex
+```
+
+Install that watcher as a restarting Codex-backed user service:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch-service <name> <topology> --runtime codex
+```
+
+Autowatch refuses to run when a live presence record already exists for
+the same agent name. This prevents a headless service from composing as
+an agent while an interactive Claude/Codex session is already on that
+identity. Use `--allow-presence-conflict` only when intentionally taking
+over an agent name.
 
 Manual turn flow:
 

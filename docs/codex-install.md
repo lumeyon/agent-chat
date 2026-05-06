@@ -1,9 +1,8 @@
 # Installing agent-chat on Codex CLI
 
-This page documents the empirical install lifecycle for the Codex side
-of agent-chat's dual-runtime support, including the schema-mismatch
-workaround you currently need until Codex's plugin discovery converges
-with Claude Code's marketplace.json shape.
+This page documents the Codex side of agent-chat's dual-runtime support:
+plugin discovery, the Codex runtime adapter, and the plugin-owned
+autonomous watcher used for no-human-in-the-loop agents.
 
 ## TL;DR
 
@@ -11,7 +10,10 @@ with Claude Code's marketplace.json shape.
 codex plugin marketplace add lumeyon/agent-chat
 ```
 
-Then add this entry to `~/.codex/config.toml`:
+The repo ships a Codex-shaped marketplace at
+`.agents/plugins/marketplace.json`. If your Codex build still does not
+auto-enable the plugin after adding the marketplace, add this fallback
+entry to `~/.codex/config.toml`:
 
 ```toml
 [plugins."agent-chat@agent-chat-marketplace"]
@@ -30,7 +32,38 @@ without errors, the install is healthy and the Codex runtime adapter
 (scripts/runtimes/codex.ts, Round-15i) is ready to dispatch through
 `codex exec`.
 
-## Why the manual config.toml step
+## Autonomous watcher
+
+The watcher is part of the Codex plugin payload. `agent-chat run` remains
+a bounded one-tick command; `agent-chat autowatch` is the persistent
+scheduler that watches `.turn` files and invokes the existing run path
+whenever an edge hands the floor to that agent.
+
+Run directly:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch lumeyon petersen --peer orion --runtime codex
+```
+
+Install as a restarting user service:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" autowatch-service lumeyon petersen --peer orion --runtime codex
+```
+
+Autowatch is presence-aware. If `lumeyon` is already live in an
+interactive Codex session, the service exits rather than writing as
+`lumeyon` concurrently. Stop the interactive session before promoting
+the identity to headless service mode, or pass `--allow-presence-conflict`
+only for an explicit takeover.
+
+Inspect logs:
+
+```bash
+journalctl --user -u agent-chat-lumeyon-petersen-autowatch.service -f
+```
+
+## Why config.toml may still be needed
 
 Codex's `plugin marketplace add` and Claude Code's
 `/plugin marketplace add` both git-clone the repo, but they diverge
@@ -40,16 +73,12 @@ on what happens next:
   reads the cloned `.claude-plugin/marketplace.json`, registers the
   plugin under `~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/<version>/`,
   and `/reload-plugins` makes the skill available immediately.
-- **Codex**: there is no separate `codex plugin install` subcommand;
-  per-plugin enable happens through `~/.codex/config.toml` entries.
-  Pre-existing curated plugins (`openai-curated`) ship with a richer
-  marketplace.json schema that Codex parses to populate the agent's
-  available-plugins list automatically; our marketplace.json (in
-  `.claude-plugin/`) uses Claude Code's flat-string `source` field
-  which Codex tolerates at the marketplace level (the marketplace
-  is registered) but doesn't fully expand into per-plugin metadata.
-  The `[plugins."<name>@<marketplace>"] enabled = true` toml entry
-  is the manual switch that bypasses the auto-discovery gap.
+- **Codex**: there is no separate `codex plugin install` subcommand.
+  Current repo versions ship both the legacy Claude marketplace and a
+  Codex-shaped `.agents/plugins/marketplace.json` with object `source`,
+  `policy`, and `category`. Older Codex builds or already-cloned older
+  marketplace revisions may still need the `[plugins."<name>@<marketplace>"]`
+  manual enable switch in `~/.codex/config.toml`.
 
 ## The empirical schema diff
 
@@ -70,38 +99,30 @@ Codex's curated marketplace.json (verified against codex-cli 0.128.0):
 }
 ```
 
-Ours (Claude Code shape):
+agent-chat now ships the Codex shape separately at
+`.agents/plugins/marketplace.json`:
 
 ```json
 {
   "name": "agent-chat-marketplace",
-  "owner": {"name": "tickcode", "url": "https://github.com/lumeyon"},
-  "description": "...",
+  "interface": {"displayName": "agent-chat"},
   "plugins": [
     {
       "name": "agent-chat",
-      "source": "./plugins/agent-chat",
-      "description": "..."
+      "source": {"source": "local", "path": "./plugins/agent-chat"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
+      "category": "Coding"
     }
   ]
 }
 ```
 
-Differences that matter:
-- `interface.displayName` (Codex-specific) vs `description` (Claude-specific)
-- `source: { source: "local", path: ... }` object vs `source: "..."` string
-- `policy: { installation, authentication }` (Codex-only)
-- `category` (Codex)
-
-Because Claude Code rejected `repository: { type: "git", url: "..." }` as
-"expected string" in earlier rounds, switching `source` to Codex's object
-form would likely break the Claude Code install. We don't have a way to
-verify Claude Code's tolerance without risking the install for all current
-users, so the workaround above is the conservative path.
+The legacy `.claude-plugin/marketplace.json` remains in Claude Code's
+flat-string source shape so the Claude install path is not regressed.
 
 ## Verifying the runtime adapter works after install
 
-Once the toml entry is in place, the Codex runtime adapter wraps
+Once the plugin is enabled, the Codex runtime adapter wraps
 `codex exec <prompt>` for ephemeral dispatch (symmetric with Claude's
 adapter wrapping `claude -p`). The wire protocol is unchanged — Codex
 agents read/write the same CONVO.md / .turn / .dots / .roles files
@@ -111,7 +132,7 @@ graph works because every state is filesystem-mediated.
 To smoke-test the adapter (after enabling the plugin):
 
 ```bash
-bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" self-test         # 62 hermetic checks
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" self-test         # 76 hermetic checks
 bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" network-test      # 205 Dot Collector checks
 ```
 
@@ -127,5 +148,6 @@ The right long-term fix is one of:
 2. Claude Code's parser tolerates Codex's object `source` field.
 3. The two CLIs agree on a polyglot schema.
 
-Until one of those lands, the manual config.toml workaround above is
-the install path for Codex users.
+Until one of those lands, agent-chat carries both marketplace files.
+The manual config.toml entry is the fallback for Codex builds that have
+already cached an older marketplace revision.

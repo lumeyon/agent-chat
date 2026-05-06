@@ -1,16 +1,13 @@
 {
   "name": "agent-chat",
   "version": "0.6.0",
-  "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on an arbitrary graph (Petersen, ring, star, pair) write turns to per-edge CONVO.md files with atomic .turn sentinels. Lossless DAG-based archive layer keeps long conversations cheap to re-read. Round 15d ships ephemeral-only execution: each `agent-chat run` invocation reads filesystem state, processes actionable edges, and exits. The wire protocol is identical to the Claude Code variant — agents in different runtimes can collaborate on the same graph. Round 15i: Codex-side dispatcher (scripts/runtimes/codex.ts) is now IMPLEMENTED — wraps `codex exec <prompt>` for ephemeral dispatch and shares the same loop-driver scheduling primitives with the Claude variant. Note: full Codex plugin install lifecycle (per-plugin enable via config.toml) is not yet automated; `codex plugin marketplace add lumeyon/agent-chat` clones the marketplace but plugin discovery requires manual config.toml entries.",
+  "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on arbitrary graph topologies write turns to per-edge CONVO.md files with atomic .turn sentinels. The wire protocol is identical to the Claude Code variant, so Claude and Codex agents can collaborate on the same Petersen graph. The Codex runtime adapter wraps `codex exec <prompt>` for ephemeral dispatch, and the plugin ships `agent-chat autowatch` plus `autowatch-service` for autonomous no-human-in-the-loop operation.",
   "author": {
     "name": "tickcode",
     "email": "tickcode@gmail.com"
   },
   "homepage": "https://github.com/lumeyon/agent-chat",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lumeyon/agent-chat.git"
-  },
+  "repository": "https://github.com/lumeyon/agent-chat.git",
   "bugs": {
     "url": "https://github.com/lumeyon/agent-chat/issues"
   },
@@ -23,13 +20,35 @@
     "turn-taking",
     "petersen-graph",
     "lossless-archive",
-    "cross-runtime"
+    "cross-runtime",
+    "autowatch"
   ],
+  "skills": "./skills/",
   "category": "development",
   "tags": [
     "automation",
     "ai-agents",
     "coordination",
     "audit-trail"
-  ]
+  ],
+  "interface": {
+    "displayName": "agent-chat",
+    "shortDescription": "Filesystem turn-taking for Claude and Codex agents",
+    "longDescription": "Coordinate Claude and Codex agents on shared graph topologies through append-only conversation files, atomic turn sentinels, runtime adapters, and a Codex-owned autonomous watcher service.",
+    "developerName": "tickcode",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/lumeyon/agent-chat",
+    "defaultPrompt": [
+      "Set up agent-chat autowatch for a Codex agent",
+      "Inspect a Petersen graph conversation",
+      "Run cross-runtime agent-chat tests"
+    ],
+    "brandColor": "#111827",
+    "screenshots": []
+  }
 }

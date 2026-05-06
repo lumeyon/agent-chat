@@ -7,7 +7,9 @@
 //
 // What this adapter does:
 //   - dispatch(input) shells out to `codex exec <prompt>` (Codex's
-//     non-interactive entrypoint, equivalent to `claude -p`). Honors
+//     non-interactive entrypoint, equivalent to `claude -p`) with an
+//     explicit autonomous policy so systemd-launched agents don't inherit
+//     an unusable default sandbox. Honors
 //     AGENT_CHAT_NO_LLM=1 hermeticity flag and AGENT_CHAT_INSIDE_LLM_CALL=1
 //     reentrancy guard the same way runClaude does.
 //   - scheduleWakeup(reason, delay) emits the same JSON directive shape
@@ -26,7 +28,10 @@
 //   1. CLI surface confirmed: `codex exec <prompt>` is the non-interactive
 //      single-shot entry. Stdin can append a `<stdin>` block to the
 //      prompt — useful for large payloads where shell argv length matters.
-//      Verified by `codex exec --help`.
+//      Verified by `codex exec --help`. For autonomous service use we pass
+//      `--dangerously-bypass-approvals-and-sandbox`, matching the user's
+//      explicit no-human-in-the-loop requirement and avoiding bwrap
+//      namespace failures under user systemd.
 //
 //   2. Marketplace add: `codex plugin marketplace add <owner>/<repo>` git-
 //      clones the repo into ~/.codex/.tmp/marketplaces/<name>/. The
@@ -71,8 +76,21 @@ export type EphemeralDispatchResult = RunClaudeResult;
 /** Default timeout matches Claude adapter (90s). */
 const DEFAULT_TIMEOUT_MS = 90_000;
 
+function codexExecArgs(prompt: string): string[] {
+  const args = ["exec"];
+  if (process.env.AGENT_CHAT_CODEX_SANDBOXED !== "1") {
+    args.push("--dangerously-bypass-approvals-and-sandbox");
+  }
+  args.push(prompt);
+  return args;
+}
+
 /**
- * Run a single ephemeral Codex invocation via `codex exec`. Honors
+ * Run a single ephemeral Codex invocation via `codex exec`. Defaults to
+ * Codex's explicit no-sandbox/no-approval flag because autowatch services
+ * are intentionally noninteractive. Set AGENT_CHAT_CODEX_SANDBOXED=1 to
+ * opt back into Codex's default sandbox/approval policy. Set
+ * AGENT_CHAT_CODEX_BIN to use a specific Codex binary path. Honors
  * AGENT_CHAT_NO_LLM=1 (returns "not-found" reason) and
  * AGENT_CHAT_INSIDE_LLM_CALL=1 (reentrancy refusal). Same shape as
  * Claude adapter so cross-runtime callers can swap one for the other.
@@ -93,30 +111,38 @@ export async function dispatch(input: EphemeralDispatchInput): Promise<Ephemeral
   if (process.env.AGENT_CHAT_NO_LLM === "1") {
     return { stdout: null, stderr: "AGENT_CHAT_NO_LLM=1", code: null, reason: "not-found" };
   }
-  // Probe `codex` on PATH. If absent, return "not-found" so the caller
-  // can fall back gracefully (matches runClaude's missing-binary path).
-  const probe = child_process.spawnSync("which", ["codex"], { encoding: "utf8" });
-  if (probe.status !== 0 || !probe.stdout.trim()) {
-    return {
-      stdout: null,
-      stderr: "codex CLI not found on PATH. Install codex-cli or set runtime: claude in agents.<topology>.yaml.",
-      code: null,
-      reason: "not-found",
-    };
+  const configuredBin = process.env.AGENT_CHAT_CODEX_BIN?.trim();
+  let codexBin = configuredBin ?? "";
+  if (!codexBin) {
+    // Probe `codex` on PATH. If absent, return "not-found" so the caller
+    // can fall back gracefully (matches runClaude's missing-binary path).
+    const probe = child_process.spawnSync("which", ["codex"], { encoding: "utf8" });
+    if (probe.status !== 0 || !probe.stdout.trim()) {
+      return {
+        stdout: null,
+        stderr: "codex CLI not found on PATH. Install codex-cli or set runtime: claude in agents.<topology>.yaml.",
+        code: null,
+        reason: "not-found",
+      };
+    }
+    codexBin = probe.stdout.trim();
   }
-  const codexBin = probe.stdout.trim();
 
-  // Spawn codex exec with the prompt as the positional argument. Pass the
-  // reentrancy sentinel via env so any descendant agent-chat invocation
-  // (e.g. archive.ts auto inside a Codex-driven sub-relay) refuses to
-  // re-enter the LLM. Mirrors scripts/llm.ts:scrubChildEnv.
+  // Spawn codex exec with the prompt as the positional argument. By default
+  // pass Codex's explicit bypass flag: systemd-launched autowatch processes
+  // have no human approval path, and the default sandbox can fail before
+  // repo access with `bwrap: loopback: Failed RTM_NEWADDR`.
+  //
+  // Pass the reentrancy sentinel via env so any descendant agent-chat
+  // invocation (e.g. archive.ts auto inside a Codex-driven sub-relay)
+  // refuses to re-enter the LLM. Mirrors scripts/llm.ts:scrubChildEnv.
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.AGENT_NAME;
   delete env.AGENT_TOPOLOGY;
   delete env.AGENT_CHAT_USER;
   env.AGENT_CHAT_INSIDE_LLM_CALL = "1";
 
-  const r = child_process.spawnSync(codexBin, ["exec", input.prompt], {
+  const r = child_process.spawnSync(codexBin, codexExecArgs(input.prompt), {
     encoding: "utf8",
     timeout: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     env,

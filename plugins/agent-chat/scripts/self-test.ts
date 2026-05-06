@@ -375,6 +375,18 @@ scenario("Round-15l-D — notify.ts watcher script is callable + wired as `agent
   check("cmdWatch spawns scripts/notify.ts", /cmdWatch[\s\S]{0,1500}scripts\/notify\.ts/.test(code));
 });
 
+scenario("Round-15m — autowatch ships inside the plugin and is wired as `agent-chat autowatch`", () => {
+  const autowatchScript = path.join(SKILL_ROOT, "scripts/autowatch.ts");
+  const serviceScript = path.join(SKILL_ROOT, "scripts/install-autowatch-systemd.ts");
+  check("scripts/autowatch.ts exists", fs.existsSync(autowatchScript));
+  check("scripts/install-autowatch-systemd.ts exists", fs.existsSync(serviceScript));
+  const code = fs.readFileSync(path.join(SKILL_ROOT, "scripts/agent-chat.ts"), "utf8");
+  check("agent-chat dispatcher has 'autowatch' case", /case "autowatch":\s+void cmdAutowatch/.test(code));
+  check("agent-chat dispatcher has 'autowatch-service' case", /case "autowatch-service":\s+void cmdAutowatchService/.test(code));
+  check("cmdAutowatch spawns scripts/autowatch.ts", /cmdAutowatch[\s\S]{0,1500}scripts\/autowatch\.ts/.test(code));
+  check("cmdAutowatchService spawns installer", /cmdAutowatchService[\s\S]{0,1500}scripts\/install-autowatch-systemd\.ts/.test(code));
+});
+
 scenario("Round-15i Item-6 — loop-driver --interactive exits cleanly when idle", () => {
   // Spawn loop-driver in interactive mode with 1s cadence. With no edges
   // flipped to me, singleTickPass returns idle, so 3 consecutive idle ticks
