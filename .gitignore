@@ -151,3 +151,10 @@ vite.config.ts.timestamp-*
 # If you DO want to version a particular conversation (e.g. for a public
 # example), force-add the specific edge directory: `git add -f conversations/pair/lumeyon-orion/CONVO.md`
 conversations/
+
+# Claude Code's per-machine working state — scheduled task locks, session
+# snapshots, settings overrides, etc. Same shape as conversations/: created
+# on demand by Claude Code on each clone, not part of the skill source.
+# Force-add specific files if a particular Claude Code config (e.g. a
+# project-level settings.json with shared permissions) should be versioned.
+.claude/
