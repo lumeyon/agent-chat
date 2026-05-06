@@ -120,16 +120,54 @@ async function main(): Promise<void> {
     if (resultLine) log(`mirror: ${resultLine.trim()}`);
   }
 
-  // 2) Auto-archive — fire-and-forget so we don't block the Claude Code
-  //    response cycle. The archive layer is idempotent and bounded by the
-  //    line threshold; if nothing needs sealing, it's a fast no-op. If
-  //    something does, it can take a few seconds per edge.
+  // 2) Auto-archive the active edge for this turn.
   //
-  //    We detach the process so even a slow archive run doesn't delay
-  //    the user seeing their next prompt. Failures are logged inside
-  //    `agent-chat gc` itself and surface in <conv>/.logs/.
+  //    `gc --auto-archive` only handles parked edges; we also need to
+  //    archive ACTIVE edges (where .turn is the speaker's name)
+  //    because that's where every user turn lands. archive.ts auto
+  //    --force overrides the parked check and seals everything older
+  //    than the fresh tail. If the edge is below threshold, it's a
+  //    fast no-op.
+  //
+  //    The edge is determined by the current_speaker (typically the
+  //    user, e.g. "boss"). archive.ts auto takes the peer name, which
+  //    is the OTHER agent on the edge — for an orion session with
+  //    speaker=boss, peer=boss.
+  //
+  //    Detached so a slow archive doesn't block the Claude Code
+  //    response cycle.
+  const archiveBin = path.join(SCRIPT_DIR, "archive.ts");
   try {
-    const child = child_process.spawn(
+    // Find the speaker. The session has it in <conv>/.sessions/<key>.current_speaker.json
+    const speakers: string[] = [];
+    const sessionsDir = path.join(CONV_DIR, ".sessions");
+    if (fs.existsSync(sessionsDir)) {
+      for (const f of fs.readdirSync(sessionsDir)) {
+        if (!f.endsWith(".current_speaker.json")) continue;
+        try {
+          const sp = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
+          if (sp?.name && !speakers.includes(sp.name)) speakers.push(sp.name);
+        } catch { /* ignore */ }
+      }
+    }
+
+    for (const speaker of speakers) {
+      const child = child_process.spawn(
+        "bun",
+        [archiveBin, "auto", speaker, "--force"],
+        {
+          env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      child.unref();
+      log(`archive auto ${speaker} --force launched detached (pid=${child.pid})`);
+    }
+
+    // Also keep the parked-edge sweep for any edges that drifted into
+    // parked state since the last hook fire.
+    const gcChild = child_process.spawn(
       "bun",
       [AGENT_CHAT_BIN, "gc", "--auto-archive", "--archive-threshold=200"],
       {
@@ -138,10 +176,74 @@ async function main(): Promise<void> {
         stdio: "ignore",
       },
     );
-    child.unref();
-    log(`auto-archive launched detached (pid=${child.pid})`);
+    gcChild.unref();
+    log(`gc --auto-archive launched detached (pid=${gcChild.pid})`);
   } catch (e) {
     log(`auto-archive launch failed: ${e}`);
+  }
+
+  // 3) Rebuild the per-edge knowledge graph for whichever edge(s) just
+  //    received a new turn. Detached so a slow KG build (embedding +
+  //    Poincaré projection) doesn't block the response cycle.
+  //
+  //    The KG build is incremental in practice because of the persistent
+  //    embedding cache — only NEW section sha256s require a fresh ONNX
+  //    forward pass. Cache hits are sub-millisecond.
+  //
+  //    We rebuild the KG for the FULL edge (active CONVO.md + all leaf
+  //    archives) because the kg.ts pipeline is single-pass; differential
+  //    updates can come later if perf demands.
+  const kgBin = path.join(SCRIPT_DIR, "kg.ts");
+  try {
+    // For each known speaker, the kg.ts targeting boss-orion (etc.) is
+    // determined by edge name. Speakers come from the same source we
+    // used in step 2 — re-derive briefly to avoid name pollution.
+    const sessionsDir = path.join(CONV_DIR, ".sessions");
+    const speakers: string[] = [];
+    if (fs.existsSync(sessionsDir)) {
+      for (const f of fs.readdirSync(sessionsDir)) {
+        if (!f.endsWith(".current_speaker.json")) continue;
+        try {
+          const sp = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
+          if (sp?.name && !speakers.includes(sp.name)) speakers.push(sp.name);
+        } catch { /* ignore */ }
+      }
+    }
+    // Determine my agent name from session record
+    const myAgents: string[] = [];
+    if (fs.existsSync(sessionsDir)) {
+      for (const f of fs.readdirSync(sessionsDir)) {
+        if (f.endsWith(".current_speaker.json") || !f.endsWith(".json")) continue;
+        try {
+          const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
+          if (s?.agent && !myAgents.includes(s.agent)) myAgents.push(s.agent);
+        } catch { /* ignore */ }
+      }
+    }
+    // For every (speaker, agent) pair we observed, compute edge id and rebuild.
+    const edgeIds: string[] = [];
+    for (const sp of speakers) {
+      for (const ag of myAgents) {
+        if (sp === ag) continue;
+        const edgeId = sp < ag ? `${sp}-${ag}` : `${ag}-${sp}`;
+        if (!edgeIds.includes(edgeId)) edgeIds.push(edgeId);
+      }
+    }
+    for (const edgeId of edgeIds) {
+      const child = child_process.spawn(
+        "bun",
+        [kgBin, "build", edgeId],
+        {
+          env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      child.unref();
+      log(`kg build ${edgeId} launched detached (pid=${child.pid})`);
+    }
+  } catch (e) {
+    log(`kg build launch failed: ${e}`);
   }
 
   // Hook always exits 0 — failures are logged, never block the response.
