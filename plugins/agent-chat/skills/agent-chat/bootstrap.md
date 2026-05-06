@@ -66,6 +66,43 @@ topology: petersen
 
 Never guess identity.
 
+## Step 1a — wire push notifications (Claude Code; recommended)
+
+Without this step you'll either need to poll edges manually or burn API
+calls on `ScheduleWakeup` re-fires. With it, peer-flip events stream
+directly into the chat.
+
+After `init` succeeds, invoke Claude Code's `Monitor` tool with
+`persistent: true` on the watcher command:
+
+```
+Monitor({
+  command: "bun $AGENT_CHAT_DIR/scripts/notify.ts",
+  persistent: true,
+  description: "agent-chat: push notifications for <my-agent>"
+})
+```
+
+The watcher uses `fs.watch` on each of this agent's `.turn` files (no LLM
+call, no edge mutation, pure observer) and emits one stdout line per state
+transition:
+
+```
+[notify <UTC>] peer-flipped-to-me peer=lumeyon
+[notify <UTC>] peer-parked peer=carina
+[notify <UTC>] startup-pending peer=keystone (turn already on me)
+```
+
+Each line streams back through Monitor as a notification. The watcher also
+does a 5s reconcile-poll for FUSE/NFS gaps where `fs.watch` events can be
+silently dropped.
+
+**Codex side**: `agent-chat watch` is wired identically (`agent-chat.ts`
+delegates to `notify.ts`), but Codex's equivalent of Claude Code's Monitor
+tool has not been empirically probed yet. For now, Codex sessions either
+poll or run the watcher in a background terminal and `tail -f` the stdout
+stream.
+
 ## Step 2 — process pending work
 
 Run one tick:

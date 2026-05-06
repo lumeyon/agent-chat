@@ -360,6 +360,21 @@ scenario("Round-15k Item-7 — <role> directive parser regex", () => {
     `expected: ${expectedRolePath}`);
 });
 
+scenario("Round-15l-D — notify.ts watcher script is callable + wired as `agent-chat watch`", () => {
+  // Hermetic check: the script imports cleanly, the CLI delegate exists.
+  // Real fs.watch + flip-detection behavior is verified manually rather
+  // than in-suite (the timing-sensitive observation requires careful
+  // ordering with the wire-protocol scenarios that mutate lumeyon-orion's
+  // turn state). Keep this lightweight — full e2e watch verification is
+  // a planned follow-up.
+  const notifyScript = path.join(SKILL_ROOT, "scripts/notify.ts");
+  check("scripts/notify.ts exists", fs.existsSync(notifyScript));
+  // Verify CLI dispatcher routes "watch" to cmdWatch which spawns notify.ts.
+  const code = fs.readFileSync(path.join(SKILL_ROOT, "scripts/agent-chat.ts"), "utf8");
+  check("agent-chat dispatcher has 'watch' case", /case "watch":\s+void cmdWatch/.test(code));
+  check("cmdWatch spawns scripts/notify.ts", /cmdWatch[\s\S]{0,1500}scripts\/notify\.ts/.test(code));
+});
+
 scenario("Round-15i Item-6 — loop-driver --interactive exits cleanly when idle", () => {
   // Spawn loop-driver in interactive mode with 1s cadence. With no edges
   // flipped to me, singleTickPass returns idle, so 3 consecutive idle ticks

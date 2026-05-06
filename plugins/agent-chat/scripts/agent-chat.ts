@@ -796,6 +796,19 @@ function cmdDots(args: string[]): void {
   }
 }
 
+async function cmdWatch(args: string[]): Promise<void> {
+  // Round-15l-D: push-notification watcher (replaces ScheduleWakeup poll
+  // patterns). Long-running fs.watch over this agent's .turn files,
+  // emits one stdout line per state transition. Designed to run inside
+  // Claude Code's Monitor tool with persistent: true so the agent gets
+  // push notifications without spawning extra LLM calls just to poll.
+  // See scripts/notify.ts for the implementation.
+  const child = child_process.spawn("bun", [path.join(SKILL_ROOT, "scripts/notify.ts"), ...args], {
+    stdio: "inherit", env: process.env,
+  });
+  await new Promise<void>(() => child.on("exit", (code) => process.exit(code ?? 1)));
+}
+
 async function cmdIntegrationTest(args: string[]): Promise<void> {
   // Round-15j-A: end-to-end pipeline smoke. Spawns a real claude -p
   // through cmdRun against a synthetic two-agent setup, asserts the
@@ -1887,6 +1900,7 @@ switch (cmd) {
   case "network-test": void cmdNetworkTest(rest); break;
   case "llm-smoke":    void cmdLlmSmoke(rest); break;
   case "integration-test": void cmdIntegrationTest(rest); break;
+  case "watch":        void cmdWatch(rest); break;
   case "role":         cmdRole(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
