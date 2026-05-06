@@ -46,13 +46,29 @@ import {
 } from "./embed.ts";
 import { batchEuclideanToPoincare, hyperbolicDistance } from "./lib/hyperbolic.ts";
 import { PersistentEmbeddingCache } from "./lib/persistent-cache.ts";
+import { chunkText } from "./lib/chunking.ts";
+import { HNSWIndex } from "./lib/hnsw-index.ts";
 
 // ─── Schema ─────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;             // bumped: chunk-level nodes + HNSW
 const POINCARE_CURVATURE = 1.0;       // matches ruflo's default
 const SECTION_HEADER_RE = /^## /m;     // standard agent-chat section delimiter
 const TEXT_EXCERPT_LEN = 280;          // chars stored in node for grep/preview
+
+// Ruflo's chunkText defaults: maxChunkSize=512 chars, overlap=50,
+// strategy='sentence'. We pass these explicitly to make the contract
+// visible — anything passing here also passes ruflo's chunking tests.
+const CHUNK_MAX_SIZE = 512;
+const CHUNK_OVERLAP = 50;
+const CHUNK_STRATEGY = "sentence" as const;
+const CHUNK_MIN_SIZE = 100;
+
+// HNSW config — matches ruflo's @claude-flow/memory defaults for cosine
+// similarity over 384-dim sentence-transformer embeddings.
+const HNSW_M = 16;
+const HNSW_EF_CONSTRUCTION = 200;
+const HNSW_EF_SEARCH = 50;            // search-time fan-out (recall vs speed)
 
 export interface KGNode {
   id: string;
@@ -60,6 +76,8 @@ export interface KGNode {
   source: "convo" | "archive";
   archive_id?: string;        // present for kind=section in archived BODY, and kind=archive
   section_idx?: number;       // present for kind=section
+  chunk_idx?: number;         // present for chunked sections (multi-chunk sections only)
+  chunk_total?: number;       // total chunks for this section
   sha256: string;
   header: string;             // first line of the section (## boss — ...)
   text_excerpt: string;       // first ~280 chars of body
@@ -81,6 +99,14 @@ export interface KGManifest {
   model_id: string;
   model_dim: number;
   poincare_curvature: number;
+  chunk_max_size: number;
+  chunk_overlap: number;
+  chunk_strategy: "character" | "sentence" | "paragraph" | "token";
+  chunk_min_size: number;
+  hnsw_M: number;
+  hnsw_efConstruction: number;
+  hnsw_efSearch: number;
+  hnsw_indexed_vectors: number;
   built_at: string;
   node_count: number;
   edge_count: number;
@@ -114,12 +140,32 @@ function parseSections(content: string): { header: string; body: string; idx: nu
   });
 }
 
-function nodeIdSection(source: "convo" | "archive", archiveId: string | null, idx: number, sha: string): string {
+function nodeIdSection(source: "convo" | "archive", archiveId: string | null, idx: number, chunkIdx: number, sha: string): string {
   const a = archiveId ?? "live";
-  return `sec:${source}:${a}:${idx}:${sha.slice(0, 8)}`;
+  // chunkIdx=0 single-chunk sections look identical to v1 ids except for
+  // the trailing :0 — v1 ids included no chunk index. Keep new format
+  // unconditional so HNSW ids are unique even within a single section.
+  return `sec:${source}:${a}:${idx}:c${chunkIdx}:${sha.slice(0, 8)}`;
 }
 function nodeIdArchive(archiveId: string): string {
   return `arc:${archiveId}`;
+}
+
+/**
+ * Apply ruflo's chunkText with our configured defaults. Returns the
+ * raw chunk text strings only — the metadata is reconstructed at the
+ * KG-node layer so we don't depend on ChunkedDocument shape evolving.
+ */
+function chunkSection(text: string): string[] {
+  const result = chunkText(text, {
+    maxChunkSize: CHUNK_MAX_SIZE,
+    overlap: CHUNK_OVERLAP,
+    strategy: CHUNK_STRATEGY,
+    minChunkSize: CHUNK_MIN_SIZE,
+  });
+  // Each chunk has .text; if the input was below minChunkSize ruflo
+  // returns one chunk == the whole input. We never lose content.
+  return result.chunks.map((c) => c.text);
 }
 
 interface EdgeDescriptor {
@@ -195,7 +241,12 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
     }
   }
 
-  // ─── Pass 1: collect texts + sha256s + cache lookups ───
+  // ─── Pass 1: chunk every section, collect (text, sha) per chunk ───
+  // Each section gets sentence-chunked via ruflo's chunkText. Sections
+  // shorter than CHUNK_MIN_SIZE collapse to one chunk == the whole text;
+  // longer sections produce N chunks with CHUNK_OVERLAP char overlap.
+  // Each chunk becomes its own node so retrieval works at chunk
+  // granularity (RAG style — what ruflo does).
   type Pending = {
     text: string;
     sha: string;
@@ -203,27 +254,47 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
   };
   const pending: Pending[] = [];
 
-  for (const sec of liveSections) {
+  function pushSectionChunks(
+    source: "convo" | "archive",
+    archiveId: string | null,
+    sec: { header: string; body: string; idx: number },
+  ): void {
     const fullText = `${sec.header}\n${sec.body}`;
-    const sha = sha256(fullText);
-    pending.push({
-      text: fullText,
-      sha,
-      nodeFactory: (eu) => ({
-        id: nodeIdSection("convo", null, sec.idx, sha),
-        kind: "section",
-        source: "convo",
-        section_idx: sec.idx,
-        sha256: sha,
-        header: sec.header,
-        text_excerpt: sec.body.slice(0, TEXT_EXCERPT_LEN),
-        eu_embedding: eu,
-      }),
-    });
+    const chunks = chunkSection(fullText);
+    const total = chunks.length;
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunkText = chunks[ci];
+      const sha = sha256(chunkText);
+      const idx = sec.idx;
+      pending.push({
+        text: chunkText,
+        sha,
+        nodeFactory: (eu) => ({
+          id: nodeIdSection(source, archiveId, idx, ci, sha),
+          kind: "section",
+          source,
+          archive_id: archiveId ?? undefined,
+          section_idx: idx,
+          chunk_idx: ci,
+          chunk_total: total,
+          sha256: sha,
+          header: sec.header,
+          // Excerpt comes from THIS chunk so multi-chunk sections show
+          // the right slice when grepping/previewing nodes.
+          text_excerpt: chunkText.slice(0, TEXT_EXCERPT_LEN),
+          eu_embedding: eu,
+        }),
+      });
+    }
+  }
+
+  for (const sec of liveSections) {
+    pushSectionChunks("convo", null, sec);
   }
 
   for (const arc of archives) {
-    // Archive node — text is the TL;DR (or first body section if no TL;DR)
+    // Archive node — text is the TL;DR (or first body section if no TL;DR).
+    // Archive nodes are NOT chunked (they're already a summary).
     const archiveText = arc.tldr || arc.sections[0]?.body.slice(0, 500) || arc.id;
     const archiveSha = sha256(archiveText);
     pending.push({
@@ -240,25 +311,8 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
         eu_embedding: eu,
       }),
     });
-    // Section nodes within this archive
     for (const sec of arc.sections) {
-      const fullText = `${sec.header}\n${sec.body}`;
-      const sha = sha256(fullText);
-      pending.push({
-        text: fullText,
-        sha,
-        nodeFactory: (eu) => ({
-          id: nodeIdSection("archive", arc.id, sec.idx, sha),
-          kind: "section",
-          source: "archive",
-          archive_id: arc.id,
-          section_idx: sec.idx,
-          sha256: sha,
-          header: sec.header,
-          text_excerpt: sec.body.slice(0, TEXT_EXCERPT_LEN),
-          eu_embedding: eu,
-        }),
-      });
+      pushSectionChunks("archive", arc.id, sec);
     }
   }
 
@@ -327,9 +381,14 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
 
   // ─── Pass 5: edges ───
 
+  // Temporal ordering key: section_idx first, chunk_idx within. Sorting
+  // by this gives the natural reading order across multi-chunk sections.
+  const temporalKey = (n: KGNode) =>
+    (n.section_idx ?? 0) * 100000 + (n.chunk_idx ?? 0);
+
   // (a) temporal edges within each source (live convo, then each archive)
   const liveSecNodes = nodes.filter((n) => n.kind === "section" && n.source === "convo");
-  liveSecNodes.sort((a, b) => (a.section_idx ?? 0) - (b.section_idx ?? 0));
+  liveSecNodes.sort((a, b) => temporalKey(a) - temporalKey(b));
   for (let i = 0; i < liveSecNodes.length - 1; i++) {
     edges.push({
       src: liveSecNodes[i].id,
@@ -348,7 +407,7 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
     }
   }
   for (const [, list] of byArc) {
-    list.sort((a, b) => (a.section_idx ?? 0) - (b.section_idx ?? 0));
+    list.sort((a, b) => temporalKey(a) - temporalKey(b));
     for (let i = 0; i < list.length - 1; i++) {
       edges.push({
         src: list[i].id,
@@ -390,6 +449,23 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
   fs.writeFileSync(nodesPath, nodesContent);
   fs.writeFileSync(edgesPath, edgesContent);
 
+  // ─── Build HNSW index over Euclidean embeddings ───
+  // Pure-TS HNSWIndex from ruflo's @claude-flow/memory. In-memory only
+  // (no native deps); we rebuild from nodes.jsonl on each query call,
+  // which is fast enough at our scale (~1000 nodes/edge).
+  // queryEdgeKG instantiates this same class and calls .search(query, k).
+  const hnsw = new HNSWIndex({
+    dimensions: MODEL_DIM,
+    M: HNSW_M,
+    efConstruction: HNSW_EF_CONSTRUCTION,
+    metric: "cosine",
+    maxElements: nodes.length + 100,  // headroom for incremental adds
+  });
+  for (const n of nodes) {
+    await hnsw.addPoint(n.id, new Float32Array(n.eu_embedding));
+  }
+  const hnswStats = hnsw.getStats();
+
   const manifest: KGManifest = {
     schema_version: SCHEMA_VERSION,
     edge_id: edge.edgeId,
@@ -397,6 +473,14 @@ export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
     model_id: MODEL_ID,
     model_dim: MODEL_DIM,
     poincare_curvature: POINCARE_CURVATURE,
+    chunk_max_size: CHUNK_MAX_SIZE,
+    chunk_overlap: CHUNK_OVERLAP,
+    chunk_strategy: CHUNK_STRATEGY,
+    chunk_min_size: CHUNK_MIN_SIZE,
+    hnsw_M: HNSW_M,
+    hnsw_efConstruction: HNSW_EF_CONSTRUCTION,
+    hnsw_efSearch: HNSW_EF_SEARCH,
+    hnsw_indexed_vectors: hnswStats.vectorCount,
     built_at: new Date().toISOString(),
     node_count: nodes.length,
     edge_count: edges.length,
@@ -429,20 +513,49 @@ export async function queryEdgeKG(
   if (!fs.existsSync(nodesPath)) {
     throw new Error(`KG not built for ${edge.edgeId}; run \`kg build ${edge.edgeId}\` first`);
   }
+
+  // Read all nodes once (we'll need their po_embedding + metadata for the
+  // pathfinder rescore step regardless of HNSW).
+  const lines = fs.readFileSync(nodesPath, "utf-8").split("\n").filter(Boolean);
+  const nodes: KGNode[] = lines.map((l) => JSON.parse(l));
+  if (nodes.length === 0) return [];
+
+  // Build HNSW index in memory from the persisted nodes. At ~1000 nodes
+  // per edge this rebuild is sub-second; for much larger edges we can
+  // memo it across calls (out of scope here).
+  const hnsw = new HNSWIndex({
+    dimensions: MODEL_DIM,
+    M: HNSW_M,
+    efConstruction: HNSW_EF_CONSTRUCTION,
+    metric: "cosine",
+    maxElements: nodes.length + 100,
+  });
+  for (const n of nodes) {
+    await hnsw.addPoint(n.id, new Float32Array(n.eu_embedding));
+  }
+
   // Embed query in both Euclidean and Poincaré spaces
   const qEuVec = await embed(queryText);
   const qEu = new Float32Array(qEuVec);
   const [qPo] = batchEuclideanToPoincare([qEu], { curvature: POINCARE_CURVATURE });
 
-  const lines = fs.readFileSync(nodesPath, "utf-8").split("\n").filter(Boolean);
+  // Stage 1: HNSW shortlist. We pull more than topK because the second-
+  // stage rescore (multiplying by hyperbolic-distance weight) can re-
+  // order neighbors. Pulling 4*topK is a common HNSW pattern.
+  const shortlistK = Math.min(nodes.length, Math.max(topK * 4, 20));
+  const hnswHits = await hnsw.search(qEu, shortlistK, HNSW_EF_SEARCH);
+
+  // Stage 2: rescore the shortlist with the pathfinder formula
+  // (cosine × 1/(1+hyperbolicDistance)). HNSW returned cosine *distance*
+  // (1 - similarity); convert back.
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const hits: QueryHit[] = [];
-  for (const line of lines) {
-    const node: KGNode = JSON.parse(line);
-    const eu = new Float32Array(node.eu_embedding);
+  for (const h of hnswHits) {
+    const node = nodeById.get(h.id);
+    if (!node) continue;
+    const cos = 1 - h.distance;  // HNSW cosine returns distance = 1 - sim
     const po = new Float32Array(node.po_embedding);
-    const cos = cosineSimilarity(qEu, eu);
     const hyp = hyperbolicDistance(qPo, po, { curvature: POINCARE_CURVATURE });
-    // Pathfinder score = cos * 1/(1+hyp). Tunable later.
     const score = cos * (1 / (1 + hyp));
     hits.push({
       id: node.id,
