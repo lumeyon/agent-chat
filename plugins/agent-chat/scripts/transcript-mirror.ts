@@ -185,25 +185,58 @@ interface RecordResult {
 function recordTurn(user: string, assistant: string, convDir: string): RecordResult {
   // Use --stdin to avoid argv length limits (commonly hit for >4KB
   // bodies). Pass the JSON {user, assistant} on stdin.
+  //
+  // Retry on rc=1 with bounded backoff. The most common failure is a
+  // concurrent writer holding boss-orion/CONVO.md.turn.lock — a few
+  // hundred ms is usually enough for the lock to release. Without the
+  // retry, a burst of concurrent hook firings can drop hundreds of
+  // turns silently (motivated by the 272-fail incident).
   const payload = JSON.stringify({ user, assistant });
   const env = {
     ...process.env,
     AGENT_CHAT_CONVERSATIONS_DIR: convDir,
   };
-  const result = child_process.spawnSync(
-    "bun",
-    [RECORD_TURN_BIN, "record-turn", "--stdin"],
-    {
-      input: payload,
-      env,
-      timeout: 30000,
-      encoding: "utf-8",
-    },
-  );
+  const MAX_ATTEMPTS = 4;
+  // Backoff: 0, 100ms, 300ms, 700ms (jittered to avoid thundering herd).
+  const backoffsMs = [0, 100, 300, 700];
+
+  let lastResult: ReturnType<typeof child_process.spawnSync> | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      const base = backoffsMs[attempt];
+      const jitter = Math.floor(Math.random() * 50);
+      const sleepFor = base + jitter;
+      // Synchronous sleep — we're already inside spawnSync's blocking model
+      const end = Date.now() + sleepFor;
+      while (Date.now() < end) { /* spin */ }
+    }
+    lastResult = child_process.spawnSync(
+      "bun",
+      [RECORD_TURN_BIN, "record-turn", "--stdin"],
+      {
+        input: payload,
+        env,
+        timeout: 30000,
+        encoding: "utf-8",
+      },
+    );
+    const rc = lastResult.status ?? -1;
+    if (rc === 0) break;
+    // Only retry transient failures (lock contention errors print
+    // patterns like "lock held" / "edge is locked" / fs EBUSY-style).
+    // For unknown errors, retry once more before giving up; for
+    // explicit non-lock errors (bad input, malformed config), bail.
+    const stderr = lastResult.stderr ?? "";
+    const isTransient =
+      /lock|EBUSY|EAGAIN|ENOLCK|busy|contention|already in progress/i.test(
+        stderr.toString(),
+      );
+    if (!isTransient && attempt >= 1) break; // fail fast on real errors
+  }
   return {
-    rc: result.status ?? -1,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    rc: lastResult?.status ?? -1,
+    stdout: lastResult?.stdout?.toString() ?? "",
+    stderr: lastResult?.stderr?.toString() ?? "",
   };
 }
 

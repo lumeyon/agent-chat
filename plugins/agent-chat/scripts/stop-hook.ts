@@ -106,18 +106,68 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Project-scoping: this hook is registered globally in
+  // ~/.claude/settings.json so it fires for EVERY Claude Code session on
+  // the host. Without scoping, a session in /data/eyon/git/riverdale (or
+  // any other repo) would mirror its transcript onto whichever
+  // agent-chat edge happened to match the speaker — corrupting unrelated
+  // edges with content from elsewhere.
+  //
+  // Rule: only proceed if there's an agent-chat session record whose
+  // cwd equals (or is a parent of) the hook payload's cwd. If no
+  // session matches, the user has no agent-chat identity in this Claude
+  // Code session and there's nothing legitimate to record.
+  const hookCwd = payload.cwd ?? "";
+  if (hookCwd) {
+    const sessionsDir = path.join(CONV_DIR, ".sessions");
+    let matched = false;
+    if (fs.existsSync(sessionsDir)) {
+      for (const f of fs.readdirSync(sessionsDir)) {
+        if (f.endsWith(".current_speaker.json") || !f.endsWith(".json")) continue;
+        try {
+          const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
+          const sessCwd = s?.cwd ?? "";
+          if (!sessCwd) continue;
+          // Match if hookCwd is the same as sessCwd or a subdirectory of it.
+          if (hookCwd === sessCwd || hookCwd.startsWith(sessCwd + "/")) {
+            matched = true;
+            break;
+          }
+        } catch { /* ignore malformed records */ }
+      }
+    }
+    if (!matched) {
+      log(`hook skipped: cwd="${hookCwd}" does not match any agent-chat session`);
+      process.exit(0);
+    }
+  }
+
   log(`hook fired: session=${payload.session_id ?? "?"} transcript=${transcript}`);
 
   // 1) Mirror new turns into CONVO.md (idempotent via record-turn ledger)
   const mirror = spawnQuiet("bun", [MIRROR_BIN, "--backfill", transcript], 60_000);
   if (mirror.rc !== 0) {
-    log(`mirror failed: rc=${mirror.rc} stderr=${mirror.stderr.slice(0, 300)}`);
+    log(`mirror failed: rc=${mirror.rc} stderr=${mirror.stderr.slice(0, 800)}`);
   } else {
     // Find the result line ("backfill done. total=...")
     const resultLine = mirror.stdout
       .split("\n")
       .find((l) => l.includes("backfill done."));
     if (resultLine) log(`mirror: ${resultLine.trim()}`);
+    // Even with rc=0, individual pairs may have failed. Surface the
+    // first few failure lines so we don't have silent corruption like
+    // the 272-fail burst that motivated this fix.
+    const failureLines = mirror.stderr
+      .split("\n")
+      .filter((l) => l.includes("failed:"))
+      .slice(0, 3);
+    if (failureLines.length > 0) {
+      log(`mirror per-pair failures (first ${failureLines.length}): ${failureLines.join(" | ").slice(0, 800)}`);
+    }
+    // Also detect summary-level failure count > 0
+    if (resultLine && /failed=([1-9])/.test(resultLine)) {
+      log(`mirror summary indicates failures: ${resultLine.trim()}`);
+    }
   }
 
   // 2) Auto-archive the active edge for this turn.
