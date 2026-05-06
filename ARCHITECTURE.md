@@ -3070,3 +3070,205 @@ Self-explanatory. The doc was 8 rounds out of date.
 0.5.0 → 0.6.0 reflects the orchestrator-grade automation layer
 shipping. Prior rounds added primitives; this round wires them into
 an end-to-end "orion intelligently dispatches" workflow.
+
+---
+
+## Round 15l — Per-agent runtime selection (Claude vs Codex wired into cmdRun)
+
+Codex runtime adapter (Round-15i) was implemented but never reachable from
+cmdRun, which hardcoded `import { runClaude } from "./llm.ts"`. Round-15l
+wires it via `lib.resolveRuntime(topo, agent)` with three-tier resolution
+(env > yaml > auto-detect). cmdRun does `await import("./runtimes/" +
+runtimeName + ".ts")` per tick. Both adapters now return `reason: "ok"`
+on success for shape symmetry. Surface: `agent-chat doctor --runtimes`.
+
+The big shift: lib.RuntimeName + ALL_RUNTIMES become the single source
+of truth for what runtimes the codebase supports. New runtimes drop
+into `scripts/runtimes/<name>.ts` + the type union.
+
+Plus slice A: `bootstrap.md` `$AGENT_CHAT_DIR` probe extended to find
+Codex marketplace clones (`~/.codex/.tmp/marketplaces/...`) so a Codex
+session reading SKILL.md on first turn finds the install transparently.
+
+Plus slice D: `scripts/notify.ts` push-notification watcher. fs.watch on
+`.turn` files; emits one stdout line per state transition. Designed for
+Claude Code's `Monitor` tool: persistent: true, each transition becomes
+a notification — push, not poll. `ScheduleWakeup` polls cost a full
+context re-load per check; the watcher cuts that to zero for the common
+case of "peer flipped to me." `agent-chat watch` is the CLI wrapper.
+
+## Round 15m — Codex autowatch service (lumeyon's slice)
+
+Codex doesn't have Claude Code's `Monitor` tool, so the same notification
+mechanism doesn't translate. Round-15m's answer: an autonomous `agent-chat
+autowatch` command that polls `.turn` files and invokes `agent-chat run`
+when an edge hands the floor to that agent. Plus `install-autowatch-systemd.ts`
+that installs as a user-level systemd service with restart semantics.
+
+Critical guard: presence-conflict check. autowatch refuses to start (or
+exits gracefully on its next tick) if another live session for the same
+agent is alive. The empirical motivator: during this round, codex
+accidentally left two autowatch services running while the user had
+interactive sessions for the same identities; the autowatch composed
+sections "as orion" while the real orion session was alive, producing
+the audit-trail-confusing "who wrote that?" failure mode. Presence-
+conflict guard prevents recurrence.
+
+Plus a Codex-shaped marketplace.json at `.agents/plugins/marketplace.json`
+(parallel to the existing Claude-shaped one at `.claude-plugin/marketplace.json`)
+to address Codex's stricter `source: { source: "local", path: ... }` +
+`policy: { installation: "AVAILABLE" }` requirements. Both marketplace
+shapes coexist; neither breaks.
+
+Plus `--dangerously-bypass-approvals-and-sandbox` in the codex.ts adapter
+for headless service contexts (systemd-launched processes have no terminal
+for approval prompts and inherit no usable sandbox config). Opt-back-in
+via `AGENT_CHAT_CODEX_SANDBOXED=1`.
+
+## Round 15n — notify.ts self-flip suppression
+
+`notify.ts` (Round-15l-D) emitted `peer-flipped-to-me` on every transition
+where the new value matched id.name — including transitions THIS agent
+authored (authoritative atomic rewrite for stale-lock recovery, or any
+concurrent agent-chat-run process running as the same identity). False-
+positive notifications eroded the signal value of push notifications:
+the user's "ScheduleWakeup polls cost API calls" insight applies equally
+to false push-notifications.
+
+Three approaches considered (lock-body sidechannel; dual fs.watch on lock
++ turn; writer identity in the wire format). Ack'd option B (dual fs.watch
++ per-edge lock-holder snapshots with TTL) as additive + non-protocol-
+breaking.
+
+Two empirical surprises during implementation:
+1. Bun's `fs.watch` on a file path BREAKS on rename-replace (atomic-rewrite
+   via `.tmp` + `mv` leaves a new inode the watcher isn't on). Workaround:
+   watch the EDGE DIRECTORY and filter by basename — captures all events
+   for any file inside.
+2. Bun's `fs.watch` can fire the source-rename event for `mv tmp dest`
+   BEFORE the dest replacement settles. checkEdge sees the still-old `.turn`,
+   returns early. Workaround: schedule a 100ms delayed re-check after
+   temp-file rename events.
+
+Both lessons are durable wisdom worth keeping (filed as lessons in
+`<conv>/.lessons/orion/` — Round-15o).
+
+## Round 15o — Cross-edge crystallized lessons (the LAST closed loop)
+
+The strategic moment: the user asked whether to pivot to ruflo (140k LoC,
+30+ plugins, swarm coordinator, federation, AgentDB, etc.) or to rebuild
+on top of `tree-of-knowledge` (their previous attempt at multi-agent
+knowledge accumulation). My read after auditing both: keep agent-chat,
+but add ONE more closed loop that ToK was trying to solve.
+
+**ToK's failure mode**: EVIDENCE.md files accumulated as append-only
+diary, but no read path consulted them during reasoning. Storage without
+surfacing is a Wiki, not a learning system. Knowledge requires a
+**closed loop where today's writes deterministically change tomorrow's
+reads.**
+
+agent-chat already had five such loops (per-edge archives, per-agent
+scratchpad, Dot Collector, role overrides, relay paths). Missing:
+**cross-edge crystallized lessons** — wisdom an agent extracts from
+many conversations and consults during future reasoning.
+
+Round-15o adds the loop with the same closing pattern that already
+works five times (the cmdRun prompt surface):
+
+- `<lesson topic="kebab-slug">body</lesson>` directive in cmdRun output
+- Storage: `<conv>/.lessons/<agent>/<topic>.md`, append-only, dated
+  headers per addition (multiple lessons on same topic accumulate as
+  a trail)
+- `composeLessonsPromptBlock` surfaces the headline (first non-empty
+  line of most-recent dated entry) for each topic in next cmdRun's
+  prompt, capped at 2 KB
+- Per-agent isolation: orion's lessons never leak into lumeyon's prompt
+- `agent-chat lessons <list|get|set|clear>` CLI for out-of-band access
+
+After Round-15o, the architecture is **structurally complete** for
+"agents acquire valuable knowledge over time and re-use it":
+
+| Scale | Loop |
+|---|---|
+| Per-edge knowledge | archives |
+| Per-agent autobiographical | scratchpad |
+| **Per-agent crystallized** | **lessons (NEW)** |
+| Per-network competence | Dot Collector |
+| Per-network specialty | role overrides |
+| Per-network routing | relay paths |
+
+There is no obvious 7th loop. The test of the architecture is now using
+it, not extending it.
+
+## Round 15p — Architectural decision: ephemeral-spawn over codex-app
+
+The user's strategic observation: the "two long-running interactive
+terminals" pattern (Claude session + Codex session, human types into
+each) has high coordination cost. Codex doesn't act unless the user
+types in his terminal. Claude (orion) tends to yield after each
+substantive response, expecting the user's next prompt. Round-15p
+addresses both.
+
+Architecture decision: **drop the codex-live-app-server proposal even
+though both empirical probes (`fs/watch`, `thread/resume`) PASSED.**
+
+Both architectures are technically viable for live cross-runtime
+collaboration:
+- App-server: long-lived `codex app-server` controller process, JSON-RPC
+  client in agent-chat, persistent threadId per agent, `turn/start` /
+  `turn/steer` orchestration
+- Ephemeral-spawn: fresh `codex exec` per dispatch, context rebuilt from
+  CONVO.md tail + scratchpad + lessons + roster on each spawn (the
+  Round-15l-already-shipped runtime adapter wiring)
+
+**Empirical receipt for ephemeral-spawn working**: Round-15p Phase A
+(`scripts/cross-runtime-integration-test.ts`) hit 16/16 PASS — orion-via-
+Codex and lumeyon-via-Claude exchanged turns on a shared CONVO.md edge
+with full token round-trip, clean lock release, correct turn semantics.
+This is the first end-to-end empirical proof of the dual-runtime claim
+(every prior round had hermetic test coverage of components but no
+real-LLM integration).
+
+Decision: ephemeral-spawn is strictly simpler — zero long-lived
+processes, no JSON-RPC client, no thread-id persistence, bounded failure
+modes (each spawn fails or succeeds independently). The persistent-thread
+machinery would only be load-bearing if context couldn't be rebuilt from
+durable filesystem state. For agent-chat's filesystem-mediated protocol,
+context CAN be rebuilt — every spawn has access to CONVO.md tail +
+scratchpad + lessons + roster + dots. So app-server's complexity buys
+no functional capability.
+
+Codified declaratively: `agents.<topology>.yaml` now carries a `runtimes:`
+section per agent. `runtimes: { orion: claude, lumeyon: codex, ... }`.
+`lib.resolveRuntime` reads it. cmdRun's `<dispatch peer="X">` directive
+spawns the right runtime for X.
+
+The mental model shift: **"Claude driver + ephemeral codex workers"**
+(ruflo's pattern) replaces "two long-running interactive terminals."
+Lower coordination cost, no zombie watchers, no per-turn user typing in
+two windows. Lumeyon's interactive terminal session becomes optional UI,
+not load-bearing.
+
+The codex-app-server proposal lives on as a **superseded** doc with
+preserved probe results — durable evidence that if a future requirement
+demands true persistent live-thread continuity (e.g. IDE attachment to
+a running model session), the implementation surface is small enough
+to land in 1-2 commits.
+
+---
+
+After Round-15p, the project status is:
+
+- Architecture structurally complete (six closed learning loops, dual-
+  runtime empirically demonstrated, push notifications without polling,
+  audit trail as design document)
+- 399 unit tests / 88 self-test / 205 network-test / 16 cross-runtime
+  integration — 0 fail
+- Six rounds (15l/m/n/o/p) shipped across two contributors with the
+  petersen graph mediating coordination
+- `docs/codex-live-app-server-proposal.md` superseded; `docs/codex-app-server-phase-a-results.md`
+  preserved as durable empirical record
+
+The product is **done in the sense that there is no obvious next
+architectural slice to add**. Future work is using it for real coding
+agents on real engineering problems.
