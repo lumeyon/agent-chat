@@ -86,8 +86,8 @@ describeIf("real-LLM round-trip (gated by RUN_LLM_TESTS=1)", () => {
       // its turn, not bootstrap the conversation.
       const orionEnv = sessionEnv(CONVO_DIR, "orion", "pair");
       const lumeyonEnv = sessionEnv(CONVO_DIR, "lumeyon", "pair");
-      runScript("agent-chat.ts", ["init", "orion", "pair", "--no-monitor"], orionEnv);
-      runScript("agent-chat.ts", ["init", "lumeyon", "pair", "--no-monitor"], lumeyonEnv);
+      runScript("agent-chat.ts", ["init", "orion", "pair"], orionEnv);
+      runScript("agent-chat.ts", ["init", "lumeyon", "pair"], lumeyonEnv);
       runScript("turn.ts", ["init", "lumeyon", "orion"], orionEnv);
 
       const edgeDir = path.join(CONVO_DIR, "pair", "lumeyon-orion");

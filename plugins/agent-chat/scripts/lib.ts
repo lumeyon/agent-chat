@@ -537,13 +537,6 @@ export type SessionRecord = {
   started_at: string;
   cwd: string;
   tty?: string;
-  monitor_pid?: number;
-  monitor_pid_starttime?: number;
-  // Sidecar daemon fields (slice 1+). Mirror monitor_pid pair for the same
-  // pid-recycling defense (processIsOriginal). Optional so legacy session
-  // records keep working unchanged.
-  sidecar_pid?: number;
-  sidecar_pid_starttime?: number;
   // Last speaker recorded by `agent-chat record-turn` in this session. Used
   // by record-turn to detect speaker switches and emit a handoff section on
   // the OLD edge before routing the next turn to the NEW edge. Optional so
@@ -552,27 +545,13 @@ export type SessionRecord = {
   // Round-15c (Contract A): synthetic SessionRecord pre-written by a
   // dispatcher (cmdRun --speaker, future human-AI ephemeral flows) before
   // spawning a `claude -p` ephemeral child. Distinguishes a synthetic
-  // dispatcher-owned record from a stalled real session so cmdGc + the
-  // monitor + doctor can classify it correctly. Optional; legacy records
-  // omit; default false.
+  // dispatcher-owned record from a normal interactive session. Optional;
+  // legacy records omit; default false.
   ephemeral?: boolean;
 };
 
 export const SESSIONS_DIR = path.join(CONVERSATIONS_DIR, ".sessions");
 export const PRESENCE_DIR = path.join(CONVERSATIONS_DIR, ".presence");
-// LOGS_DIR is rooted on CONVERSATIONS_DIR so that AGENT_CHAT_CONVERSATIONS_DIR
-// overrides redirect log writes too. Pre-fix, agent-chat.ts hardcoded
-// path.join(SKILL_ROOT, "conversations", ".logs") for monitor logs and
-// --prune-logs, which broke env-var-aware test harnesses (carina/cadence P1
-// "silent destructive on a path the env-var-aware harness assumes hermetic").
-export const LOGS_DIR = path.join(CONVERSATIONS_DIR, ".logs");
-// SOCKETS_DIR holds per-agent Unix domain sockets for the sidecar daemon.
-// Same env-var rooting as the other control dirs.
-export const SOCKETS_DIR = path.join(CONVERSATIONS_DIR, ".sockets");
-// HEARTBEATS_DIR moved to scripts/liveness.ts in Round-13 Phase-2 (single
-// source of truth for the heartbeat schema across slice 1/2/3). The
-// directory is created lazily on first write via writeFileAtomic's
-// mkdirSync — no entry needed in ensureControlDirs.
 
 // Round-15a: ScheduleWakeup delay tuned to keep Anthropic's prompt cache
 // warm. Cache TTL is 5 minutes; sleeping past 300s pays a full cache-miss
@@ -610,6 +589,10 @@ export function scratchPath(agent: string): string {
   // pattern; defense against agent names that could escape the dir).
   const safe = agent.replace(/[^A-Za-z0-9_-]/g, "_");
   return path.join(SCRATCH_DIR, `${safe}.md`);
+}
+
+function safeAgent(agent: string): string {
+  return agent.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
 // Read the agent's scratchpad. Returns "" if no scratchpad exists yet
@@ -913,40 +896,9 @@ export function relayPathTo(topo: Topology, from: string, to: string): string[] 
 export function ensureControlDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
-  fs.mkdirSync(LOGS_DIR, { recursive: true });
-  fs.mkdirSync(SOCKETS_DIR, { recursive: true });
   fs.mkdirSync(ROLES_DIR, { recursive: true });
   fs.mkdirSync(DOTS_DIR, { recursive: true });
 }
-
-// Per-agent path helpers. All sanitize the agent name the same way
-// presenceFile() does (lyra L1 defense-in-depth).
-function safeAgent(agent: string): string {
-  return agent.replace(/[^A-Za-z0-9_-]/g, "_");
-}
-
-export function socketPathFor(agent: string): string {
-  return path.join(SOCKETS_DIR, `${safeAgent(agent)}.sock`);
-}
-
-export function pidFilePath(agent: string, kind: "sidecar" | "monitor"): string {
-  return path.join(SOCKETS_DIR, `${kind}-${safeAgent(agent)}.pid`);
-}
-
-export function cursorsFilePath(agent: string): string {
-  return path.join(SOCKETS_DIR, `${safeAgent(agent)}.cursors.json`);
-}
-
-export function logPathFor(agent: string, kind: "sidecar" | "monitor"): string {
-  return path.join(LOGS_DIR, `${kind}-${safeAgent(agent)}.log`);
-}
-
-// Round-13 slice 1: heartbeat schema lives in scripts/liveness.ts (single
-// source of truth across slices 1/2/3). Slice-1 contributes the WRITER
-// (formatHeartbeat in liveness.ts; sidecar.ts startHeartbeatEmitter wires
-// it). pid + starttime fingerprint matches lockTag (Round-4) and is
-// verified by processIsOriginal (Round-9): when monitor reports
-// stuck-but-pid-alive, this is the field to grep.
 
 // ---------------------------------------------------------------------------
 // current_speaker.json — slice 2 (multi-user transparency).
@@ -959,10 +911,9 @@ export function logPathFor(agent: string, kind: "sidecar" | "monitor"): string {
 // not in a live-state file). Mode 0600 to avoid leaking human identity to
 // other local users on shared hosts (pulsar's mode recommendation).
 //
-// Lifecycle: written by `agent-chat speaker <name>`, read on every dispatch
-// by sidecar's whoami/speaker UDS methods (no caching — same lesson as
-// orion's Bug 1 fix for monitor_pid), unlinked by `agent-chat exit` and
-// reclaimed by `agent-chat gc` for orphan session_keys.
+// Lifecycle: written by `agent-chat speaker <name>`, read by `record-turn`
+// and `cmdRun --speaker`, unlinked by `agent-chat exit` and reclaimed by
+// `agent-chat gc` for orphan session_keys.
 // ---------------------------------------------------------------------------
 
 export const CURRENT_SPEAKER_FILE_SUFFIX = ".current_speaker.json";
@@ -1006,9 +957,8 @@ export function writeCurrentSpeaker(key: string, name: string): void {
   writeFileAtomic(currentSpeakerPath(key), json, { mode: 0o600 });
 }
 
-// ENOENT-tolerant unlink. Mirrors agent-chat.ts:safeUnlink for callers that
-// need it from lib.ts (sidecar.ts, tests, future modules) without forcing
-// them to import from agent-chat.ts. Returns true if the file was removed,
+// ENOENT-tolerant unlink. Shared by CLIs and tests that need cleanup
+// without importing from agent-chat.ts. Returns true if the file was removed,
 // false if it was already gone (peer race or already-cleaned). Throws on
 // any other error so a real EACCES / EBUSY surfaces.
 export function safeUnlink(p: string): boolean {
@@ -1094,11 +1044,11 @@ export function resolveDefaultSpeaker(): DefaultSpeakerResolution {
 //   1. $CLAUDE_SESSION_ID / $CLAUDE_CODE_SESSION_ID — explicit session id,
 //      if the runtime sets one.
 //   2. `pid:<stableSessionPid>` — derived from the long-lived agent runtime
-//      ancestor (Claude Code main process via /proc walk on Linux, or
-//      process.ppid on plain shell / non-Linux). Each Claude Code instance
-//      has a different main pid, so two instances on the same host get
-//      different keys. Stable across every bun invocation within a session
-//      because the ancestor pid doesn't change.
+//      ancestor (Claude Code / Codex main process via marker walk, or
+//      process.ppid on plain shell). Each runtime instance has a different
+//      main pid, so two instances on the same host get different keys.
+//      Stable across every bun invocation within a session because the
+//      ancestor pid doesn't change.
 //
 // We deliberately do NOT key by $CLAUDE_CODE_SSE_PORT: empirically, two
 // Claude Code instances under the same VS Code remote dev parent can share
@@ -1149,9 +1099,8 @@ export function writeSessionRecord(rec: SessionRecord): void {
   // Mode 0o600 (owner-only): session and presence records contain
   // identity-tagged data (`agent: <name>@<host>:<pid>`); on a shared host,
   // 0o644 default would leak the identifier to other local users. Same
-  // rationale that justified 0o600 on .sockets/<agent>.sock and on the
-  // current_speaker.json file shipped in the multi-user rollout. Caught at
-  // Phase-4 cross-review by lumeyon as mode-asymmetry concern; uniform
+  // rationale as current_speaker.json in the multi-user rollout. Caught
+  // at Phase-4 cross-review by lumeyon as mode-asymmetry concern; uniform
   // 0o600 across all per-session writes is the defense-in-depth answer.
   const json = JSON.stringify(rec, null, 2) + "\n";
   writeFileAtomic(sessionFile(rec.session_key), json, { mode: 0o600 });
@@ -1175,14 +1124,14 @@ export function deleteSessionRecord(rec: SessionRecord): void {
 
 // Round-15c (Contract A): Pre-write synthetic identity state for a
 // dispatched ephemeral child so its in-process `agent-chat record-turn`
-// invocation can resolve speaker without a live sidecar. Returns the
-// synthetic session key (export as CLAUDE_SESSION_ID into the child's
-// env) plus a cleanup() function that unlinks the pre-written files.
+// invocation can resolve speaker. Returns the synthetic session key
+// (export as CLAUDE_SESSION_ID into the child's env) plus a cleanup()
+// function that unlinks the pre-written files.
 //
 // Carina's Phase-1 break-point analysis: under ephemeral mode,
-// `cmdRecordTurn:1238` calls `fetchSpeaker(id.name, key)` which fails
-// (no sidecar → no UDS, no speaker file → null), exit 64. This helper
-// is the file-side primitive that closes the gap.
+// `cmdRecordTurn` calls `fetchSpeaker(id.name, key)` which fails when no
+// speaker file exists. This helper is the file-side primitive that closes
+// the gap for ephemeral children.
 //
 // Usage:
 //   const { sessionKey, cleanup } = prepareEphemeralIdentity({
@@ -1191,11 +1140,11 @@ export function deleteSessionRecord(rec: SessionRecord): void {
 //   process.env.CLAUDE_SESSION_ID = sessionKey;
 //   try { await runClaude({ ... }); } finally { cleanup(); }
 //
-// The synthetic record carries `ephemeral: true` so cmdGc + monitor +
-// doctor can distinguish it from a stalled real session. `parent` is
-// the dispatcher's SessionRecord — its pid + starttime are inherited
-// (the parent is alive while the child runs; pid-recycle defense via
-// processIsOriginal works against the parent's identity).
+// The synthetic record carries `ephemeral: true` so cmdGc + doctor can
+// distinguish it from a normal session. `parent` is the dispatcher's
+// SessionRecord — its pid + starttime are inherited (the parent is alive
+// while the child runs; pid-recycle defense via processIsOriginal works
+// against the parent's identity).
 export function prepareEphemeralIdentity(input: {
   agent: string;
   speaker: string;
@@ -1238,13 +1187,13 @@ export function listSessions(): SessionRecord[] {
     try {
       const parsed = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), "utf8"));
       // Defensive shape validation: SESSIONS_DIR also holds per-session
-      // sidecar artifacts like `<key>.current_speaker.json` that share the
+      // live-state files like `<key>.current_speaker.json` that share the
       // `.json` suffix but are NOT SessionRecords. Pre-fix, those files
       // contaminated the return — `cmdWho`'s `r.agent.padEnd(...)` then
       // crashed on `undefined`. Caught at Phase-4 cross-review by lumeyon
       // (multi-user rollout); the fix is general defense against any future
       // foreign `.json` file in SESSIONS_DIR (test fixtures, manual
-      // breadcrumbs, future feature sidecars).
+      // breadcrumbs, future live-state files).
       if (!parsed || typeof parsed.agent !== "string" || typeof parsed.session_key !== "string") continue;
       out.push(parsed as SessionRecord);
     } catch {}
@@ -1408,33 +1357,60 @@ export function displayTag(name: string): string {
 export const processTag = displayTag;
 
 // Lock-file fingerprint: agent@host:<stable-session-pid>. The lock body
-// records the long-lived agent runtime ancestor pid (Claude Code main
+// records the long-lived agent runtime ancestor pid (Claude Code/Codex main
 // process, or the user's terminal pid for plain shell), NOT the
 // short-lived bun pid. With process.pid, every bun spawn looks like a
 // "stale lock" the moment it returns; with stableSessionPid, the lock
-// looks fresh as long as the Claude Code session is alive, and goes
-// stale only when that session genuinely exits.
-// Lock body wire format: `<agent>@<host>:<pid>:<starttime> <ts>` (4-tuple).
-// The previous format was `<agent>@<host>:<pid> <ts>` (3-tuple); parseLockFile
-// accepts both for one release so an in-flight upgrade doesn't strand
-// already-held locks. Embedding starttime lets unlock/flip/park reject foreign
-// recycled-pid claimants the same way SessionRecord+processIsOriginal does.
+// looks fresh as long as the agent session is alive, and goes stale only
+// when that session genuinely exits.
+// Lock body wire format:
+//   `<agent>@<host>:<pid>:<starttime>:<session_key> <ts>` (5-tuple).
+// Older formats were `<agent>@<host>:<pid>:<starttime> <ts>` (4-tuple)
+// and `<agent>@<host>:<pid> <ts>` (3-tuple); parseLockFile accepts both
+// so an in-flight upgrade doesn't strand already-held locks. Embedding
+// starttime rejects recycled-pid claimants; embedding session_key lets
+// same-agent lock checks distinguish two live sessions even when process
+// ancestry is ambiguous under test runners or nested shells.
 export function lockTag(name: string): string {
   const sp = stableSessionPid();
   const st = pidStarttime(sp);
-  return `${name}@${os.hostname()}:${sp}:${st ?? 0}`;
+  return `${name}@${os.hostname()}:${sp}:${st ?? 0}:${encodeURIComponent(currentSessionKey())}`;
 }
 
-// Parse a lock file body of the form "<agent>@<host>:<pid>:<starttime> <ts>"
-// (new) or "<agent>@<host>:<pid> <ts>" (legacy). When the legacy form is
-// observed, `starttime` is null and callers fall back to pidIsAlive.
+export type LockRecord = {
+  agent: string;
+  host: string;
+  pid: number;
+  starttime: number | null;
+  session_key?: string;
+  ts: string;
+};
+
+// Parse a lock file body in the current 5-tuple form, or the older 4-tuple
+// / 3-tuple forms. When an old form is observed, missing fields remain
+// absent/null and callers fall back to conservative pid/starttime checks.
 export function parseLockFile(
   p: string,
-): { agent: string; host: string; pid: number; starttime: number | null; ts: string } | null {
+): LockRecord | null {
   if (!fs.existsSync(p)) return null;
   const text = fs.readFileSync(p, "utf8").trim();
-  // Try 4-tuple first.
-  let m = text.match(/^(\S+)@([^:\s]+):(\d+):(\d+)\s+(\S+)$/);
+  // Current 5-tuple.
+  let m = text.match(/^(\S+)@([^:\s]+):(\d+):(\d+):([^:\s]+)\s+(\S+)$/);
+  if (m) {
+    const st = parseInt(m[4], 10);
+    let sessionKey: string | undefined;
+    try { sessionKey = decodeURIComponent(m[5]); } catch { sessionKey = m[5]; }
+    return {
+      agent: m[1],
+      host: m[2],
+      pid: parseInt(m[3], 10),
+      starttime: st > 0 ? st : null,
+      session_key: sessionKey,
+      ts: m[6],
+    };
+  }
+  // 4-tuple without session_key.
+  m = text.match(/^(\S+)@([^:\s]+):(\d+):(\d+)\s+(\S+)$/);
   if (m) {
     const st = parseInt(m[4], 10);
     return { agent: m[1], host: m[2], pid: parseInt(m[3], 10), starttime: st > 0 ? st : null, ts: m[5] };
@@ -1443,6 +1419,13 @@ export function parseLockFile(
   m = text.match(/^(\S+)@([^:\s]+):(\d+)\s+(\S+)$/);
   if (!m) return null;
   return { agent: m[1], host: m[2], pid: parseInt(m[3], 10), starttime: null, ts: m[4] };
+}
+
+export function lockBelongsToCurrentSession(lk: LockRecord): boolean {
+  if (lk.session_key != null) return lk.session_key === currentSessionKey();
+  const myStablePid = stableSessionPid();
+  const myStarttime = pidStarttime(myStablePid);
+  return lk.pid === myStablePid && lk.starttime != null && myStarttime != null && lk.starttime === myStarttime;
 }
 
 export function pidIsAlive(pid: number): boolean {
@@ -1513,44 +1496,43 @@ export function processIsOriginal(pid: number, expected: number | null | undefin
 }
 
 // Find the pid of the long-lived agent runtime that ultimately spawned the
-// current bun process. Under Claude Code, every Bash() invocation gets a
-// freshly-spawned shell as its parent, so process.ppid is dead by the time
-// anyone checks. We need an ancestor pid that survives the whole user
-// session.
+// current bun process. Under Claude Code and Codex, each tool invocation may
+// get a freshly-spawned shell as its parent, so process.ppid is often too
+// short-lived for lock ownership. We need an ancestor pid that survives the
+// whole user session.
 //
-// Strategy: Claude Code sets CLAUDECODE=1 in the env of its child processes.
-// That means every descendant of the Claude Code main process has the
-// marker, but the Claude Code process itself does NOT (its own env was
-// inherited from the user's shell, which doesn't set it). So the Claude
-// Code main process is the first ancestor *without* the marker whose
-// child *had* it.
-//
-// Walk up /proc/<pid>/status (Linux only); track whether the previous
-// (deeper) ancestor had the marker; return the first ancestor where we
-// transition from has-marker → no-marker. Falls back to process.ppid for
-// plain shells, non-Linux platforms, when /proc isn't readable, or when
-// the current process isn't running under Claude Code.
+// Strategy: descendants carry a runtime marker (CLAUDECODE=1 for Claude
+// Code, CODEX_THREAD_ID for Codex) that the runtime parent itself does not.
+// Walk ancestors and return the first marker-present → marker-absent
+// transition. Falls back to process.ppid for plain shells, non-Linux/macOS
+// platforms, or unreadable process metadata.
 export function stableSessionPid(): number {
-  if (process.env.CLAUDECODE !== "1") {
-    // Plain shell / Codex: ppid is the user's terminal, which is itself
-    // long-lived enough.
-    return process.ppid || process.pid;
+  if (process.env.CLAUDECODE === "1") {
+    if (process.platform === "linux") return stableSessionPidLinux("CLAUDECODE", "1", "Claude Code");
+    if (process.platform === "darwin") return stableSessionPidDarwin("CLAUDECODE", "1");
   }
-  if (process.platform === "linux") return stableSessionPidLinux();
-  if (process.platform === "darwin") return stableSessionPidDarwin();
+  if (process.env.CODEX_THREAD_ID) {
+    // Codex descendants carry CODEX_THREAD_ID, but the long-lived Codex CLI
+    // parent does not. Use the same marker-transition walk as Claude so
+    // lock identity is stable across short-lived Bun subprocesses.
+    if (process.platform === "linux") return stableSessionPidLinux("CODEX_THREAD_ID", process.env.CODEX_THREAD_ID, "Codex");
+    if (process.platform === "darwin") return stableSessionPidDarwin("CODEX_THREAD_ID", process.env.CODEX_THREAD_ID);
+  }
+  // Plain shell: ppid is the user's terminal, which is itself long-lived
+  // enough for this protocol's lock ownership checks.
   return process.ppid || process.pid;
 }
 
-function stableSessionPidLinux(): number {
+function stableSessionPidLinux(markerName: string, markerValue: string, runtimeName: string): number {
   let pid = process.ppid;
-  let prevHadMarker = true; // we (the bun process) have CLAUDECODE=1 set
+  let prevHadMarker = true; // we (the bun process) have the runtime marker set
   const seen = new Set<number>();
   for (let depth = 0; depth < 30 && pid > 1 && !seen.has(pid); depth++) {
     seen.add(pid);
     let hasMarker = false;
     try {
       const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
-      hasMarker = environ.split("\0").includes("CLAUDECODE=1");
+      hasMarker = environ.split("\0").includes(`${markerName}=${markerValue}`);
     } catch { break; }
     if (prevHadMarker && !hasMarker) return pid;
     prevHadMarker = hasMarker;
@@ -1567,25 +1549,24 @@ function stableSessionPidLinux(): number {
   // an unusual process tree (daemonized parent, container init, etc.). Warn
   // so the user can investigate; lock identity is unstable in this state.
   if (seen.size >= 30) {
-    console.error(`[agent-chat] stableSessionPid: walked 30 ancestors without finding the Claude Code main process; falling back to ppid=${process.ppid}.`);
+    console.error(`[agent-chat] stableSessionPid: walked 30 ancestors without finding the ${runtimeName} main process; falling back to ppid=${process.ppid}.`);
   }
   return process.ppid || process.pid;
 }
 
-// macOS marker-walk. /proc isn't available; we shell out to `ps -E -o command=`
-// (env disclosure for our own user's processes only) to read each ancestor's
-// environment block, looking for the same CLAUDECODE=1 → no-CLAUDECODE
-// transition that the Linux walk uses. ~10ms per step, walk usually 1-3 deep
-// — acceptable for `init`/`lock`/`unlock` cadence.
-function stableSessionPidDarwin(): number {
+// macOS marker-walk. /proc isn't available; we shell out to `ps -E -o
+// command=` (env disclosure for our own user's processes only) to read each
+// ancestor's environment block, looking for the same marker-present →
+// marker-absent transition that the Linux walk uses. ~10ms per step, walk
+// usually 1-3 deep — acceptable for `init`/`lock`/`unlock` cadence.
+function stableSessionPidDarwin(markerName: string, markerValue: string): number {
   const cp = require("node:child_process") as typeof import("node:child_process");
   function envHasMarker(pid: number): boolean | null {
     try {
       const r = cp.spawnSync("ps", ["-E", "-p", String(pid), "-o", "command="], { encoding: "utf8", timeout: 2000 });
       if (r.status !== 0) return null;
-      // `ps -E` prepends the process's environment to the command. We just
-      // want to know whether `CLAUDECODE=1` appears anywhere in the line.
-      return / CLAUDECODE=1(\s|$)/.test(" " + r.stdout.trim());
+      // `ps -E` prepends the process's environment to the command.
+      return (` ${r.stdout.trim()} `).includes(` ${markerName}=${markerValue} `);
     } catch { return null; }
   }
   function ppidOf(pid: number): number | null {
@@ -1915,9 +1896,7 @@ export function splitForArchive(convoText: string, freshTailCount: number): Conv
 // and `.SSSSSSSSS` (ns). Pre-fix the regex hard-coded second-precision and
 // silently dropped any agent's section header using millisecond precision
 // (e.g. round-2 latency-poll spec instructed `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"`
-// for send_time and several agents echoed that into the section header,
-// causing those sections to parse as author=null and fall out of
-// `since-last-spoke` cursor calculations — keystone's round-1 sidecar fold).
+// for send_time and several agents echoed that into the section header).
 export function sectionMeta(section: string): { author: string; ts: string | null } {
   const m = section.match(/^##\s+([A-Za-z0-9_-]+)\s+—.*?\(UTC\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z)\)/m);
   if (!m) return { author: "unknown", ts: null };

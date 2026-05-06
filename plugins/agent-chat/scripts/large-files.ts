@@ -40,7 +40,7 @@ export type ExtractionResult = {
   body: string;
   // Number of large blocks that were pulled out.
   extracted: number;
-  // Paths of the large-file sidecar files written.
+  // Paths of the large-file companion files written.
   paths: string[];
 };
 
@@ -52,7 +52,7 @@ export function largeFilesDir(edgeDir: string): string {
 // by `^---$` separators per the existing CONVO format), and for any
 // section whose byte count exceeds LARGE_BLOCK_BYTE_THRESHOLD, replaces
 // the section content with a `<file>` placeholder + writes the full
-// content to a sha256-named sidecar file.
+// content to a sha256-named companion file.
 //
 // Sections that already contain a `<file ref="large-file:..."` placeholder
 // are passed through unchanged (extraction is idempotent).
@@ -78,9 +78,9 @@ export function extractLargeBlocks(body: string, edgeDir: string): ExtractionRes
       outParts.push(sec);
       continue;
     }
-    const { placeholder, sidecarPath } = extractOne(sec, edgeDir);
+    const { placeholder, companionPath } = extractOne(sec, edgeDir);
     outParts.push(placeholder);
-    paths.push(sidecarPath);
+    paths.push(companionPath);
     extracted++;
   }
 
@@ -113,16 +113,16 @@ function splitSections(body: string): string[] {
 
 function extractOne(sectionText: string, edgeDir: string): {
   placeholder: string;
-  sidecarPath: string;
+  companionPath: string;
 } {
   const sha = crypto.createHash("sha256").update(sectionText, "utf8").digest("hex");
   const dir = largeFilesDir(edgeDir);
   fs.mkdirSync(dir, { recursive: true });
-  const sidecarPath = path.join(dir, `${sha}.txt`);
+  const companionPath = path.join(dir, `${sha}.txt`);
   // Idempotent write: if a previous seal already extracted this exact
-  // content, the sidecar already exists and we don't need to rewrite.
-  if (!fs.existsSync(sidecarPath)) {
-    fs.writeFileSync(sidecarPath, sectionText);
+  // content, the companion file already exists and we don't need to rewrite.
+  if (!fs.existsSync(companionPath)) {
+    fs.writeFileSync(companionPath, sectionText);
   }
 
   const lines = sectionText.split("\n");
@@ -147,23 +147,23 @@ function extractOne(sectionText: string, edgeDir: string): {
     inline +
     `\n</file>`;
 
-  return { placeholder, sidecarPath };
+  return { placeholder, companionPath };
 }
 
 // inlineLargeFiles: reverse transform used by search.ts expand
 // --inline-large-files. Walks the body, finds `<file ref="large-file:...">`
-// blocks, replaces them with the sidecar content. Missing sidecar files
+// blocks, replaces them with the companion content. Missing companion files
 // are passed through with an obvious "[MISSING: <ref>]" marker so the
 // failure is visible rather than silent.
 export function inlineLargeFiles(body: string, edgeDir: string): string {
   const re = /<file\s+ref="large-file:([a-f0-9]+\.txt)"[^>]*>[\s\S]*?<\/file>/g;
   return body.replace(re, (_match, refName: string) => {
-    const sidecarPath = path.join(largeFilesDir(edgeDir), refName);
-    if (!fs.existsSync(sidecarPath)) {
+    const companionPath = path.join(largeFilesDir(edgeDir), refName);
+    if (!fs.existsSync(companionPath)) {
       return `[MISSING large-file: ${refName} not found in ${largeFilesDir(edgeDir)}]`;
     }
     try {
-      return fs.readFileSync(sidecarPath, "utf8");
+      return fs.readFileSync(companionPath, "utf8");
     } catch (e: any) {
       return `[ERROR reading large-file: ${refName}: ${e.message}]`;
     }

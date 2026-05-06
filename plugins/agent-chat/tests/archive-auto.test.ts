@@ -86,10 +86,8 @@ beforeEach(() => {
   SESSION_KEY = ORION_ENV.CLAUDE_SESSION_ID!;
   fs.mkdirSync(path.join(CONVO_DIR, ".sessions"), { recursive: true });
   fs.mkdirSync(path.join(CONVO_DIR, ".presence"), { recursive: true });
-  fs.mkdirSync(path.join(CONVO_DIR, ".sockets"), { recursive: true });
-  fs.mkdirSync(path.join(CONVO_DIR, ".logs"), { recursive: true });
   // Pre-stage the session record so resolveIdentity hits the file path
-  // (matches sidecar/speaker/append-turn test fixtures exactly).
+  // (matches speaker/append-turn test fixtures exactly).
   fs.writeFileSync(
     path.join(CONVO_DIR, ".sessions", `${SESSION_KEY}.json`),
     JSON.stringify({
@@ -282,7 +280,7 @@ describe("agent-chat exit / gc — auto-archive integration", () => {
     fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md"), buildSyntheticConvo(50));
     fs.writeFileSync(path.join(EDGE_DIR, "CONVO.md.turn"), "parked");
 
-    // Run exit (auto-archive default-on, --no-monitor avoids spawning a real monitor).
+    // Run exit (auto-archive default-on).
     // Note: cmdExit's auto-archive shells out to archive.ts auto which calls
     // resolveIdentity — which needs the session record on disk. Pre-staged
     // by beforeEach.

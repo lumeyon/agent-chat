@@ -34,9 +34,8 @@
 // rare two-on-same-edge case; cross-edge writes never contend.
 //
 // Corruption detection: on SQLITE_CORRUPT during write, write a sentinel
-// file <edge.dir>/.fts-corrupt with the error body so monitor.ts can
-// surface a "search degraded" notification (sentinel's silence-≠-success
-// additive). Sentinel file cleared on successful rebuild.
+// file <edge.dir>/.fts-corrupt with the error body so doctor/gc can surface
+// degraded search. Sentinel file cleared on successful rebuild.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -88,9 +87,8 @@ function openDb(edgeDir: string): Database {
   return db;
 }
 
-// Mark this edge's FTS as corrupt. Caller writes a short error message;
-// monitor.ts emits a one-shot "fts-corrupt" notification when the sentinel
-// appears. Cleared by rebuildFromIndex on successful completion.
+// Mark this edge's FTS as corrupt. Caller writes a short error message.
+// Cleared by rebuildFromIndex on successful completion.
 function markCorrupt(edgeDir: string, err: Error): void {
   try {
     fs.writeFileSync(
@@ -303,7 +301,7 @@ export async function rebuildFromIndex(
   const dbPath = ftsDbPath(edgeDir);
   // Drop and recreate from scratch.
   try { fs.unlinkSync(dbPath); } catch {}
-  // Also clean up any WAL/SHM sidecar files.
+  // Also clean up any WAL/SHM companion files.
   for (const suffix of ["-wal", "-shm", "-journal"]) {
     try { fs.unlinkSync(dbPath + suffix); } catch {}
   }

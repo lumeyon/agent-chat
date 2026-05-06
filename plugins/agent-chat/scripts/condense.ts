@@ -286,8 +286,8 @@ switch (op) {
     // Round 12 slice 2: upsert the FTS5 row alongside the index entry.
     // Wrapped in try/catch — FTS write failure does NOT block the index
     // commit (filesystem authoritative; FTS derived). Errors flow to a
-    // <edge>/.fts-corrupt sentinel via fts.ts; monitor.ts surfaces a
-    // notification so degraded search isn't silent.
+    // <edge>/.fts-corrupt sentinel via fts.ts so degraded search isn't
+    // silent.
     try {
       const { upsertEntry } = await import("./fts.ts");
       const { extractExpandTopics, extractSummaryBody } = await import("./lib.ts");

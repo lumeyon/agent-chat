@@ -1,34 +1,24 @@
 // speaker.test.ts — slice 2 load-bearing coverage for the multi-user
-// transparency primitives (speaker CLI + current_speaker.json + sidecar
-// integration).
+// transparency primitives (speaker CLI + current_speaker.json).
 //
 // Four load-bearing tests covering the surfaces the hardening-audit lessons
 // said to exercise (orion: "two bugs caught only via load-bearing tests"):
 //
 //   1. smoke (full lifecycle)         — set/clear/whoami/exit via CLI
 //   2. concurrent race                — parallel speaker writes, atomic, no torn reads
-//   3. sidecar Bug-1-class regression — whoami reflects current_speaker
-//                                       written AFTER sidecar spawn
-//                                       (pulsar slice-2 mandated this test
-//                                       by name, mirroring the round-3 fix
-//                                       for monitor_pid)
-//   4. gc orphan reclamation          — current_speaker.json with no matching
+//   3. gc orphan reclamation          — current_speaker.json with no matching
 //                                       session record gets reclaimed
 //
-// Tests pre-create session records on disk (matching sidecar.test.ts pattern)
-// to avoid the spawn cost of full `agent-chat init` for every test.
+// Tests pre-create session records on disk to avoid the spawn cost of full
+// `agent-chat init` for every test.
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
-import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  mkTmpConversations, rmTmp, runScript, spawnScript, sessionEnv,
+  mkTmpConversations, rmTmp, runScript, sessionEnv,
 } from "./helpers.ts";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
-
-const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 let CONVO_DIR: string;
 let ORION_ENV: Record<string, string>;
@@ -40,10 +30,8 @@ beforeEach(() => {
   SESSION_KEY = ORION_ENV.CLAUDE_SESSION_ID!;
   fs.mkdirSync(path.join(CONVO_DIR, ".sessions"), { recursive: true });
   fs.mkdirSync(path.join(CONVO_DIR, ".presence"), { recursive: true });
-  fs.mkdirSync(path.join(CONVO_DIR, ".sockets"), { recursive: true });
-  fs.mkdirSync(path.join(CONVO_DIR, ".logs"), { recursive: true });
   // Pre-create the session record so cmdSpeaker's lookup succeeds without
-  // running full `agent-chat init`. Mirrors sidecar.test.ts setup exactly.
+  // running full `agent-chat init`.
   const rec = {
     agent: "orion", topology: "petersen", session_key: SESSION_KEY,
     claude_session_id: SESSION_KEY, host: os.hostname(), pid: process.pid,
@@ -53,50 +41,6 @@ beforeEach(() => {
 });
 
 afterEach(() => { rmTmp(CONVO_DIR); });
-
-// Tiny client (copied from sidecar.test.ts so a regression in
-// scripts/sidecar-client.ts can't mask a sidecar-side bug).
-function rawRequest(socketPath: string, req: any, timeoutMs = 1000): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const sock = new net.Socket();
-    let buf = "";
-    let settled = false;
-    const finish = (r: any, isErr = false) => {
-      if (settled) return;
-      settled = true;
-      try { sock.destroy(); } catch {}
-      isErr ? reject(r) : resolve(r);
-    };
-    sock.setTimeout(timeoutMs, () => finish(new Error(`request timed out after ${timeoutMs}ms`), true));
-    sock.on("error", (e) => finish(e, true));
-    sock.on("data", (chunk) => {
-      buf += chunk.toString("utf8");
-      const nl = buf.indexOf("\n");
-      if (nl < 0) return;
-      try { finish(JSON.parse(buf.slice(0, nl))); }
-      catch (e) { finish(e, true); }
-    });
-    sock.connect(socketPath, () => sock.write(JSON.stringify(req) + "\n"));
-  });
-}
-
-async function waitForSocket(socketPath: string, timeoutMs = 3000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (fs.existsSync(socketPath)) {
-      const ok = await new Promise<boolean>((res) => {
-        const s = new net.Socket();
-        s.setTimeout(150, () => { s.destroy(); res(false); });
-        s.once("error", () => res(false));
-        s.once("connect", () => { s.destroy(); res(true); });
-        try { s.connect(socketPath); } catch { res(false); }
-      });
-      if (ok) return;
-    }
-    await sleep(50);
-  }
-  throw new Error(`socket ${socketPath} never became ready within ${timeoutMs}ms`);
-}
 
 const speakerFile = (key: string) => {
   // Mirror lib.ts:currentSpeakerPath sanitization
@@ -264,13 +208,6 @@ describe("speaker CLI — slice 2 concurrent writes", () => {
   });
 });
 
-// Round-15d-β: "speaker — sidecar Bug-1-class regression" describe block
-// removed entirely. The sidecar no longer exists; the cache-invalidation
-// invariant it tested (file written after sidecar boot must be visible
-// on next dispatch) doesn't apply to file-direct reads. The original
-// pulsar slice-2 audit test was load-bearing while the sidecar shipped;
-// retired with the deletion of sidecar.ts in this commit.
-
 describe("speaker — gc orphan reclamation", () => {
   test("orphan current_speaker.json (no matching session record) is reclaimed by gc", () => {
     // Pre-stage an orphan: write a current_speaker file under a session_key
@@ -335,8 +272,6 @@ describe("speaker — gc orphan reclamation", () => {
 // vars + that yaml; no per-test fixture override is needed.
 //
 // All tests use full `agent-chat init` to exercise the auto-write splice.
-// We pass --no-sidecar --no-monitor so the test doesn't leak background
-// daemons; the auto-resolve splice runs regardless of those flags.
 // ===========================================================================
 
 describe("speaker auto-resolve — slice 2 refactor", () => {
@@ -361,7 +296,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
 
   test("1. $AGENT_CHAT_USER auto-resolves to a registered user", () => {
     const env = envWith({ AGENT_CHAT_USER: "boss", USER: "" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env);
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toMatch(/speaker auto-resolved to boss \(source: \$AGENT_CHAT_USER\)/);
 
@@ -376,7 +311,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
 
   test("2. $USER fallback when $AGENT_CHAT_USER is unset and $USER is registered", () => {
     const env = envWith({ AGENT_CHAT_USER: null, USER: "john" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env);
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toMatch(/speaker auto-resolved to john \(source: \$USER\)/);
     const body = JSON.parse(fs.readFileSync(speakerFile(SESSION_KEY), "utf8"));
@@ -386,7 +321,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
   test("3. users.yaml default fallback when no env hits", () => {
     // Both env vars unset OR set to a name not in users.yaml → falls through to default.
     const env = envWith({ AGENT_CHAT_USER: null, USER: "nobody-on-this-host" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env);
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toMatch(/speaker auto-resolved to boss \(source: users.yaml default\)/);
     const body = JSON.parse(fs.readFileSync(speakerFile(SESSION_KEY), "utf8"));
@@ -395,7 +330,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
 
   test("4. hard-fail on $AGENT_CHAT_USER set-but-unregistered (no state writes)", () => {
     const env = envWith({ AGENT_CHAT_USER: "mallory", USER: "" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env, { allowFail: true });
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env, { allowFail: true });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/no user named 'mallory' in agents\.users\.yaml/);
     // ZERO cleanup needed because the early-fail placement happens BEFORE
@@ -414,7 +349,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
     fs.writeFileSync(f, JSON.stringify({ name: "john", set_at: "2026-05-02T00:00:00Z" }));
 
     const env = envWith({ AGENT_CHAT_USER: "boss", USER: "" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env);
     expect(r.exitCode).toBe(0);
     // Init's auto-resolve attempted boss, EEXIST-ed, logged the skip.
     expect(r.stderr).toMatch(/speaker already set to john \(explicit; auto-resolve to boss from \$AGENT_CHAT_USER skipped\)/);
@@ -449,7 +384,7 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
     fs.writeFileSync(stalePath, JSON.stringify({ name: "stale-speaker-from-prev-session", set_at: "2026-05-01T00:00:00Z" }));
 
     const env = envWith({ AGENT_CHAT_USER: "boss", USER: "" });
-    const r = runScript("agent-chat.ts", ["init", "carina", "petersen", "--no-sidecar", "--no-monitor"], env);
+    const r = runScript("agent-chat.ts", ["init", "carina", "petersen"], env);
     expect(r.exitCode).toBe(0);
     // The stale speaker file under the PRIOR key was reclaimed by the
     // EEXIST presence-replacement branch.
@@ -460,8 +395,4 @@ describe("speaker auto-resolve — slice 2 refactor", () => {
     expect(newSpeaker.name).toBe("boss");
   });
 
-  // Round-15d-β: Test #7 ("sidecar Bug-1 regression — whoami reflects
-  // auto-resolved speaker after init") removed. The sidecar no longer
-  // exists; the cache-invalidation invariant it pinned doesn't apply
-  // under ephemeral file-direct reads.
 });

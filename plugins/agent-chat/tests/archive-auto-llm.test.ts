@@ -117,8 +117,6 @@ describeIf("real-LLM recall against an auto-archived edge (gated)", () => {
     SESSION_KEY = ORION_ENV.CLAUDE_SESSION_ID!;
     fs.mkdirSync(path.join(CONVO_DIR, ".sessions"), { recursive: true });
     fs.mkdirSync(path.join(CONVO_DIR, ".presence"), { recursive: true });
-    fs.mkdirSync(path.join(CONVO_DIR, ".sockets"), { recursive: true });
-    fs.mkdirSync(path.join(CONVO_DIR, ".logs"), { recursive: true });
     fs.writeFileSync(
       path.join(CONVO_DIR, ".sessions", `${SESSION_KEY}.json`),
       JSON.stringify({

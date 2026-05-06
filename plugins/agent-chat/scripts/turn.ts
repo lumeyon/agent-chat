@@ -16,11 +16,10 @@ import * as os from "node:os";
 import {
   loadTopology, resolveIdentity, edgesOf, ensureEdgeFiles,
   readTurn, writeTurnAtomic, utcStamp,
-  processTag, lockTag, parseLockFile, pidIsAlive, processIsOriginal,
-  stableSessionPid, pidStarttime,
+  lockTag, parseLockFile, processIsOriginal,
+  stableSessionPid, lockBelongsToCurrentSession,
   exclusiveWriteOrFail, safeUnlink,
 } from "./lib.ts";
-// Round-15d-β: sidecar-client import removed; peek is file-direct only.
 
 function die(msg: string): never { console.error(msg); process.exit(2); }
 
@@ -34,10 +33,8 @@ const edge = edges.find((e) => e.peer === peer);
 if (!edge) die(`${peer} is not a neighbor of ${id.name} in topology ${id.topology}`);
 const participants: [string, string] = [id.name, peer].sort() as [string, string];
 
-// Round-15d-β: peek is file-direct only. The sidecar UDS fast-path
-// (peekViaSidecar) was removed when persistent-mode infrastructure was
-// retired; the 3-statSync + 2-readFileSync cost on the file path is
-// negligible compared to a typical cmdRun tick anyway.
+// peek is file-direct; the 3-statSync + 2-readFileSync cost is negligible
+// compared to a typical cmdRun tick.
 
 async function runOp() {
 switch (op) {
@@ -115,26 +112,19 @@ switch (op) {
       die(`refuse to lock — turn is "${cur}", not "${id.name}". Only the floor-holder can lock.`);
     }
     // Use exclusive-create open so two concurrent `lock` calls cannot both
-    // succeed. The lock body now embeds starttime so an unlock/flip/park can
-    // distinguish "my own lock" from "another session of the same agent
-    // name" even if pids happen to match (pid-recycling).
+    // succeed. The lock body embeds session_key plus pid/starttime so an
+    // unlock/flip/park can distinguish "my own lock" from "another session
+    // of the same agent name" even if process ancestry is ambiguous.
     const body = `${lockTag(id.name)} ${utcStamp()}\n`;
-    const myStablePid = stableSessionPid();
-    const myStarttime = pidStarttime(myStablePid);
     try {
       exclusiveWriteOrFail(edge.lock, body);
     } catch (err: any) {
       if (err.code !== "EEXIST") throw err;
       const lk = parseLockFile(edge.lock);
       // Idempotent re-lock: the same agent SESSION already holds it.
-      // Match on agent + host + same stable pid + matching starttime
-      // fingerprint (when available). starttime mismatch with same pid
-      // is the pid-recycling signal — fall through to the stale path.
-      if (
-        lk && lk.agent === id.name && lk.host === os.hostname() &&
-        lk.pid === myStablePid &&
-        (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime)
-      ) {
+      // Match on agent + host + same session proof. New locks carry
+      // session_key; older locks fall back to pid+starttime.
+      if (lk && lk.agent === id.name && lk.host === os.hostname() && lockBelongsToCurrentSession(lk)) {
         console.log(`already locked by me (${edge.id})`);
         break;
       }
@@ -187,14 +177,11 @@ switch (op) {
     // Same agent name + same host + the lock-holder belongs to a DIFFERENT
     // live session → that's the two-sessions-with-same-name misconfig.
     // Refuse so we don't release another live session's lock. The
-    // lock-holder is "us" iff its recorded pid equals our stableSessionPid
-    // AND its starttime fingerprint matches (when both are available). If
-    // the recorded pid is dead-or-recycled, allow the unlock.
+    // lock-holder is "us" iff its session_key matches ours; older locks
+    // fall back to pid+starttime. If the recorded pid is dead-or-recycled,
+    // allow the unlock.
     const myStablePid = stableSessionPid();
-    const myStarttime = pidStarttime(myStablePid);
-    const isSameSession =
-      lk.pid === myStablePid &&
-      (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime);
+    const isSameSession = lockBelongsToCurrentSession(lk);
     if (!isSameSession && processIsOriginal(lk.pid, lk.starttime)) {
       die(
         `refuse to unlock — lock held by another live session ${lk.agent}@${lk.host}:${lk.pid}, I am session ${myStablePid}. ` +
@@ -208,8 +195,8 @@ switch (op) {
   case "recover": {
     // Crash recovery: if a session crashed between `append` and `flip`,
     // CONVO.md has the section ending `→ <next>` but `.turn` still points
-    // at the writer (us). Peer's monitor never fires. This command
-    // reconstructs the intended flip from the trailing `→ X` arrow that
+    // at the writer (us). This command reconstructs the intended flip from
+    // the trailing `→ X` arrow that
     // SKILL.md mandates as the section format. Read-only by default;
     // --apply actually writes (carina Q5).
     const apply = arg3 === "--apply" || process.argv.slice(2).includes("--apply");
@@ -282,12 +269,10 @@ function refuseIfLockBelongsToAnotherSession(
   if (lk.agent !== myName) {
     die(`refuse to ${op} — edge ${edge.id} is locked by ${lk.agent}@${lk.host}:${lk.pid}, not me (${myName}).`);
   }
-  // Same agent name. Check it's actually MY session (pid + starttime).
+  // Same agent name. Check it's actually MY session (session_key on new
+  // locks, pid+starttime fallback on older locks).
   const myStablePid = stableSessionPid();
-  const myStarttime = pidStarttime(myStablePid);
-  const isSameSession =
-    lk.pid === myStablePid &&
-    (lk.starttime == null || myStarttime == null || lk.starttime === myStarttime);
+  const isSameSession = lockBelongsToCurrentSession(lk);
   if (!isSameSession && processIsOriginal(lk.pid, lk.starttime)) {
     die(
       `refuse to ${op} — edge ${edge.id} is locked by another live session of "${myName}" ` +

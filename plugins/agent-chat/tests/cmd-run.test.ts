@@ -59,31 +59,6 @@ describe("agent-chat run — argv + lifecycle guards (Round-15a slice 1)", () =>
     expect(r.stderr).toContain("AGENT_CHAT_INSIDE_LLM_CALL=1");
   });
 
-  test("refuses if a sidecar UDS socket exists for this agent (persistent-mode collision)", async () => {
-    // Stage a fake live UDS socket. Real test: cmdRun probes via UDS
-    // whoami; we can't bind a fake server in a unit test cleanly, but
-    // the file existence + connect-timeout path returns "not ok" and
-    // cmdRun proceeds. To genuinely exercise the refusal, spawn a real
-    // sidecar — too heavy for a unit test. This test pins the file-stat
-    // path; the UDS-probe path is integration-tested via the ack on
-    // existing sidecar.test.ts coverage.
-    const sid = fakeSessionId("orion");
-    bootstrapSession("orion", sid);
-    fs.mkdirSync(path.join(CONVO_DIR, ".sockets"), { recursive: true });
-    // Touch a file to simulate a stale socket; UDS probe will fail to
-    // connect and cmdRun proceeds (per the live-probe-required guard).
-    fs.writeFileSync(path.join(CONVO_DIR, ".sockets", "orion.sock"), "");
-    const r = runScript(
-      "agent-chat.ts", ["run", "--once"],
-      envWith({ CLAUDE_SESSION_ID: sid, AGENT_CHAT_NO_LLM: "1" }),
-      { allowFail: true },
-    );
-    // Stale-socket case: file exists, probe fails → cmdRun proceeds. The
-    // subsequent runClaude call returns "not-found" (AGENT_CHAT_NO_LLM=1),
-    // cmdRun logs and skips each edge. Exit code 0 (no work done is OK).
-    expect(r.exitCode).toBe(0);
-  });
-
   test("processes no edges when none have turn=self (graceful no-op)", () => {
     const sid = fakeSessionId("orion");
     bootstrapSession("orion", sid);

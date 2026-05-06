@@ -19,8 +19,8 @@ beforeEach(() => {
   ORION_ENV = sessionEnv(CONVO_DIR, "orion", "petersen");
   LUMEYON_ENV = sessionEnv(CONVO_DIR, "lumeyon", "petersen");
   // Pre-seed the session records so turn.ts can resolve identity without
-  // requiring agent-chat init (which would auto-launch a monitor we'd have to
-  // tear down). Tests that exercise init explicitly do so separately.
+  // requiring agent-chat init. Tests that exercise init explicitly do so
+  // separately.
   fs.mkdirSync(path.join(CONVO_DIR, ".sessions"), { recursive: true });
   fs.mkdirSync(path.join(CONVO_DIR, ".presence"), { recursive: true });
   for (const [env, agent] of [[ORION_ENV, "orion"], [LUMEYON_ENV, "lumeyon"]] as const) {
@@ -165,11 +165,9 @@ describe("turn.ts lock format and unlock guards", () => {
   });
 
   test("unlock with same agent + LIVE other-session is refused (misconfig safety net)", () => {
-    // Hand-write a lock claiming a pid that's alive but isn't this test's
-    // stableSessionPid (we use process.pid, which is the test process — alive,
-    // but distinct from the stableSessionPid the runScript subprocess will
-    // resolve to). Demonstrates: a lock owned by a different live session
-    // can't be released by us, even with the same agent name.
+    // Hand-write an older-format lock with a live pid and no session_key.
+    // Because the current session cannot prove ownership of that lock, it
+    // must refuse rather than clearing another live same-agent session.
     const lockPath = path.join(EDGE_DIR, "CONVO.md.turn.lock");
     fs.writeFileSync(lockPath, `orion@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`);
     const r = runScript("turn.ts", ["unlock", "lumeyon"], ORION_ENV, { allowFail: true });
@@ -286,10 +284,10 @@ describe("turn.ts lock format and unlock guards", () => {
   });
 
   test("two concurrent lock attempts from the SAME session: one wins via wx, the other idempotent-re-locks", async () => {
-    // The two children share a stableSessionPid (same parent process tree),
-    // so they're the same "session" by the lock's accounting. The wx-EEXIST
-    // race differentiator: one child wins the create; the other reads its
-    // lock and sees its OWN stable pid → idempotent re-lock branch fires.
+    // The two children share a session_key, so they're the same "session"
+    // by the lock's accounting. The wx-EEXIST race differentiator: one
+    // child wins the create; the other reads its lock and sees its OWN
+    // session_key → idempotent re-lock branch fires.
     // No lock file ever ends up double-written or in a half-state.
     const { spawn } = await import("node:child_process");
     function lockChild(): Promise<{ code: number; stderr: string; stdout: string }> {
@@ -318,13 +316,9 @@ describe("turn.ts lock format and unlock guards", () => {
   });
 
   test("two lock attempts from DIFFERENT sessions: the second refuses cleanly", async () => {
-    // Pre-plant a lock as if from a different session (different host so
-    // the pid lookup goes through the "different host" path → not stale).
-    // Wait, that hits the "cross-host refusal" branch in unlock, but for
-    // *lock* we want to show wx-EEXIST + foreign-live-pid → refuse.
-    // Simpler: plant a lock with a live pid that ISN'T this test's stable
-    // pid. Use process.pid of the test (alive but not the stableSessionPid
-    // the subprocess resolves to).
+    // Pre-plant an older-format same-agent lock with a live pid but no
+    // session_key. For lock, this exercises wx-EEXIST + foreign-live-pid →
+    // refuse instead of assuming same-agent means same-session.
     fs.writeFileSync(
       path.join(EDGE_DIR, "CONVO.md.turn.lock"),
       `orion@${os.hostname()}:${process.pid} 2026-05-01T00:00:00Z\n`,
@@ -430,10 +424,9 @@ describe("turn.ts flip/park — pid-match guard (lumeyon P1, mirrors unlock)", (
   });
 
   test("flip refuses when same-agent lock is held by ANOTHER live session (not a stale-lock race)", () => {
-    // Plant a lock that claims to be orion@host but with a DIFFERENT live
-    // pid (this test process's pid != stableSessionPid). Pre-fix, flip
-    // would proceed because lk.agent === id.name passed; post-fix, the
-    // pid-match guard refuses.
+    // Plant a lock that claims to be orion@host but lacks our session_key.
+    // Pre-fix, flip would proceed because lk.agent === id.name passed;
+    // post-fix, the session guard refuses.
     fs.writeFileSync(
       path.join(EDGE_DIR, "CONVO.md.turn.lock"),
       `orion@${os.hostname()}:${process.pid}:0 2026-05-01T00:00:00Z\n`,

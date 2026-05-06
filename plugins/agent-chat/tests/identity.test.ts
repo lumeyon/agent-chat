@@ -25,7 +25,7 @@ afterEach(() => { rmTmp(CONVO_DIR); });
 describe("agent-chat init", () => {
   test("init writes session and presence files", () => {
     const sid = fakeSessionId("orion");
-    const r = runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     expect(r.stdout).toContain("✓ this session is orion@petersen");
     const sess = readSession(CONVO_DIR, sid);
@@ -36,7 +36,7 @@ describe("agent-chat init", () => {
   });
 
   test("init prints neighbors for the chosen topology", () => {
-    const r = runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     // orion's Petersen neighbors are carina, keystone, lumeyon (sorted)
     // Post-users-overlay (slice 1): orion's petersen neighbors are 3 AI
@@ -46,42 +46,42 @@ describe("agent-chat init", () => {
   });
 
   test("init refuses an unknown agent name", () => {
-    const r = runScript("agent-chat.ts", ["init", "ghost", "petersen", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "ghost", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }), { allowFail: true });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("not declared in topology");
   });
 
   test("init refuses an unknown topology", () => {
-    const r = runScript("agent-chat.ts", ["init", "orion", "no-such-topo", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "orion", "no-such-topo"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }), { allowFail: true });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain('no topology "no-such-topo"');
   });
 
   test("init refuses on collision with a live session of the same name", () => {
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
-    const r = runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }), { allowFail: true });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain('agent "orion" is already live');
   });
 
   test("--force overrides a live collision", () => {
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     const r = runScript("agent-chat.ts",
-      ["init", "orion", "petersen", "--force", "--no-monitor"],
+      ["init", "orion", "petersen", "--force"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     expect(r.stdout).toContain("✓ this session is orion@petersen");
   });
 
   test("infers topology when only one is in use elsewhere on the host", () => {
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     // Now init lumeyon WITHOUT specifying topology — should infer petersen.
-    const r = runScript("agent-chat.ts", ["init", "lumeyon", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "lumeyon"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     expect(r.stdout).toContain("✓ this session is lumeyon@petersen");
     expect(r.stderr).toContain("inferring topology");
@@ -91,12 +91,11 @@ describe("agent-chat init", () => {
   // topology and exercise the full init path end-to-end. This is the
   // discipline-rule receipt — would catch any presence-file path-traversal
   // regression (lyra L1), displayTag drift (lyra L2), or AI-only branch
-  // sneaking into resolveIdentity. Round-2 found two bugs (monitor_alive
-  // placeholder + fractional-seconds regex) that smoke tests missed and
-  // only this kind of end-to-end exercise caught.
+  // sneaking into resolveIdentity. Earlier rounds found bugs here that
+  // smoke tests missed; this end-to-end exercise keeps that path covered.
   test("init boss org writes session + presence; whoami enumerates 11 human-degree neighbors", () => {
     const sid = fakeSessionId("boss");
-    const r = runScript("agent-chat.ts", ["init", "boss", "org", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "boss", "org"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     expect(r.stdout).toContain("✓ this session is boss@org");
     // Human degree under the org topology is 11 (10 AI + 1 other human).
@@ -124,7 +123,7 @@ describe("agent-chat init", () => {
   // preserving symmetry (users-as-id.name) without per-call-site edits.
   test("init boss petersen succeeds via users overlay (no agents.petersen.yaml change required)", () => {
     const sid = fakeSessionId("boss");
-    const r = runScript("agent-chat.ts", ["init", "boss", "petersen", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "boss", "petersen"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     expect(r.stdout).toContain("✓ this session is boss@petersen");
     // 10 petersen AI + 1 other user (john) = 11 neighbors.
@@ -144,7 +143,7 @@ describe("agent-chat init", () => {
 describe("agent-chat exit", () => {
   test("exit removes session and presence files", () => {
     const sid = fakeSessionId();
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     expect(readSession(CONVO_DIR, sid)).not.toBeNull();
     const r = runScript("agent-chat.ts", ["exit"], envWith({ CLAUDE_SESSION_ID: sid }));
@@ -161,8 +160,8 @@ describe("agent-chat exit", () => {
 });
 
 describe("agent-chat who / gc / whoami", () => {
-  test("who lists live sessions with monitor status", () => {
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+  test("who lists live sessions", () => {
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId() }));
     const r = runScript("agent-chat.ts", ["who"], BASE_ENV);
     expect(r.stdout).toContain("live (1):");
@@ -189,7 +188,7 @@ describe("agent-chat who / gc / whoami", () => {
 
   test("whoami prints session identity in one line", () => {
     const sid = fakeSessionId();
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     const r = runScript("agent-chat.ts", ["whoami"], envWith({ CLAUDE_SESSION_ID: sid }));
     expect(r.stdout).toContain("orion@petersen");
@@ -202,7 +201,7 @@ describe("ten sessions sharing one cwd", () => {
     const agents = ["orion", "lumeyon", "lyra", "keystone", "sentinel",
                     "vanguard", "carina", "pulsar", "cadence", "rhino"];
     for (const a of agents) {
-      const r = runScript("agent-chat.ts", ["init", a, "petersen", "--no-monitor"],
+      const r = runScript("agent-chat.ts", ["init", a, "petersen"],
         envWith({ CLAUDE_SESSION_ID: fakeSessionId(a) }));
       expect(r.stdout).toContain(`✓ this session is ${a}@petersen`);
     }
@@ -216,7 +215,7 @@ describe("ten sessions sharing one cwd", () => {
     for (const a of ["orion", "lumeyon"]) {
       const sid = fakeSessionId(a);
       sids.set(a, sid);
-      runScript("agent-chat.ts", ["init", a, "petersen", "--no-monitor"],
+      runScript("agent-chat.ts", ["init", a, "petersen"],
         envWith({ CLAUDE_SESSION_ID: sid }));
     }
     for (const [a, sid] of sids) {
@@ -239,7 +238,7 @@ describe("resume offer", () => {
     };
     fs.writeFileSync(path.join(CONVO_DIR, ".sessions", "old-restart.json"), JSON.stringify(stale));
     // Run init from the same cwd+tty without specifying topology
-    const r = runScript("agent-chat.ts", ["init", "keystone", "--no-monitor"],
+    const r = runScript("agent-chat.ts", ["init", "keystone"],
       envWith({ CLAUDE_SESSION_ID: fakeSessionId(), TTY: "/dev/pts/test" }),
       { cwd: CONVO_DIR },  // match the stale record's cwd
     );
@@ -251,7 +250,7 @@ describe("resume offer", () => {
 describe("session file resolution wins over env and .agent-name", () => {
   test("session file's identity wins over $AGENT_NAME / $AGENT_TOPOLOGY", () => {
     const sid = fakeSessionId();
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "petersen"],
       envWith({ CLAUDE_SESSION_ID: sid }));
     // Now run whoami with conflicting env vars — session file should win.
     const r = runScript("agent-chat.ts", ["whoami"],
@@ -281,9 +280,9 @@ describe("session-key collision resistance (Bug A regression)", () => {
     // Both sessions get the same hypothetical SSE port; if it were the
     // session key, they'd collide. The explicit ids should win.
     const sharedSse = "55112";
-    runScript("agent-chat.ts", ["init", "orion", "pair", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "orion", "pair"],
       envWith({ CLAUDE_SESSION_ID: sidA, CLAUDE_CODE_SSE_PORT: sharedSse }));
-    runScript("agent-chat.ts", ["init", "lumeyon", "pair", "--no-monitor"],
+    runScript("agent-chat.ts", ["init", "lumeyon", "pair"],
       envWith({ CLAUDE_SESSION_ID: sidB, CLAUDE_CODE_SSE_PORT: sharedSse }));
     // Both records must still be readable. If session-key collision
     // happened, only the second init's record would survive.
@@ -307,7 +306,7 @@ describe("session-key collision resistance (Bug A regression)", () => {
     const env = envWith({});
     delete env.CLAUDE_SESSION_ID;
     delete env.CLAUDE_CODE_SESSION_ID;
-    runScript("agent-chat.ts", ["init", "orion", "petersen", "--no-monitor"], env);
+    runScript("agent-chat.ts", ["init", "orion", "petersen"], env);
     // The session record file is named after the (sanitized) key.
     const files = fs.readdirSync(path.join(CONVO_DIR, ".sessions"));
     expect(files.some((f) => f.startsWith("pid_") || f.startsWith("pid:"))).toBe(true);
@@ -325,7 +324,7 @@ describe("session-key collision resistance (Bug A regression)", () => {
       return new Promise((resolve) => {
         const c = spawn(process.execPath, [
           path2.join(import.meta.dirname, "..", "scripts", "agent-chat.ts"),
-          "init", "orion", "petersen", "--no-monitor",
+          "init", "orion", "petersen",
         ], {
           env: envWith({ CLAUDE_SESSION_ID: sid }),
           stdio: ["ignore", "pipe", "pipe"],

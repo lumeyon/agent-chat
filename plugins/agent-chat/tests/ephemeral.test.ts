@@ -44,7 +44,7 @@ function writeCurrentSpeaker(dir: string, key: string, name: string): void {
 
 // Synthetic ephemeral SessionRecord. The `ephemeral: true` flag is forward-
 // compat documentation — Round-15c lands the contract that makes it
-// load-bearing for cmdGc/monitor disambiguation. Today, cmdRecordTurn does
+// load-bearing for cmdGc/ephemeral-state disambiguation. Today, cmdRecordTurn does
 // not branch on this field, so test #2 + #3 exercise the same code paths
 // they would under interactive mode (the regression-pin is in the absence
 // of the speaker file, not in the field's presence).

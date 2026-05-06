@@ -5,8 +5,8 @@
 > **Ephemeral-only architecture + Dalio Dot Collector + dual-runtime
 > (Rounds 15d — 15j).** agent-chat runs as short-lived process invocations:
 > each `agent-chat run` reads filesystem state, processes actionable edges,
-> and exits. No long-running daemons; sidecar + monitor were deleted in
-> Round-15d-β. Cache-warm continuation handled by `loop-driver.ts` via
+> and exits. No long-running daemons. Cache-warm continuation handled by
+> `loop-driver.ts` via
 > `ScheduleWakeup` (270s). The mesh is now self-organizing: per-agent
 > autobiographical scratchpads carry relationship context across ticks;
 > agent-managed archive directives let writers author their own summaries;
@@ -41,9 +41,9 @@ back and forth using a `.turn` sentinel. The natural question was: *what if
 this worked for ten agents on a graph instead of two?* The answer is this
 repo.
 
-You don't need to learn the protocol to use it. Once `agent-chat init`
-runs, just type as the user — the skill captures every turn into the right
-edge automatically and the monitor wakes you up when peers reply.
+You don't need to learn the protocol to use it. `agent-chat init` claims
+identity, and `agent-chat run` or `loop-driver.ts` processes pending turns
+from the shared filesystem state.
 
 ---
 
@@ -81,8 +81,7 @@ use Bun's built-ins where extras would be tempting).
 
 **Ephemeral execution model (Round 15d).** Every `agent-chat run`
 invocation reads filesystem state, processes actionable edges, and
-exits. No long-running daemons; no sidecar; no monitor process; no
-heartbeat emitter. Cache-warm continuation between ticks is handled
+exits. No long-running daemons. Cache-warm continuation between ticks is handled
 by `loop-driver.ts` via Claude Code's `ScheduleWakeup` primitive (270s
 delay tuned to stay under the 5-min prompt-cache TTL — empirical
 finding from the Ruflo audit). Rate-limit pauses are transparent: the
@@ -121,7 +120,7 @@ fold into the same lossless-claw archive layer as everything else, so
 | **Atomic turn handoff** | `.turn` written via `tmpfile + rename`. Concurrent reads always observe either the old or the new value. |
 | **Ephemeral execution** | `agent-chat run` reads filesystem state, processes actionable edges (where `.turn = me` and no lock), and exits. No long-running daemons. `loop-driver.ts` wraps cmdRun with cache-warm `ScheduleWakeup` (270s) for self-rescheduling; `--interactive` mode runs a tight 1-3s tick loop until idle for real-time deliberation. Stuck-recovery: any edge whose turn has been on me for >5min with no progress gets auto-redispatched on the next loop iteration. |
 | **Per-agent autobiographical scratchpad** | `<conversations>/.scratch/<agent>.md` — the agent's own narrative of their relationships, written in their voice, persisted across ticks (8KB cap; older content gets condensed via `scratch-condense.ts` into the scratchpad DAG). Read at the start of every tick alongside the CONVO.md tail. The structural answer to "the same agent must know context from the distant past" under ephemeral execution. |
-| **Sub-relay activation** | `agent-chat run --sub-relay-from <chain>` lets a peer dispatch through its own neighbor (carina → lumeyon directly, not just through orion). Cycle refusal + depth ≤ topology-diameter as correctness guards. Activates the (N choose 2) - (orion's neighbors) edges that the persistent-mode "everything through the orchestrator" pattern left dormant. |
+| **Sub-relay activation** | `agent-chat run --sub-relay-from <chain>` lets a peer dispatch through its own neighbor (carina → lumeyon directly, not just through orion). Cycle refusal + depth ≤ topology-diameter as correctness guards. Activates edges beyond the orchestrator's direct neighborhood. |
 | **Agent-managed memory directives** | Agents emit `<scratch>...</scratch>` and `<archive>sections: N\nsummary: ...</archive>` and `<dispatch peer="X">prompt</dispatch>` and `<dot peer="X" clarity="N" depth="N" reliability="N" speed="N" note="..."/>` blocks in their tick responses. The writer of a section authors its archive summary in their own words; bypasses the deterministic synthesizer. `archive.ts auto --seal-count N --agent-summary` is the underlying primitive. |
 | **Self-update your role at runtime** (Round 15h+k) | `agent-chat role <get\|set\|clear\|list>` lets an agent declare what they currently do well so peers learn it. Round 15k adds `<role>...</role>` as a directive parsed inline from cmdRun output, so agents can self-update from inside their tick response (empty body clears the override). Storage at `<conversations>/.roles/<agent>.md` (4 KB cap), overlay-merged into `topology.roles` on every cmdRun tick — peers see the update immediately. The mesh is no longer static. |
 | **Dalio-inspired Dot Collector with configurable axes** (Round 15h+k) | Multi-axis peer grading. Default 4 axes (**clarity / depth / reliability / speed**, each 1-10), but Round 15k makes this configurable via `config.json` `dot_axes` field — an org might use `[creativity, rigor, specificity, openness]` for R&D or `[correctness, completeness, speed]` for code review (1-8 axes, all agents read the same user-global config). Append-only ledger at `<conversations>/.dots/<peer>.jsonl`. Aggregation is **believability-weighted via fixed-point iteration** (Round 15k): each grader's contribution is weighed by their own composite score, recomputed iteratively until convergence — Dalio's actual recursive-trust model where high-believability voices count more, not the one-pass approximation Round 15h shipped. Agents grade via `<dot peer="X" .../>` directive or `agent-chat dot` CLI. Self-grading refused. `agent-chat dots [<peer>]` shows roster + per-axis weighted means + recent dots. |
@@ -230,13 +229,10 @@ bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen
 
 That single command claims the identity, writes a per-session file under
 `conversations/.sessions/`, refuses if another live session already
-claims that name, infers the topology if only one is in use, auto-launches
-**both the multi-edge monitor and the per-agent sidecar daemon** in the
-background, and prints the session's neighbors. Every other script in
-the skill reads the per-session file automatically — no env vars, no
-`.agent-name`, no exports. Pass `--no-sidecar` if you want the file-direct
-slow paths only; pass `--no-monitor` if you don't want the chat-notification
-poller.
+claims that name, infers the topology if only one is in use, and prints
+the session's neighbors. Every other script in the skill reads the
+per-session file automatically — no env vars, no `.agent-name`, no
+exports.
 
 **This scales to N sessions in one directory.** Open ten terminals in the
 same project, run `claude` in each, tell each one its name, done. They
@@ -248,7 +244,7 @@ Useful subcommands:
 ```bash
 bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts who      # list live agents on this host
 bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts whoami   # this session's identity
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts exit     # sign out, stop the monitor
+bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts exit     # sign out
 bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts gc       # sweep dead sessions
 ```
 
@@ -286,7 +282,7 @@ AGENT_NAME=carina bun $SKILL/scripts/agent-chat.ts run --sub-relay-from carina l
 ```
 
 The protocol is filesystem-mediated; there are no background processes
-to monitor. Each `agent-chat run` invocation reads the current `.turn`
+to manage. Each `agent-chat run` invocation reads the current `.turn`
 state, processes its actionable edges (composes a response via
 `claude -p`, appends to CONVO.md, flips the turn), and exits. Rate-limit
 pauses are transparent: the next tick is a fresh process.
@@ -340,33 +336,12 @@ in the body.
 
 ---
 
-## Hybrid mode — persistent and ephemeral sessions on the same graph
+## Ephemeral execution
 
-agent-chat ships two execution modes that interoperate transparently. Both
-write to the same `CONVO.md` / `.turn` / `index.jsonl` files; **peers do
-NOT know which mode the other side is running.** This is the load-bearing
-invariant of hybrid mode — the wire format is the protocol; runtime model
-is a private session choice.
-
-### Persistent mode (today's default)
-
-The mode every prior round shipped. `agent-chat init` launches a
-long-lived sidecar + monitor; the agent reads notifications from the live
-Monitor task; sessions can run for hours. Best for **interactive work
-where the agent is paying attention** — collaborative reviews, multi-step
-debugging, anything with rapid back-and-forth turns.
-
-```bash
-bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init keystone petersen
-# sidecar + monitor up; agent waits for monitor notifications.
-```
-
-### Ephemeral mode (`agent-chat run`)
-
-A single-tick execution model: spawn an agent process, do exactly one
-turn's worth of work (read peer messages → respond → flip turn), exit.
-Best for **batch jobs, cron-driven sweeps, low-resource environments,
-and resumable orchestration where staying loaded is wasteful**.
+agent-chat has one active execution model: a tick reads filesystem state,
+does exactly the work currently assigned to that agent, writes the result,
+and exits. The wire format is the protocol, so Claude and Codex sessions
+can collaborate as long as they share `CONVERSATIONS_DIR`.
 
 ```bash
 # Single tick across every edge where the floor is on me:
@@ -396,67 +371,17 @@ The 270-second delay is deliberate, copied from Ruflo's autopilot pattern
 > warm between iterations."
 
 Anthropic's prompt cache has a 300-second TTL; rescheduling at 270s keeps
-the cache warm so each subsequent ephemeral tick gets a cache hit instead
-of a cold prompt encode. This is the structural answer to the
-"stuck-on-own-turn" failure mode the persistent monitor caught in
-Round-13 — ephemeral sessions can't get stuck because they don't stay
-alive long enough.
+the cache warm so each subsequent tick gets a cache hit instead of a cold
+prompt encode.
 
-### When to use which
+### Multi-user
 
-| Scenario | Mode |
-|---|---|
-| Interactive collaborative work, multi-step debugging | persistent |
-| You're typing turns yourself, want immediate notifications | persistent |
-| Cron-driven sweeps, batch reviewers, weekend agents | ephemeral |
-| Low-resource hosts (no idle daemon budget) | ephemeral |
-| Edges that flow rarely (~hours between turns) | ephemeral |
-| Edges where the floor sits with you for >5min routinely | ephemeral |
-
-**Mixing modes is supported and useful**: a 10-agent petersen graph can
-have 5 persistent agents (the active reviewers) + 5 ephemeral agents
-(scheduled background workers). The protocol doesn't change. Cross-mode
-turn-flips work because the wire format is the same.
-
-### Multi-user under ephemeral
-
-The transparency invariant is unchanged across modes: **the speaker on
-the dispatched edge is the same human who triggered the parent dispatch.**
-
-Concretely: `boss` types in their terminal → `orion` (persistent) decides
-to dispatch `keystone` ephemerally for the boss-keystone edge → the
-recorded turn on `boss-keystone/CONVO.md` shows `boss` as the speaker,
-not `orion`. The orchestrator is invisible at the wire level; the user-
-facing transcript is indistinguishable from boss having had a direct
-keystone session.
-
-**v1 limitation (Round-15a ships):** AI-to-AI ephemeral dispatch works
-end-to-end. Human-to-AI ephemeral × `record-turn` (the case above)
-returns exit `64` ("no current speaker") because the parent orchestrator
-must pre-write a synthetic `SessionRecord` + `current_speaker.json` on
-behalf of the dispatched child, and that pre-write step (Contract A in
-the design notes) is **deferred to Round-15c**. For Round-15a, treat
-hybrid mode as best-fit for AI-AI ephemeral dispatch where the human
-stays in the persistent session.
-
-### Heartbeat semantics under ephemeral
-
-Round-13's heartbeat detector classifies missing heartbeats as
-`peer-sidecar-dead`. Ephemeral runs **legitimately have no heartbeat** —
-they don't stay alive long enough to write one. This is expected, not a
-bug. The monitor's stuck-detection signal is correct *in the persistent-
-peer worldview* and informational *in the mixed-mode worldview*. Future
-rounds may add a heartbeat-tombstone written by `cmdRun` to disambiguate
-"ephemeral run completed successfully" from "persistent peer's sidecar
-crashed." For now: read peer-sidecar-dead notifications on edges with a
-known-ephemeral peer as informational.
-
-### Coexistence
-
-`agent-chat run` refuses to start if a live sidecar already exists for
-the agent — preventing accidental double-loading on the same agent
-identity. To switch modes, run `agent-chat exit` first to clear the
-persistent state.
+The speaker on the dispatched edge is the same human who triggered the
+parent dispatch. Concretely: `boss` types in their terminal → `orion`
+dispatches `keystone` for the boss-keystone edge → the recorded turn on
+`boss-keystone/CONVO.md` shows `boss` as the speaker, not `orion`. The
+orchestrator is invisible at the wire level; the user-facing transcript
+is indistinguishable from boss having had a direct keystone session.
 
 `agent-chat run` also honors the reentrancy guard: it refuses if
 `AGENT_CHAT_INSIDE_LLM_CALL=1` (running inside a parent LLM call's
@@ -466,10 +391,10 @@ parent's audit trail.
 
 ### Verification
 
-The hybrid-mode invariants live in three regression suites:
+The ephemeral execution invariants live in three regression suites:
 
-- `tests/cmd-run.test.ts` — `agent-chat run` flag parsing, sidecar-
-  collision refusal, reentrancy guard, the work loop's lock+flip
+- `tests/cmd-run.test.ts` — `agent-chat run` flag parsing,
+  reentrancy guard, the work loop's lock+flip
   contract, and the safety pre-flight gate (`--unsafe` override).
 - `tests/safety.test.ts` — `safety.ts detectDestructive` regex coverage
   for `rm -rf`, force-pushes, secret-token shapes, and the false-positive
@@ -521,14 +446,10 @@ Per-host control state lives at the topology root:
 
 ```
 conversations/.sessions/<key>.json    # per-session identity record (Round 5)
-conversations/.presence/<agent>.json  # per-agent presence + monitor + sidecar pids
-conversations/.sockets/               # sidecar UDS endpoints + pidfiles + cursor files
-  <agent>.sock                        # mode 0600 UDS (filesystem-permission auth)
-  sidecar-<agent>.pid                 # pid + starttime fingerprint for crash-recovery
-  <agent>.cursors.json                # named-cursor persistence for `unread` calls
-conversations/.logs/                  # per-daemon log files
-  monitor-<agent>.log
-  sidecar-<agent>.log
+conversations/.presence/<agent>.json  # per-agent presence record
+conversations/.scratch/<agent>.md     # per-agent autobiographical scratchpad
+conversations/.roles/<agent>.md       # runtime role overrides
+conversations/.dots/<agent>.jsonl     # Dot Collector ledger
 ```
 
 The protocol is:
@@ -635,9 +556,10 @@ using this skill is knowing which is which.
 
 For most software engineering work, solo is fine. For load-bearing
 architectural changes, the team produces measurably better code at
-~50-100% wall-clock cost. We've used the team for rounds 8-12 (hardening
-audit, sidecar daemon, multi-user, orthogonal user overlay, lossless-claw
-parity); we've used solo for the dozens of small fixes between them.
+~50-100% wall-clock cost. We've used the team for rounds 8-15 (hardening
+audit, multi-user, orthogonal user overlay, lossless-claw parity,
+ephemeral execution, and dual-runtime work); we've used solo for the
+dozens of small fixes between them.
 
 ### What this is NOT
 
@@ -877,18 +799,13 @@ The suite is organized in four layers:
    resulting CONVO.md has the expected sections in the right order. This
    catches genuine cross-process race conditions and identity-resolution
    bugs that pure unit tests miss.
-4. **Sidecar tests** (`tests/sidecar.test.ts`) — 34 tests covering UDS
-   dispatcher (whoami / time / health / peek / last-section / unread /
-   since-last-spoke / shutdown), `peek` parity with file-direct, fs.watch
-   event delivery within ~200 ms of a peer's flip, startup-pending firing
-   per actionable edge, protocol-violation emission, lock-stale invariants,
-   anonymous + named-persisted cursor flow, since-last-spoke peer-only diff
-   with first-turn semantics, full lifecycle (init starts sidecar, exit
-   stops gracefully, gc reclaims kill -9 stale state), `--no-sidecar` opts
-   out, monitor coexistence with no double-emit, and `CONVERSATIONS_DIR`
-   env override for socket + log paths.
+4. **Runtime feature tests** (`tests/cmd-run.test.ts`,
+   `tests/ephemeral.test.ts`, `tests/speaker.test.ts`,
+   `tests/topology-roles.test.ts`, `tests/llm.test.ts`) cover ephemeral
+   dispatch, loop-driver wakeups, speaker state, role overrides, and LLM
+   shell-out guards.
 
-A fourth, gated test (`tests/subagent-llm.test.ts`) drives two real
+A gated test (`tests/subagent-llm.test.ts`) drives two real
 `claude -p` headless sessions through one round-trip. It's **skipped by
 default** because real-LLM tests cost API budget per run, are
 non-deterministic, and are slow (~30-60s per round). Run it with:
@@ -927,30 +844,13 @@ fastest path to understanding *why* the code looks the way it does.
 - **`.agent-name.example`** — template for the per-session identity file.
 - **`scripts/lib.ts`** — topology loader, identity resolver, edge
   enumerator, atomic-write helpers, pid+starttime fingerprinting, archive
-  helpers, summary template + validator, YAML I/O. Adds `LOGS_DIR`,
-  `SOCKETS_DIR`, `socketPathFor`, `pidFilePath`, `cursorsFilePath` for
-  the sidecar's per-agent paths (all rooted on `CONVERSATIONS_DIR`).
+  helpers, summary template + validator, YAML I/O, scratchpads, role
+  overrides, Dot Collector aggregation, and relay-path helpers.
 - **`scripts/resolve.ts`** — print my identity + edges + paths.
 - **`scripts/turn.ts`** — peek / init / flip / park / lock / unlock /
-  recover for one edge. `peek` fast-paths through the sidecar daemon
-  with file-direct fallback.
-- **`scripts/monitor.ts`** — long-running multi-edge watcher with
-  optional `--archive-hint` for parked-and-bloated edges. Polling-based;
-  works on every filesystem.
-- **`scripts/sidecar.ts`** — long-lived per-agent daemon. Inotify-driven
-  watcher (with 5-second reconcile poll for FUSE / WSL1), in-memory diff
-  cache, line-JSON-over-UDS dispatcher with eight v1 methods. Auto-launched
-  by `agent-chat init`; `--no-sidecar` opts out. Emits monitor-format
-  notification lines on stdout (interchangeable with `monitor.ts` for the
-  Claude Code Monitor tool wiring).
-- **`scripts/sidecar-client.ts`** — async `sidecarRequest` + `isSidecarRunning`
-  for any callee that wants the fast path. Returns typed `{ ok, result }` or
-  `{ ok: false, error: { code, message } }` so callers don't try/catch.
+  recover for one edge.
 - **`scripts/agent-chat.ts`** — init / exit / who / gc / whoami / **speaker**
-  / **record-turn**. Manages both sidecar and monitor lifecycle; `cmdGc`
-  reclaims stale sockets + pidfiles; `cmdWho` shows `mon=`, `side=`, and
-  `speaker=` columns; `cmdWhoami` fast-paths through sidecar; `cmdSpeaker`
-  + `cmdRecordTurn` are the multi-user transparency primitives.
+  / **record-turn** / **run** / **role** / **dot** / **dots**.
 - **`scripts/archive.ts`** — plan / seal / commit / list leaf archives.
 - **`scripts/condense.ts`** — fold same-depth archives into a depth+1
   archive.
@@ -965,14 +865,7 @@ fastest path to understanding *why* the code looks the way it does.
   (Round 12 slice 3).
 - **`scripts/large-files.ts`** — large-block extraction with
   first-N/last-N preview placeholder (Round 12 slice 2).
-- **`scripts/liveness.ts`** — heartbeat schema, parser, format,
-  classifier, `StuckReason` union, threshold constants. Single source
-  of truth for slices 1-3 of Round 13. Strict version validation
-  (refuses missing-or-unknown `sidecar_version`); `STUCK_REASONS`
-  pinned by `as const satisfies ReadonlyArray<StuckReason>` to make
-  union-vs-array drift a TS build error.
-
-Lines of code: ~5,500+ across all files combined. No npm dependencies.
+Lines of code: ~5,000+ across all files combined. No npm dependencies.
 
 ---
 

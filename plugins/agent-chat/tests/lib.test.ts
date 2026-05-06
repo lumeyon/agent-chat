@@ -1009,6 +1009,21 @@ describe("validateSummary — audit fixtures", () => {
 describe("parseLockFile", () => {
   const tmp = `${process.env.TMPDIR ?? "/tmp"}/agent-chat-locktest-${process.pid}`;
 
+  test("parses 5-tuple lock file with session key", () => {
+    const fs = require("node:fs");
+    fs.writeFileSync(tmp, "orion@hostname.example:12345:987654321:session%3Aabc 2026-05-01T00:00:00Z\n");
+    const lk = parseLockFile(tmp);
+    expect(lk).toEqual({
+      agent: "orion",
+      host: "hostname.example",
+      pid: 12345,
+      starttime: 987654321,
+      session_key: "session:abc",
+      ts: "2026-05-01T00:00:00Z",
+    });
+    fs.unlinkSync(tmp);
+  });
+
   test("parses legacy 3-tuple lock file (backward-compat with pre-starttime format)", () => {
     const fs = require("node:fs");
     fs.writeFileSync(tmp, "orion@hostname.example:12345 2026-05-01T00:00:00Z\n");
@@ -1082,8 +1097,8 @@ describe("stableSessionPid", () => {
     expect(pidIsAlive(pid)).toBe(true);
   });
 
-  test("when CLAUDECODE is forcibly unset, returns ppid (plain-shell fallback)", async () => {
-    // Spawn a fresh bun child WITHOUT the CLAUDECODE marker; it should
+  test("when runtime markers are forcibly unset, returns ppid (plain-shell fallback)", async () => {
+    // Spawn a fresh bun child WITHOUT Claude/Codex runtime markers; it should
     // hit the early-return ppid fallback path. We use a tiny one-liner
     // child that prints stableSessionPid() and verify it equals the
     // child's own ppid (i.e. this test process).
@@ -1096,7 +1111,9 @@ describe("stableSessionPid", () => {
         });
       `],
       {
-        env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== "CLAUDECODE")) as Record<string, string>,
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(([k]) => k !== "CLAUDECODE" && k !== "CODEX_THREAD_ID"),
+        ) as Record<string, string>,
         encoding: "utf8",
       },
     );

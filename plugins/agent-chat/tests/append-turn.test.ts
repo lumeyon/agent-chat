@@ -1,8 +1,8 @@
 // End-to-end tests for `agent-chat record-turn` (slice 3 — keystone).
 //
 // These are LOAD-BEARING tests: each one invokes the real CLI against a real
-// CONVO.md + .turn + lock file in a tmpdir, with sidecar absent (file-direct
-// fallback). The vanguard-designed test set + 3 negative cases.
+// CONVO.md + .turn + lock file in a tmpdir. The vanguard-designed test set
+// + 3 negative cases.
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
@@ -174,11 +174,11 @@ describe("record-turn — load-bearing", () => {
     expect(rhConvo).not.toMatch(/handoff to/);
   });
 
-  test("5. sidecar-equivalent re-parse: the parser cursor logic finds the right last-self-section", () => {
+  test("5. parser cursor logic finds the right last-self-section", () => {
     // This validates that the sections are emitted with correct headers
     // (lowercase, second-precision UTC stamp, real author name) — the same
-    // shape the round-3 parser bug fixed. We don't need a live sidecar; we
-    // just need to assert that `parseSections` + `sectionMeta` from lib.ts
+    // shape the round-3 parser bug fixed. We just need to assert that
+    // `parseSections` + `sectionMeta` from lib.ts
     // see the right author for both sections.
     const key = fakeSessionId("ks");
     writeSessionRecord(tmp, key, AGENT, TOPO);

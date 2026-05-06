@@ -4,7 +4,7 @@
 // reads automatically; no env-var fiddling, no shell wrappers, no exports.
 //
 // Usage (run inside the session):
-//   bun scripts/agent-chat.ts init <name> [<topology>] [--force] [--no-monitor]
+//   bun scripts/agent-chat.ts init <name> [<topology>] [--force]
 //   bun scripts/agent-chat.ts exit                                (this session goes offline)
 //   bun scripts/agent-chat.ts who                                 (list live agents on this host)
 //   bun scripts/agent-chat.ts gc                                  (sweep dead session/presence files)
@@ -27,10 +27,10 @@ import {
   ensureControlDirs, findLivePresence, findResumableSession, resumeKey,
   pidIsAlive, pidStarttime, processIsOriginal, stableSessionPid, processTag,
   utcStamp, edgesOf, neighborsOf, ensureEdgeFiles, lockTag, parseLockFile,
+  lockBelongsToCurrentSession,
   readTurn, writeTurnAtomic, resolveIdentity, loadUsers, parseSections,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
-  LOGS_DIR, SOCKETS_DIR, logPathFor, socketPathFor, pidFilePath,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
   computeDiameter, readScratch, writeScratch, scratchPath, SCRATCH_DIR,
@@ -43,15 +43,6 @@ import {
   relayPathTo,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
-// Round-15d-β: sidecar-client + liveness/heartbeat imports removed.
-// Persistent-mode infrastructure deleted in this commit.
-// Round-15d-β: liveness.ts deleted. Legacy heartbeat-file cleanup is
-// inlined where needed (see cmdGc). New ephemeral sessions don't
-// emit heartbeats, so this is just legacy artifact reclamation.
-function heartbeatPath(agent: string): string {
-  const safe = agent.replace(/[^A-Za-z0-9_-]/g, "_");
-  return path.join(CONVERSATIONS_DIR, ".heartbeats", `${safe}.heartbeat`);
-}
 
 function die(msg: string, code = 2): never { console.error(msg); process.exit(code); }
 
@@ -114,19 +105,6 @@ function pickTopologyDefault(): string | null {
   return null;
 }
 
-// Round-15d-β: startMonitor / stopMonitor / startSidecar / stopSidecar
-// removed. agent-chat is now ephemeral-only — no long-running daemons.
-// Each `agent-chat run` invocation is a single tick that reads filesystem
-// state, processes its actionable edges, and exits. Persistent-mode
-// monitor + sidecar lifecycle previously launched here is gone.
-//
-// Backward-compat note on legacy SessionRecord fields: the
-// `monitor_pid` / `monitor_pid_starttime` / `sidecar_pid` /
-// `sidecar_pid_starttime` fields remain in the SessionRecord type so
-// older session files continue to read cleanly, but nothing reads or
-// writes them as of Round-15d-β. They're effectively documentation of
-// historical layout. cmdGc's stale-session sweep simply ignores them.
-
 // ----- subcommands ---------------------------------------------------------
 
 function cmdInit(args: string[]): void {
@@ -144,21 +122,13 @@ function cmdInit(args: string[]): void {
   nfsv3ProbeWarn();
   const positional: string[] = [];
   let force = false;
-  let noMonitor = false;
-  // Sidecar defaults ON (slice 5 cutover). Pass --no-sidecar to disable —
-  // useful for CI / debug or if a platform's fs.watch turns out to misbehave.
-  // --with-sidecar is accepted as a no-op for backwards compat with slice-1
-  // callers that explicitly opted in.
-  let noSidecar = false;
   for (const a of args) {
     if (a === "--force") force = true;
-    else if (a === "--no-monitor") noMonitor = true;
-    else if (a === "--with-sidecar") { /* default-on; accept as a no-op */ }
-    else if (a === "--no-sidecar") noSidecar = true;
+    else if (a.startsWith("--")) die(`init: unknown option ${a}`, 70);
     else positional.push(a);
   }
   const [name, topologyArg] = positional;
-  if (!name) die("usage: agent-chat.ts init <name> [<topology>] [--force] [--no-monitor] [--no-sidecar]");
+  if (!name) die("usage: agent-chat.ts init <name> [<topology>] [--force]");
 
   // Resume offer: same cwd + same tty + dead prior pid → propose reusing
   // last identity rather than declaring a new one.
@@ -187,15 +157,10 @@ function cmdInit(args: string[]): void {
     die(`agent "${name}" is not declared in topology "${topology}". Known agents: ${topo.agents.join(", ")}`);
   }
 
-  // Slice-2 refactor: resolve default speaker EARLY — before any state writes.
-  // cadence slice-2-refactor recommendation: place the resolve-or-fail check
-  // immediately after agent-name validation so a bad $AGENT_CHAT_USER fails
-  // BEFORE writeSessionRecord/startSidecar/startMonitor; failure path then
-  // needs zero cleanup. The resolved name (if non-null) is written by splice
-  // point #4 below, AFTER spawn, via exclusiveWriteOrFail (pulsar's wx-on-
-  // destination single-syscall CAS so an explicit `agent-chat speaker <name>`
-  // landing inside the auto-resolve window is preserved as the "explicit
-  // wins" invariant requires).
+  // Resolve the default speaker before any state writes so a bad
+  // $AGENT_CHAT_USER fails without leaving partial session state behind.
+  // The wx write below preserves the "explicit speaker wins" invariant
+  // if `agent-chat speaker <name>` races with init.
   const speakerResolution: DefaultSpeakerResolution = resolveDefaultSpeaker();
   if (speakerResolution.error) {
     die(`[agent-chat] ${speakerResolution.error}`, 65);
@@ -244,19 +209,6 @@ function cmdInit(args: string[]): void {
     cwd,
     tty,
   };
-
-  // Round-15d-β: sidecar + monitor lifecycle removed. agent-chat is now
-  // ephemeral-only — no long-running daemons. Each agent dispatch is a
-  // single `agent-chat run` tick that reads filesystem state, processes
-  // its actionable edges, and exits. ScheduleWakeup (via loop-driver.ts)
-  // handles cache-warm continuation. The flags `--no-sidecar` and
-  // `--no-monitor` are accepted for backward-compat but no longer have
-  // an effect (deprecation deferred to the next breaking-changes round).
-  if (!noSidecar || !noMonitor) {
-    // explicitly suppress the unused-var lint without changing the CLI
-    // surface. Deprecation accept: the flags exist so existing scripts
-    // / docs / muscle memory don't break, but they're parsed-and-ignored.
-  }
 
   // Write session + presence records. The session file is keyed by
   // session_key (unique per agent runtime instance), but concurrent
@@ -365,7 +317,7 @@ function cmdInit(args: string[]): void {
   console.log(`  session_key: ${sessionKey}`);
   console.log(`  pid:         ${rec.pid}`);
   console.log(`  cwd:         ${cwd}`);
-  console.log(`  runtime:     ephemeral (Round-15d-β; no sidecar/monitor daemon)`);
+  console.log(`  runtime:     ephemeral (no background daemon)`);
   // Print neighbors so the user immediately sees who they can talk to.
   const edges = edgesOf(topo, name);
   console.log(`  neighbors (${edges.length}): ${edges.map((e) => e.peer).join(", ")}`);
@@ -457,17 +409,16 @@ async function cmdExit(args: string[]): Promise<void> {
     console.log(`no active session for key ${key} — nothing to do.`);
     return;
   }
-  // Auto-archive parked-and-bloated edges BEFORE tearing down daemons so
-  // any sealed leaf is durable on disk before the sidecar/monitor stop.
+  // Auto-archive parked-and-bloated edges before signing out so any sealed
+  // leaf is durable on disk while the session identity still resolves.
   // Default-on; --no-auto-archive opts out for sessions that prefer to
   // archive manually.
   if (!noAutoArchive) {
     const n = autoArchiveSessionEdges(rec, threshold);
     if (n > 0) console.log(`✓ auto-archived ${n} parked edge(s) before exit`);
   }
-  // Round-15d-β: ephemeral-only — no sidecar / monitor to stop. Drop the
-  // session-scoped current_speaker.json so consumers don't see a stale
-  // speaker after exit (cadence slice-2 lifecycle invariant).
+  // Drop the session-scoped current_speaker.json so consumers don't see a
+  // stale speaker after exit (cadence slice-2 lifecycle invariant).
   safeUnlink(currentSpeakerPath(key));
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
@@ -495,14 +446,13 @@ function cmdWho(_args: string[]): void {
   }
 }
 
-// safeUnlink moved to lib.ts (slice-2 refactor — single source of truth so
-// sidecar.ts and tests can use it without importing from agent-chat.ts).
+// safeUnlink moved to lib.ts (slice-2 refactor — single source of truth for
+// CLIs and tests).
 // Original rationale (cadence Q4 / P0 Major #1): concurrent gc passes used
 // to crash here when one peer's unlinkSync hit a file another peer had just
 // removed; ENOENT-tolerance kept the sweep from aborting mid-loop.
 
 async function cmdGc(args: string[]): Promise<void> {
-  const pruneLogs = args.includes("--prune-logs");
   const autoArchive = args.includes("--auto-archive");
   const thresholdArg = args.find((a) => a.startsWith("--archive-threshold="));
   const threshold = thresholdArg ? parseInt(thresholdArg.split("=")[1], 10) : 200;
@@ -529,16 +479,8 @@ async function cmdGc(args: string[]): Promise<void> {
     // filesystem — we have no authority to GC them. See cadence F8 (P0 #2).
     if (rec.host !== myHost) continue;
     if (!processIsOriginal(rec.pid, rec.pid_starttime)) {
-      // Round-15d-β: ephemeral-only — no sidecar/monitor processes to stop.
-      // Stale per-session artifacts (current_speaker.json) get cleared
-      // alongside the session record; legacy heartbeat / socket / pidfile
-      // cleanups are best-effort no-ops for old-format sessions still on
-      // disk from pre-15d-β installs.
+      // Stale per-session artifacts get cleared alongside the session record.
       try { safeUnlink(currentSpeakerPath(rec.session_key)); } catch {}
-      // Defense-in-depth: legacy artifacts from pre-15d-β sessions.
-      try { safeUnlink(socketPathFor(rec.agent)); } catch {}
-      try { safeUnlink(pidFilePath(rec.agent, "sidecar")); } catch {}
-      try { safeUnlink(heartbeatPath(rec.agent)); } catch {}
       deleteSessionRecord(rec);
       console.log(`gc: removed stale ${rec.agent}@${rec.topology} (pid ${rec.pid} gone)`);
       removed++;
@@ -568,39 +510,6 @@ async function cmdGc(args: string[]): Promise<void> {
       }
     }
   }
-  // Defense-in-depth: orphan sockets/pidfiles whose pidfile points to a dead
-  // (or recycled) pid. These can occur when a sidecar was killed -9 outside
-  // of `agent-chat exit`. Three-step pass: (a) read pidfile, (b) check
-  // processIsOriginal, (c) safeUnlink socket + pidfile. Foreign-host check
-  // not needed — sockets are always local-host artifacts.
-  if (fs.existsSync(SOCKETS_DIR)) {
-    for (const f of fs.readdirSync(SOCKETS_DIR)) {
-      const m = f.match(/^sidecar-([A-Za-z0-9_-]+)\.pid$/);
-      if (!m) continue;
-      const agent = m[1];
-      const fp = path.join(SOCKETS_DIR, f);
-      let pid = 0;
-      let st: number | null = null;
-      try {
-        const text = fs.readFileSync(fp, "utf8").trim();
-        const pm = text.match(/^(\d+)\s+(\d+)/);
-        if (pm) {
-          pid = parseInt(pm[1], 10);
-          const s = parseInt(pm[2], 10);
-          st = s > 0 ? s : null;
-        }
-      } catch (e: any) {
-        if (e?.code === "ENOENT") continue;
-      }
-      if (pid > 0 && processIsOriginal(pid, st ?? undefined)) continue;  // live, leave alone
-      // Stale: reclaim socket + pidfile.
-      try { safeUnlink(socketPathFor(agent)); } catch {}
-      if (safeUnlink(fp)) {
-        console.log(`gc: removed stale sidecar pidfile + socket for ${agent} (pid ${pid || "?"} gone)`);
-        removed++;
-      }
-    }
-  }
   // Also sweep presence files whose pid is dead (defense in depth).
   if (fs.existsSync(PRESENCE_DIR)) {
     for (const f of fs.readdirSync(PRESENCE_DIR)) {
@@ -624,25 +533,6 @@ async function cmdGc(args: string[]): Promise<void> {
           console.log(`gc: removed orphan presence ${f}`);
           removed++;
         }
-      }
-    }
-  }
-  // --prune-logs: remove monitor + sidecar log files for agents that no
-  // longer have a live session OR a presence record on this host. Nothing
-  // else cleans these up; long-running boxes accumulate them. Keep ALL logs
-  // for currently-live agents (cadence F9 / P3 cleanup).
-  // LOGS_DIR is rooted on CONVERSATIONS_DIR (carina/cadence P1 fix); pre-fix
-  // this used path.join(SKILL_ROOT, "conversations", ".logs") and silently
-  // pruned host logs from inside hermetic test sandboxes.
-  if (pruneLogs) {
-    if (fs.existsSync(LOGS_DIR)) {
-      const liveAgents = new Set<string>();
-      for (const r of listSessions()) if (processIsOriginal(r.pid, r.pid_starttime) && r.host === myHost) liveAgents.add(r.agent);
-      for (const f of fs.readdirSync(LOGS_DIR)) {
-        const m = f.match(/^(monitor|sidecar)-([A-Za-z0-9_-]+)\.log$/);
-        if (!m) continue;
-        if (liveAgents.has(m[2])) continue;
-        if (safeUnlink(path.join(LOGS_DIR, f))) { console.log(`gc: pruned ${m[1]} log ${f}`); removed++; }
       }
     }
   }
@@ -680,7 +570,7 @@ async function cmdGc(args: string[]): Promise<void> {
       try { return fs.readdirSync(CONVERSATIONS_DIR); } catch { return [] as string[]; }
     })()) {
       const tdir = path.join(CONVERSATIONS_DIR, topo);
-      // Skip control dirs (.sessions, .presence, .sockets, .logs).
+      // Skip control dirs (.sessions, .presence, .roles, .dots, etc.).
       if (topo.startsWith(".")) continue;
       try {
         const st = fs.statSync(tdir);
@@ -702,31 +592,6 @@ async function cmdGc(args: string[]): Promise<void> {
   // the explicit cross-session opt-in (orion's Phase-1.5 answer).
   const aggressive = args.includes("--aggressive");
   if (aggressive) {
-    // Round-15d-β: heartbeat / socket reapers are now legacy cleanup paths
-    // for pre-15d-β installs. The current ephemeral architecture writes
-    // neither heartbeats nor sockets, but old-format artifacts may still
-    // be on disk and this sweep clears them.
-    const heartbeatsDir = path.join(CONVERSATIONS_DIR, ".heartbeats");
-    if (fs.existsSync(heartbeatsDir)) {
-      for (const f of fs.readdirSync(heartbeatsDir)) {
-        if (!f.endsWith(".heartbeat")) continue;
-        const sp = path.join(heartbeatsDir, f);
-        if (safeUnlink(sp)) {
-          console.log(`gc: removed legacy heartbeat ${f} (Round-15d-β no longer writes these)`);
-          removed++;
-        }
-      }
-    }
-    if (fs.existsSync(SOCKETS_DIR)) {
-      for (const f of fs.readdirSync(SOCKETS_DIR)) {
-        if (!f.endsWith(".sock")) continue;
-        const sp = path.join(SOCKETS_DIR, f);
-        if (safeUnlink(sp)) {
-          console.log(`gc: removed legacy socket ${f} (Round-15d-β no longer creates these)`);
-          removed++;
-        }
-      }
-    }
     // Clear `.fts-corrupt` sentinels for edges whose fts.db is now valid.
     // We probe by attempting a lightweight fts query; any throw means still
     // corrupt, leave the sentinel alone. The `fts.ts` module is optional —
@@ -767,11 +632,9 @@ async function cmdGc(args: string[]): Promise<void> {
   if (!removed) console.log("gc: nothing to remove.");
 }
 
-// Round-15d-β: cmdDoctor preserved as a CLI surface for backward-compat
-// but the heartbeat-driven liveness check is gone (heartbeats no longer
-// emitted under ephemeral-only). The doctor command now reports session
-// records on this host; future rounds may extend with ephemeral-aware
-// stuck-tick detection (e.g. probing scratchpad mtime + .turn age).
+// cmdDoctor reports file-backed session records on this host. Future rounds
+// may extend it with stuck-tick detection (e.g. probing scratchpad mtime +
+// .turn age).
 // ── Round-15h Concern-2: agent-managed role overrides (CLI) ─────────────
 
 function cmdRole(args: string[]): void {
@@ -1022,7 +885,7 @@ async function cmdDoctor(args: string[]): Promise<void> {
       })),
       live_count: live.length,
       stale_count: stale.length,
-      runtime: "ephemeral-only (Round-15d-β; no sidecar heartbeats)",
+      runtime: "ephemeral-only",
     }, null, 2));
   } else {
     console.log(`doctor --liveness (Round-15d-β; ephemeral-only):`);
@@ -1041,7 +904,6 @@ async function cmdWhoami(_args: string[]): Promise<void> {
   const key = currentSessionKey();
   const rec = readSessionRecord(key);
   if (rec) {
-    // Round-15d-β: ephemeral-only — no sidecar UDS to fast-path through.
     // Read directly from the SessionRecord + speaker file.
     const speaker = readCurrentSpeaker(key)?.name ?? "-";
     console.log(`${rec.agent}@${rec.topology}  session_key=${key}  pid=${rec.pid}  speaker=${speaker}`);
@@ -1144,10 +1006,9 @@ function recordedTurnsLedger(edgeDir: string): string {
   return path.join(edgeDir, "recorded_turns.jsonl");
 }
 
-// Read current_speaker for a given session_key. Round-15d-β: ephemeral-
-// only — file-direct only (no sidecar UDS fast-path). The lib-exported
-// readCurrentSpeaker handles the read; this helper preserves the async
-// signature for backward-compat with cmdRecordTurn callers.
+// Read current_speaker for a given session_key. The lib-exported
+// readCurrentSpeaker handles the file-direct read; this helper preserves
+// the async signature for backward-compat with cmdRecordTurn callers.
 async function fetchSpeaker(_agent: string, key: string): Promise<string | null> {
   return readCurrentSpeaker(key)?.name ?? null;
 }
@@ -1292,7 +1153,7 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
       } catch (err: any) {
         if (err.code !== "EEXIST") throw err;
         const lk = parseLockFile(oldEdge.lock);
-        if (lk && lk.agent === id.name && lk.pid === stableSessionPid()) {
+        if (lk && lk.agent === id.name && lk.host === os.hostname() && lockBelongsToCurrentSession(lk)) {
           // idempotent re-lock — proceed
         } else if (lk && !processIsOriginal(lk.pid, lk.starttime)) {
           fs.unlinkSync(oldEdge.lock);
@@ -1327,7 +1188,7 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
   } catch (err: any) {
     if (err.code !== "EEXIST") throw err;
     const lk = parseLockFile(edge.lock);
-    if (lk && lk.agent === id.name && lk.pid === stableSessionPid()) {
+    if (lk && lk.agent === id.name && lk.host === os.hostname() && lockBelongsToCurrentSession(lk)) {
       // idempotent re-lock — proceed
     } else if (lk && !processIsOriginal(lk.pid, lk.starttime)) {
       fs.unlinkSync(edge.lock);
@@ -1335,8 +1196,8 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
     } else {
       // Restore .turn to its pre-takefloor value so peers don't observe a
       // phantom turn-flip without a section. authorityTakeFloor wrote
-      // .turn=id.name (us); on lock-blocked die, peer's monitor would see
-      // value→<id.name> + no .md-grew, refire on every poll. Reverting to
+      // .turn=id.name (us); on lock-blocked die, peers would see
+      // value→<id.name> + no .md-grew. Reverting to
       // `speaker` matches the protocol invariant "speaker has the floor
       // before they speak; agent only takes it during the brief
       // append-and-flip window." Caught at Phase-4 cross-review by carina
@@ -1373,8 +1234,8 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
 // ----- run (Round-15a slice 1: ephemeral mode) -----------------------------
 //
 // `agent-chat run` is the ephemeral entry point: process one tick worth of
-// inbox work (any edge with .turn=<self>), exit. No sidecar startup, no
-// monitor. ScheduleWakeup re-fires the loop via scripts/loop-driver.ts.
+// inbox work (any edge with .turn=<self>), exit. ScheduleWakeup re-fires
+// the loop via scripts/loop-driver.ts.
 //
 // Cross-slice context: Round-14 audit Finding 7 (file-checklist
 // simplification) — we don't need a separate task list file. The
@@ -1392,8 +1253,8 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   // keeping the work loop bounded to one pass, with `loop-driver.ts`
   // as the scheduling wrapper. Round-15a Phase-4 review caught the
   // `--once` flag as parsed-but-unused (lumeyon CONCERN #1) — same
-  // anti-pattern shape that produced bm25-weights drift, missing-
-  // sidecar_version, file-checklist-doc-lies, NO_LLM-footgun. Phase-5
+  // anti-pattern shape that produced bm25-weights drift,
+  // file-checklist-doc-lies, NO_LLM-footgun. Phase-5
   // resolution: drop the flag entirely so CLI surface matches code
   // semantics. For self-scheduling, run `bun scripts/loop-driver.ts`.
   const opts = {
@@ -1426,9 +1287,6 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   }
   const id = resolveIdentity();
   const topo = loadTopology(id.topology);
-  // Round-15d-β: ephemeral-only — no sidecar exists, so no collision check
-  // is needed. Stale .sockets/<agent>.sock files from pre-15d-β installs
-  // are tolerated; they're cleaned up by `agent-chat gc`.
   const all = edgesOf(topo, id.name);
   const targetEdges = opts.peers.length > 0 ? all.filter((e) => opts.peers.includes(e.peer)) : all;
   if (targetEdges.length === 0) {
@@ -1928,10 +1786,6 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
     }
   }
-  // Round-15d-β: post-flight heartbeat liveness hint removed (heartbeats
-  // are no longer emitted under ephemeral-only). Stuck-tick detection
-  // moves to the loop-driver scratchpad/turn-mtime probe in a future
-  // round; for now, silent.
   // Round-15c (Contract A): clean up the synthetic ephemeral identity if
   // we pre-wrote one. Idempotent — safe even if the work loop crashed
   // mid-iteration (the cleanup just unlinks files that may or may not
@@ -1986,25 +1840,20 @@ switch (cmd) {
   case "-h":
     console.log(
       `usage: agent-chat.ts <command> [args]\n\n` +
-      `  init <name> [<topology>] [--force] [--no-monitor] [--no-sidecar]\n` +
+      `  init <name> [<topology>] [--force]\n` +
       `      Declare this session's identity. Auto-resolves topology if only\n` +
-      `      one is in use; offers resume on cwd+tty match. Auto-launches\n` +
-      `      both the per-agent sidecar daemon (UDS fast path + inotify\n` +
-      `      watcher + diff cache at .sockets/<agent>.sock) and the multi-edge\n` +
-      `      monitor (chat-notification stdout) in the background.\n` +
-      `      Pass --no-sidecar to disable the daemon (file-direct only).\n` +
-      `      Pass --no-monitor to disable the chat-notification poller.\n\n` +
+      `      one is in use; offers resume on cwd+tty match. This only writes\n` +
+      `      session + presence state; use \`run\` or \`loop-driver.ts\` to\n` +
+      `      process pending turns.\n\n` +
       `  exit\n` +
-      `      Sign out: stop this session's monitor and remove its session +\n` +
-      `      presence files. Safe to skip — \`gc\` cleans up dead sessions.\n` +
+      `      Sign out and remove this session's session + presence files.\n` +
+      `      Safe to skip — \`gc\` cleans up dead sessions.\n` +
       `      Auto-archives parked edges past --archive-threshold (default 200)\n` +
       `      before teardown; pass --no-auto-archive to opt out.\n\n` +
       `  who\n` +
       `      List live (and stale) sessions on this host.\n\n` +
-      `  gc [--prune-logs] [--auto-archive] [--archive-threshold=N]\n` +
+      `  gc [--auto-archive] [--archive-threshold=N] [--aggressive]\n` +
       `      Sweep stale session/presence files (pid no longer alive).\n` +
-      `      With --prune-logs, also remove monitor log files for agents\n` +
-      `      that aren't live on this host.\n` +
       `      With --auto-archive, run \`archive.ts auto\` against every\n` +
       `      parked edge of the CURRENT session whose CONVO.md is past the\n` +
       `      line threshold (default 200). Use --archive-threshold=N to override.\n\n` +

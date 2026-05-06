@@ -92,7 +92,7 @@ When this work happens, append findings to this doc and:
 - Update `scripts/runtimes/codex.ts` to remove the throws + wire the real primitives.
 - Update `.codex-plugin/plugin.json` if hook event names need explicit declaration.
 - Add `tests/runtimes-codex.test.ts` exercising the dispatch + wakeup paths.
-- Update `README.md` Hybrid mode section to drop the "Codex side gated on empirical work" caveat.
+- Update `README.md` ephemeral execution section to drop the "Codex side gated on empirical work" caveat.
 
 ## Round-15b commit boundary
 

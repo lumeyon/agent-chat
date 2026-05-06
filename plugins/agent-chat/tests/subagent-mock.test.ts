@@ -6,7 +6,6 @@
 //   - real cross-process race conditions on .turn flips
 //   - lock-file integrity under concurrent writers
 //   - identity-via-session-file resolution under fork/exec
-//   - monitor wakeup chains (when --with-monitor is passed)
 //
 // What it doesn't catch (by design — that's what the gated LLM test is for):
 //   - whether real Claude/Codex actually obeys bootstrap.md instructions
@@ -17,7 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { spawn } from "node:child_process";
-import { mkTmpConversations, rmTmp, runScript, sessionEnv, SCRIPTS, SKILL_ROOT } from "./helpers.ts";
+import { mkTmpConversations, rmTmp, runScript, sessionEnv, SKILL_ROOT } from "./helpers.ts";
 
 const FAKE_AGENT = path.join(import.meta.dirname, "fake-agent.ts");
 
@@ -55,11 +54,10 @@ describe("two fake agents exchanging turns through the real protocol", () => {
     const orionEnv = sessionEnv(CONVO_DIR, "orion", "pair");
     const lumeyonEnv = sessionEnv(CONVO_DIR, "lumeyon", "pair");
 
-    // Each "session" runs agent-chat init first (no-monitor, since the
-    // mock test doesn't need notifications). That writes the session file
-    // each fake-agent will resolve identity from.
-    runScript("agent-chat.ts", ["init", "orion", "pair", "--no-monitor"], orionEnv);
-    runScript("agent-chat.ts", ["init", "lumeyon", "pair", "--no-monitor"], lumeyonEnv);
+    // Each "session" runs agent-chat init first. That writes the session
+    // file each fake-agent will resolve identity from.
+    runScript("agent-chat.ts", ["init", "orion", "pair"], orionEnv);
+    runScript("agent-chat.ts", ["init", "lumeyon", "pair"], lumeyonEnv);
 
     // Spawn both agents simultaneously. orion is the designated first writer.
     const orionChild = spawnFakeAgent(orionEnv, ["orion", "lumeyon", "3", "--first", "orion"]);
@@ -112,8 +110,8 @@ describe("two fake agents exchanging turns through the real protocol", () => {
   test("a single round each: orion writes-then-flips, lumeyon writes-then-parks (2 sections total)", async () => {
     const orionEnv = sessionEnv(CONVO_DIR, "orion", "pair");
     const lumeyonEnv = sessionEnv(CONVO_DIR, "lumeyon", "pair");
-    runScript("agent-chat.ts", ["init", "orion", "pair", "--no-monitor"], orionEnv);
-    runScript("agent-chat.ts", ["init", "lumeyon", "pair", "--no-monitor"], lumeyonEnv);
+    runScript("agent-chat.ts", ["init", "orion", "pair"], orionEnv);
+    runScript("agent-chat.ts", ["init", "lumeyon", "pair"], lumeyonEnv);
 
     const orionChild = spawnFakeAgent(orionEnv, ["orion", "lumeyon", "1", "--first", "orion"]);
     const lumeyonChild = spawnFakeAgent(lumeyonEnv, ["lumeyon", "orion", "1"]);
