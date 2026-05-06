@@ -50,9 +50,9 @@ function scenario(label: string, fn: () => void) {
 const AGENT_CHAT = path.join(SKILL_ROOT, "scripts/agent-chat.ts");
 const TURN = path.join(SKILL_ROOT, "scripts/turn.ts");
 
-function run(args: string[], envOverride: Record<string, string> = {}): SpawnSyncReturns<string> {
+function run(args: string[], envOverride: Record<string, string> = {}, stdin?: string): SpawnSyncReturns<string> {
   const env: Record<string, string> = { ...(process.env as Record<string, string>), ...envOverride };
-  return spawnSync("bun", args, { env, encoding: "utf8" });
+  return spawnSync("bun", args, { env, encoding: "utf8", input: stdin });
 }
 
 // ── tmp dir lifecycle ──────────────────────────────────────────────────────
@@ -358,6 +358,43 @@ scenario("Round-15k Item-7 — <role> directive parser regex", () => {
   check("role override path exists or is creatable",
     actuallyExistsAlready || !fs.existsSync(path.dirname(expectedRolePath)) || true,
     `expected: ${expectedRolePath}`);
+});
+
+scenario("Round-15o — lessons CLI + <lesson> directive wiring", () => {
+  // Smoke-check the lessons CLI surface + verify the directive parser is
+  // wired into cmdRun. Real <lesson> directive parsing on real LLM output
+  // is in llm-smoke.ts territory; this scenario covers the hermetic path.
+  const setR = run([AGENT_CHAT, "lessons", "set", "self-test-topic", "--stdin"], orionEnv,
+    "Self-test lesson body — verifies the CLI write path.");
+  check("lessons set --stdin exit 0", setR.status === 0, setR.stderr);
+
+  const lessonFile = path.join(convDir, ".lessons/orion/self-test-topic.md");
+  check("lesson file written to <conv>/.lessons/<agent>/<topic>.md", fs.existsSync(lessonFile));
+
+  const listR = run([AGENT_CHAT, "lessons", "list"], orionEnv);
+  check("lessons list exit 0", listR.status === 0, listR.stderr);
+  check("lessons list shows the topic", /self-test-topic/.test(listR.stdout));
+  check("lessons list shows the headline", /Self-test lesson body/.test(listR.stdout));
+
+  const getR = run([AGENT_CHAT, "lessons", "get", "self-test-topic"], orionEnv);
+  check("lessons get exit 0", getR.status === 0, getR.stderr);
+  check("lessons get shows dated header + body", /^## \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/m.test(getR.stdout));
+
+  // Per-agent isolation: lumeyon's lessons listing should NOT include orion's topic.
+  const lumeyonListR = run([AGENT_CHAT, "lessons", "list"], lumeyonEnv);
+  check("per-agent isolation — lumeyon doesn't see orion's lesson",
+    !/self-test-topic/.test(lumeyonListR.stdout));
+
+  // Verify the cmdRun directive parser wiring is present.
+  const code = fs.readFileSync(path.join(SKILL_ROOT, "scripts/agent-chat.ts"), "utf8");
+  check("cmdRun parses <lesson topic=...> directive",
+    /<lesson[\s\S]{0,1000}appendLesson\(id\.name/.test(code));
+  check("cmdRun surfaces lessons block in prompt",
+    /lessonsBlock\s*=\s*composeLessonsPromptBlock/.test(code));
+
+  const clearR = run([AGENT_CHAT, "lessons", "clear", "self-test-topic"], orionEnv);
+  check("lessons clear exit 0", clearR.status === 0);
+  check("lesson file removed by clear", !fs.existsSync(lessonFile));
 });
 
 scenario("Round-15l-D — notify.ts watcher script is callable + wired as `agent-chat watch`", () => {

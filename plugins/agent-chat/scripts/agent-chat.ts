@@ -43,6 +43,9 @@ import {
   relayPathTo,
   // Round-15l: per-agent runtime selection (claude vs codex)
   resolveRuntime, ALL_RUNTIMES, type RuntimeName,
+  // Round-15o: cross-edge crystallized lessons
+  appendLesson, readLesson, listLessonTopics, clearLesson, composeLessonsPromptBlock,
+  isValidLessonTopic, LESSONS_DIR, LESSON_BODY_MAX_BYTES,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 
@@ -693,6 +696,82 @@ function cmdRole(args: string[]): void {
     return;
   }
   die(`usage: agent-chat.ts role <get|set|clear|list> [<agent>] [--stdin | --from-file <path>]`, 70);
+}
+
+// ── Round-15o: cross-edge crystallized lessons (CLI) ────────────────────
+
+function cmdLessons(args: string[]): void {
+  const sub = args[0];
+  if (sub === "list") {
+    const id = resolveIdentity();
+    const target = args[1] ?? id.name;
+    const topics = listLessonTopics(target);
+    if (topics.length === 0) {
+      console.log(`(${target} has no lessons yet)`);
+      return;
+    }
+    for (const topic of topics) {
+      const body = readLesson(target, topic);
+      // Find the headline (first non-empty body line of the most recent
+      // dated section).
+      let headline = "(empty)";
+      if (body) {
+        const sections = body.split(/^## \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/m);
+        const latest = sections[sections.length - 1] ?? "";
+        const candidate = latest.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+        if (candidate) headline = candidate;
+      }
+      console.log(`  ${topic.padEnd(40)} ${headline}`);
+    }
+    return;
+  }
+  if (sub === "get") {
+    const topic = args[1];
+    if (!topic) die(`usage: agent-chat.ts lessons get <topic> [<agent>]`, 70);
+    const id = resolveIdentity();
+    const target = args[2] ?? id.name;
+    const body = readLesson(target, topic);
+    if (body == null) {
+      console.log(`(no lesson "${topic}" for ${target})`);
+      process.exit(1);
+    }
+    console.log(body);
+    return;
+  }
+  if (sub === "set") {
+    const topic = args[1];
+    if (!topic) die(`usage: agent-chat.ts lessons set <topic> [--stdin | --from-file <path>]`, 70);
+    if (!isValidLessonTopic(topic)) die(`invalid lesson topic "${topic}"; must be 1-64 chars [a-z0-9_-]`, 70);
+    const id = resolveIdentity();
+    let body = "";
+    const fromFileIdx = args.indexOf("--from-file");
+    if (fromFileIdx >= 0 && args[fromFileIdx + 1]) {
+      body = fs.readFileSync(args[fromFileIdx + 1], "utf8");
+    } else if (args.includes("--stdin")) {
+      body = fs.readFileSync(0, "utf8");
+    } else {
+      die(`lessons set: must pass --stdin or --from-file <path>`, 70);
+    }
+    body = body.trim();
+    if (!body) die(`lessons set: empty body refused`, 70);
+    if (body.length > LESSON_BODY_MAX_BYTES) {
+      die(`lessons set: body too long (${body.length} > cap ${LESSON_BODY_MAX_BYTES} bytes)`, 70);
+    }
+    appendLesson(id.name, topic, body);
+    console.log(`✓ lesson recorded for ${id.name}/${topic} (${body.length} bytes) — surfaces in your next cmdRun prompt.`);
+    return;
+  }
+  if (sub === "clear") {
+    const topic = args[1];
+    if (!topic) die(`usage: agent-chat.ts lessons clear <topic>`, 70);
+    const id = resolveIdentity();
+    const did = clearLesson(id.name, topic);
+    console.log(did
+      ? `✓ lesson "${topic}" cleared for ${id.name}`
+      : `(no lesson "${topic}" existed for ${id.name})`);
+    return;
+  }
+  die(`usage: agent-chat.ts lessons <list|get|set|clear> [<topic>] [<agent>] [--stdin | --from-file <path>]`, 70);
 }
 
 // ── Round-15h Concern-3: Dot Collector (CLI) ────────────────────────────
@@ -1456,6 +1535,13 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       const scratchBlock = scratchContent
         ? `Your persistent scratchpad (your own autobiographical memory across all relationships, written by past invocations of yourself):\n\n${scratchContent}\n\n---\n\n`
         : "";
+      // Round-15o: cross-edge crystallized lessons. Surfaces the headline
+      // (first line of most-recent dated entry) of every lesson topic this
+      // agent has accumulated. Capped at LESSON_PROMPT_BUDGET_BYTES so a
+      // long history doesn't crowd the prompt — overflow is replaced with
+      // "(N more — see `agent-chat lessons list`)" so the agent can opt
+      // into expansion when needed.
+      const lessonsBlock = composeLessonsPromptBlock(id.name);
       const subRelayBlock = subRelayChain.length > 0
         ? `Sub-relay context: dispatched as part of chain [${subRelayChain.join(" → ")} → ${id.name}]. Original dispatcher is "${subRelayChain[subRelayChain.length - 1]}".\n\n`
         : "";
@@ -1509,6 +1595,7 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         `You are agent "${id.name}" in topology "${id.topology}", currently in conversation with "${edge.peer}".\n\n` +
         peerRolesBlock +
         scratchBlock +
+        lessonsBlock +
         subRelayBlock +
         `Recent conversation tail (last 4 sections):\n\n${tail}\n\n` +
         `Compose your response as a single Markdown section beginning with the canonical header ` +
@@ -1559,6 +1646,19 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         `to learn it, append <role>updated specialty: <one-line summary></role>. ` +
         `Use this only when your durable shape has changed — not for one-off ` +
         `tasks. Empty body clears the override. ` +
+        // Round-15o: <lesson> directive — crystallize wisdom from this
+        // exchange so future ticks of YOU benefit. Use when you've
+        // recognized a durable pattern (a workaround, a load-bearing
+        // invariant, a failure-mode signature, an architectural lesson).
+        // Topic should be a short kebab-case slug; body should be 1-3
+        // paragraphs of distilled insight. Multiple <lesson> blocks per
+        // response are allowed. Lessons surface in your next cmdRun
+        // prompt's headline list.
+        `If you recognized something worth REMEMBERING ACROSS conversations ` +
+        `(a workaround, an invariant, a failure-mode signature) — not just for ` +
+        `this exchange — append <lesson topic="kebab-case-slug">distilled wisdom in 1-3 paragraphs</lesson>. ` +
+        `Lessons surface in your next prompts. Use sparingly: only durable ` +
+        `wisdom, not per-task observations. ` +
         `All directive blocks above are OPTIONAL.`;
     } catch (err) {
       console.error(`[agent-chat run] failed to read CONVO.md at ${edge.convo}: ${(err as Error).message}; skipping.`);
@@ -1667,6 +1767,34 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       }
       stdout = stdout.replace(roleMatch[0], "").trim();
     }
+    // Round-15o: extract <lesson topic="..."> blocks — agent crystallizes
+    // wisdom from this exchange. Storage at <conv>/.lessons/<agent>/<topic>.md,
+    // append-only with dated headers. Surfaced first-line in next cmdRun
+    // prompts via composeLessonsPromptBlock so the loop closes (writes
+    // change reads). Multiple lessons per response allowed.
+    let lessonSearch = stdout;
+    while (true) {
+      const m = lessonSearch.match(/<lesson\s+topic=["']([a-z0-9_-]+)["']\s*>([\s\S]*?)<\/lesson>/i);
+      if (!m) break;
+      const topic = m[1];
+      const body = m[2].trim();
+      if (!isValidLessonTopic(topic)) {
+        console.error(`[agent-chat run] <lesson> directive refused: invalid topic "${topic}"`);
+      } else if (!body) {
+        console.error(`[agent-chat run] <lesson> directive refused: empty body for topic "${topic}"`);
+      } else if (body.length > LESSON_BODY_MAX_BYTES) {
+        console.error(`[agent-chat run] <lesson> directive refused: body ${body.length} bytes > cap ${LESSON_BODY_MAX_BYTES} for topic "${topic}"`);
+      } else {
+        try {
+          appendLesson(id.name, topic, body);
+          console.log(`[agent-chat run] lesson recorded: ${id.name}/${topic} (${body.length} bytes)`);
+        } catch (err) {
+          console.error(`[agent-chat run] lesson append failed: ${(err as Error).message} (non-blocking)`);
+        }
+      }
+      lessonSearch = lessonSearch.replace(m[0], "");
+    }
+    stdout = lessonSearch.trim();
     // Round-15f: extract all <dispatch peer="..."> blocks. Validate each
     // peer is an actual neighbor of mine in this topology before queuing
     // the sub-relay (prevents typos and out-of-graph dispatches).
@@ -1923,6 +2051,7 @@ switch (cmd) {
   case "autowatch":    void cmdAutowatch(rest); break;
   case "autowatch-service": void cmdAutowatchService(rest); break;
   case "role":         cmdRole(rest); break;
+  case "lessons":      cmdLessons(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
   case undefined:
@@ -1991,6 +2120,14 @@ switch (cmd) {
       `      removes the override. \`list\` shows every agent's first-line role\n` +
       `      and which have overrides. Loaded by every cmdRun tick so peers\n` +
       `      see updates immediately.\n\n` +
+      `  lessons <list|get|set|clear> [<topic>] [<agent>] [--stdin | --from-file <path>]\n` +
+      `      Round-15o: cross-edge crystallized lessons. Closes the last open\n` +
+      `      learning loop — wisdom an agent extracts from many conversations,\n` +
+      `      surfaced in future cmdRun prompts. Topic is a kebab-case slug\n` +
+      `      ([a-z0-9_-]{1,64}); body is 1-3 paragraphs of distilled insight.\n` +
+      `      Agents emit via the <lesson topic="..."> directive in cmdRun output;\n` +
+      `      the CLI is the out-of-band path. Storage:\n` +
+      `      <conv>/.lessons/<agent>/<topic>.md (append-only with dated headers).\n\n` +
       `  dot <peer> --axis <a>=<n> [--axis ...] [--note "..."]\n` +
       `      Round-15h Concern-3: Dot Collector (Dalio-inspired). Append a\n` +
       `      multi-axis grade for <peer> to <conv>/.dots/<peer>.jsonl. Axes:\n` +

@@ -160,7 +160,7 @@ bun "$AGENT_CHAT_DIR/scripts/loop-driver.ts" --interactive
 Each tick reads `.turn` files, processes edges where `.turn` equals this
 agent, appends a Markdown section to `CONVO.md`, flips the turn sentinel,
 handles structured directives (`<scratch>`, `<archive>`, `<dispatch>`,
-`<dot/>`, `<role>`), then exits.
+`<dot/>`, `<role>`, `<lesson>`), then exits.
 
 ## Step 3 — manual turn protocol
 
@@ -405,3 +405,77 @@ A typical orion tick now reads:
 The mesh is now self-organizing: roles describe demonstrated competence,
 dots score it continuously, and routing decisions can choose the
 right peer instead of just the nearest one.
+
+## Round 15o — cross-edge crystallized lessons
+
+The last open learning loop. Per-edge archives + per-agent scratchpad +
+network competence (Dot Collector) + network specialty (roles) + network
+routing (relay paths) all close their own loops. Missing: **wisdom you
+crystallize from many conversations, surfaced in future cmdRun prompts.**
+
+When you recognize something durably true that you'd want a future tick
+of yourself to remember (a workaround, a load-bearing invariant, a
+failure-mode signature, an architectural lesson), emit a `<lesson>`
+directive in your cmdRun response — symmetric with `<scratch>` /
+`<archive>` / `<dispatch>` / `<dot/>` / `<role>`:
+
+```xml
+<lesson topic="codex-sandbox-failures">
+When bwrap loopback init fails, agents can still write files via the
+agent-chat protocol because the wire format is filesystem-only. This is
+a load-bearing property worth defending: it survives cross-runtime
+sandbox failures that would block any RPC-based coordination layer.
+</lesson>
+```
+
+Multiple `<lesson>` directives per response are allowed (each on a
+distinct topic). Storage: `<conv>/.lessons/<agent>/<topic>.md`,
+append-only with dated headers so repeated lessons on the same topic
+accumulate as a trail (most-recent on the bottom).
+
+**The closed loop**: every cmdRun tick prepends a `Lessons you've
+crystallized from past exchanges` block that surfaces the headline
+(first non-empty line of the most-recent dated entry) for each topic
+this agent has accumulated. Capped at 2 KB; overflow shows
+`(N more — see \`agent-chat lessons list\`)` so the agent can opt into
+expansion via the CLI when needed.
+
+CLI for out-of-band access:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" lessons list                  # all my topics + headlines
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" lessons get <topic>           # full body of one topic
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" lessons get <topic> <agent>   # peek another agent's lesson
+echo "..." | bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" lessons set <topic> --stdin
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" lessons clear <topic>
+```
+
+**When to crystallize**:
+
+- A workaround that took several attempts to find — capture so future you
+  doesn't re-derive it
+- A protocol/architectural invariant you observed surviving stress (e.g.
+  "filesystem-first protocol survived a sandbox failure")
+- A failure-mode signature you can name (e.g. "rename-replace breaks Bun
+  fs.watch on file paths")
+
+**When NOT to crystallize**:
+
+- Per-task observations that won't recur (use `<scratch>` instead — it's
+  per-agent autobiographical, not crystallized wisdom)
+- Per-edge context (use the CONVO.md flow + archive layer)
+- Subjective takes about peers (use `<dot/>` axes — those are weighted
+  into routing; lessons are not weighted, they're surfaced)
+
+Lessons differ from scratchpad in scope: scratchpad is your narrative of
+your relationships and recent state, refreshed often; lessons are durable
+wisdom slugs you'd want to consult on every future tick. Both are surfaced
+in the prompt, but they sit in different blocks for different reasons.
+
+**Why the loop closes here when it didn't in tree-of-knowledge**: ToK's
+EVIDENCE.md files accumulated as append-only diary, but no read path
+consulted them during reasoning — storage without surfacing. Round-15o
+puts the read path in the same surface that already closes scratchpad,
+roster, dots, roles, and relay paths: the cmdRun prompt. Today's writes
+deterministically change tomorrow's reads — same closing pattern,
+already-validated five times.

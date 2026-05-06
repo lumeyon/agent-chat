@@ -705,6 +705,124 @@ export function clearRoleOverride(agent: string): boolean {
   catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
 }
 
+// ── Round-15o: cross-edge crystallized lessons ──────────────────────────
+//
+// Closes the last open learning loop in agent-chat. Per-edge archives,
+// per-agent scratchpads, Dot Collector, role overrides, and relay paths
+// each close their own loop (today's writes change tomorrow's reads).
+// Missing: cross-edge crystallized lessons — wisdom an agent extracts
+// from many conversations, surfaced in future cmdRun prompts.
+//
+// Pattern that the tree-of-knowledge experiment got wrong (negative result
+// on /data/lumeyon/tree-of-knowledge): EVIDENCE accumulated as append-only
+// diary, but no read path consulted it during reasoning. Storage without
+// surfacing is just a Wiki, not a learning system.
+//
+// Round-15o makes the loop close at the same surface that already closes
+// the loops for scratchpad + roster + dots + roles: the cmdRun prompt.
+// Agents emit `<lesson topic="...">body</lesson>` deliberately when they
+// recognize something worth keeping. Lessons are surfaced (first line of
+// each topic) at the start of every cmdRun tick. Same closing pattern,
+// already-validated five times.
+//
+// Storage: <conv>/.lessons/<agent>/<topic>.md, append-only, with a
+// `## YYYY-MM-DDTHH:MM:SSZ` header per addition so multiple lessons on
+// the same topic accumulate as a dated trail.
+//
+// Topic name constraints: 1-64 chars matching [a-z0-9_-] (filesystem +
+// regex safe; same character class as agent names but slightly wider
+// length cap so topics can be specific without being awkward).
+export const LESSONS_DIR = path.join(CONVERSATIONS_DIR, ".lessons");
+export const LESSON_TOPIC_RE = /^[a-z0-9_-]{1,64}$/i;
+export const LESSON_BODY_MAX_BYTES = 8 * 1024;
+export const LESSON_PROMPT_BUDGET_BYTES = 2 * 1024;
+
+export function isValidLessonTopic(topic: string): boolean {
+  return LESSON_TOPIC_RE.test(topic);
+}
+
+export function lessonsAgentDir(agent: string): string {
+  return path.join(LESSONS_DIR, safeAgent(agent));
+}
+
+export function lessonPath(agent: string, topic: string): string {
+  if (!isValidLessonTopic(topic)) {
+    throw new Error(`invalid lesson topic "${topic}"; must match ${LESSON_TOPIC_RE}`);
+  }
+  return path.join(lessonsAgentDir(agent), `${topic}.md`);
+}
+
+export function appendLesson(agent: string, topic: string, body: string): void {
+  if (!isValidLessonTopic(topic)) {
+    throw new Error(`invalid lesson topic "${topic}"; must match ${LESSON_TOPIC_RE}`);
+  }
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error(`lesson body refused: empty (use \`lessons clear <topic>\` to remove)`);
+  if (trimmed.length > LESSON_BODY_MAX_BYTES) {
+    throw new Error(`lesson body too long (${trimmed.length} bytes > cap ${LESSON_BODY_MAX_BYTES})`);
+  }
+  const dir = lessonsAgentDir(agent);
+  fs.mkdirSync(dir, { recursive: true });
+  const target = lessonPath(agent, topic);
+  const ts = utcStamp();
+  // Append-only: each addition gets a dated header so repeated lessons
+  // on the same topic accumulate as a trail rather than overwriting.
+  const block = (fs.existsSync(target) ? "\n\n" : "") + `## ${ts}\n\n${trimmed}\n`;
+  fs.appendFileSync(target, block, { mode: 0o600 });
+}
+
+export function readLesson(agent: string, topic: string): string | null {
+  try { return fs.readFileSync(lessonPath(agent, topic), "utf8"); }
+  catch (e: any) { if (e?.code === "ENOENT") return null; throw e; }
+}
+
+export function listLessonTopics(agent: string): string[] {
+  const dir = lessonsAgentDir(agent);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => f.slice(0, -3))
+    .sort();
+}
+
+export function clearLesson(agent: string, topic: string): boolean {
+  try { fs.unlinkSync(lessonPath(agent, topic)); return true; }
+  catch (e: any) { if (e?.code === "ENOENT") return false; throw e; }
+}
+
+/**
+ * Compose the lessons block surfaced in cmdRun prompts. Returns the
+ * first line of each lesson topic (the most-recent dated entry's first
+ * non-empty line after its header), space-budgeted to LESSON_PROMPT_BUDGET_BYTES
+ * so a long lessons history doesn't crowd out the rest of the prompt.
+ *
+ * Returns "" if no lessons exist for this agent.
+ */
+export function composeLessonsPromptBlock(agent: string): string {
+  const topics = listLessonTopics(agent);
+  if (topics.length === 0) return "";
+  const lines: string[] = [];
+  let bytesUsed = 0;
+  for (const topic of topics) {
+    const body = readLesson(agent, topic);
+    if (!body) continue;
+    // Find the LAST dated section (most recent), then its first non-empty
+    // body line. This is the headline of the lesson.
+    const sections = body.split(/^## \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/m);
+    const latest = sections[sections.length - 1] ?? "";
+    const headline = latest.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
+    if (!headline) continue;
+    const line = `  - ${topic}: ${headline}`;
+    if (bytesUsed + line.length > LESSON_PROMPT_BUDGET_BYTES) {
+      lines.push(`  - (${topics.length - lines.length} more lesson topic(s) — see \`agent-chat lessons list\`)`);
+      break;
+    }
+    lines.push(line);
+    bytesUsed += line.length + 1; // +1 for newline
+  }
+  return `Lessons you've crystallized from past exchanges (use \`agent-chat lessons get <topic>\` to expand):\n\n${lines.join("\n")}\n\n---\n\n`;
+}
+
 // ── Round-15h Concern-3: Dot Collector (Dalio-inspired peer rating) ─────
 //
 // Multidimensional grading. Each dot is one peer's rating of another peer's
@@ -980,6 +1098,7 @@ export function ensureControlDirs(): void {
   fs.mkdirSync(PRESENCE_DIR, { recursive: true });
   fs.mkdirSync(ROLES_DIR, { recursive: true });
   fs.mkdirSync(DOTS_DIR, { recursive: true });
+  fs.mkdirSync(LESSONS_DIR, { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
