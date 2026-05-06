@@ -144,8 +144,55 @@ async function main(): Promise<void> {
 
   log(`hook fired: session=${payload.session_id ?? "?"} transcript=${transcript}`);
 
-  // 1) Mirror new turns into CONVO.md (idempotent via record-turn ledger)
-  const mirror = spawnQuiet("bun", [MIRROR_BIN, "--backfill", transcript], 60_000);
+  // Look up the agent-chat session that matched this hook (cwd match).
+  // Pass its agent + topology via env to subprocesses so record-turn's
+  // identity resolution doesn't have to walk the PPID tree (which
+  // doesn't reach our claude process from inside the spawn chain).
+  // Without this, the FIRST record-turn call crashes in
+  // resolveIdentity() and every subsequent retry hits the same crash.
+  let agentEnv: Record<string, string> = {};
+  const sessionsDirForEnv = path.join(CONV_DIR, ".sessions");
+  if (fs.existsSync(sessionsDirForEnv)) {
+    for (const f of fs.readdirSync(sessionsDirForEnv)) {
+      if (f.endsWith(".current_speaker.json") || !f.endsWith(".json")) continue;
+      try {
+        const s = JSON.parse(fs.readFileSync(path.join(sessionsDirForEnv, f), "utf-8"));
+        const sessCwd = s?.cwd ?? "";
+        if (sessCwd && (hookCwd === sessCwd || hookCwd.startsWith(sessCwd + "/"))) {
+          agentEnv = {
+            AGENT_NAME: s.agent,
+            AGENT_TOPOLOGY: s.topology,
+          };
+          // Pass the FULL session_key as CLAUDE_SESSION_ID. record-turn
+          // uses CLAUDE_SESSION_ID verbatim as the session_key, which is
+          // also the prefix of the speaker file (e.g.,
+          // "pid:2482580.current_speaker.json"). Stripping the "pid:"
+          // prefix here would cause the speaker lookup to miss.
+          if (s.session_key) agentEnv.CLAUDE_SESSION_ID = s.session_key;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Patch spawnQuiet's env-extension to include agentEnv
+  function spawnQuietWithIdentity(cmd: string, args: string[], timeoutMs: number = 30000) {
+    const result = child_process.spawnSync(cmd, args, {
+      timeout: timeoutMs,
+      encoding: "utf-8",
+      env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR, ...agentEnv },
+    });
+    return {
+      rc: result.status ?? -1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  }
+
+  // 1) Mirror new turns into CONVO.md (idempotent via record-turn ledger).
+  // Bumped timeout 60s -> 180s: a backlog of 270+ pairs with retry
+  // backoffs can legitimately need >60s to complete.
+  const mirror = spawnQuietWithIdentity("bun", [MIRROR_BIN, "--backfill", transcript], 180_000);
   if (mirror.rc !== 0) {
     log(`mirror failed: rc=${mirror.rc} stderr=${mirror.stderr.slice(0, 800)}`);
   } else {

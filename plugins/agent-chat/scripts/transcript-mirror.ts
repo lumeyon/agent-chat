@@ -195,6 +195,10 @@ function recordTurn(user: string, assistant: string, convDir: string): RecordRes
   // we ALWAYS retry up to MAX_ATTEMPTS — only success or repeated
   // failure ends the loop.
   const payload = JSON.stringify({ user, assistant });
+  // Forward AGENT_NAME / AGENT_TOPOLOGY / CLAUDE_SESSION_ID if present.
+  // These let record-turn's identity resolution short-circuit the
+  // PPID-walk path (which fails when called from a subprocess chain
+  // like stop-hook -> transcript-mirror -> record-turn).
   const env = {
     ...process.env,
     AGENT_CHAT_CONVERSATIONS_DIR: convDir,
