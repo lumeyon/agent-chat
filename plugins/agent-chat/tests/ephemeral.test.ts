@@ -111,10 +111,12 @@ describe("ephemeral mode — Round-15a slice 2 (carina Phase-3, post-pivot)", ()
     const env = sessionEnv(tmp, "orion", TOPO, key);
     const r = runScript("agent-chat.ts", ["run", "--once", "carina"], env);
     expect(r.exitCode).toBe(0);
-    // The specific failure shape: runClaude returned reason="not-found"
-    // (because AGENT_CHAT_NO_LLM=1, set globally by freshEnv). Cmdrun logs
-    // `runClaude not-found on <edge-id>` before unlocking and continuing.
-    expect(r.stderr).toMatch(/runClaude not-found on carina-orion/);
+    // The specific failure shape: dispatch returned reason="not-found"
+    // (because AGENT_CHAT_NO_LLM=1, set globally by freshEnv). cmdRun logs
+    // `dispatch (<runtime>) not-found on <edge-id>` before unlocking and
+    // continuing. Round-15l replaced the runClaude direct-import with a
+    // resolved runtime adapter; the log line now names the runtime.
+    expect(r.stderr).toMatch(/dispatch \((claude|codex)\) not-found on carina-orion/);
     // No edge mutation occurred: CONVO.md still has only the staged header,
     // .turn is still orion's (not flipped to carina), no lock leaked.
     const convo = fs.readFileSync(path.join(edgeDir, "CONVO.md"), "utf8");

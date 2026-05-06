@@ -29,6 +29,18 @@ export type Topology = {
   //     lumeyon: |
   //       Architecture and systems analyst. Deep code reading.
   roles?: Record<string, string>;
+  // Round-15l: per-agent runtime selection. Some agents may run under
+  // Claude Code (the original target), others under Codex. cmdRun reads
+  // this field via resolveRuntime() to pick the right dispatch adapter
+  // (scripts/runtimes/<name>.ts). Optional — agents without an explicit
+  // runtime fall back to env var → auto-detect via PATH.
+  //
+  // YAML shape:
+  //   runtimes:
+  //     orion: claude
+  //     lumeyon: claude
+  //     cadence: codex
+  runtimes?: Record<string, string>;
 };
 
 // Round-15d: compute the graph diameter (longest shortest-path between any
@@ -199,7 +211,8 @@ export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
 // prototype-pollution vectors `__proto__`/`constructor`/`prototype`. Agent
 // names are restricted to a safe character class so they can be used in
 // filesystem paths (lock body, presence file, log file) without escaping.
-const ALLOWED_TOP_KEYS = new Set(["topology", "description", "agents", "edges", "roles"]);
+const ALLOWED_TOP_KEYS = new Set(["topology", "description", "agents", "edges", "roles", "runtimes"]);
+const ALLOWED_RUNTIMES = new Set(["claude", "codex"]);
 const AGENT_NAME_RE = /^[a-z0-9_-]{1,40}$/i;
 
 export function isValidAgentName(name: string): boolean {
@@ -212,7 +225,8 @@ export function parseTopologyYaml(text: string): Topology {
   out.agents = [];
   out.edges = [];
   out.roles = Object.create(null);
-  let section: "agents" | "edges" | "roles" | null = null;
+  out.runtimes = Object.create(null);
+  let section: "agents" | "edges" | "roles" | "runtimes" | null = null;
   // Round-15f: roles section uses block-scalar bodies (`|`) so role text
   // can span multiple lines. Track the current role being accumulated.
   let currentRoleAgent: string | null = null;
@@ -255,8 +269,28 @@ export function parseTopologyYaml(text: string): Topology {
       if (key === "agents") { section = "agents"; continue; }
       if (key === "edges") { section = "edges"; continue; }
       if (key === "roles") { section = "roles"; continue; }
+      if (key === "runtimes") { section = "runtimes"; continue; }
       section = null;
       out[key] = val.trim();
+      continue;
+    }
+    if (section === "runtimes") {
+      // Round-15l: runtimes section is simple `agent: runtime` pairs
+      // (no block-scalar — each value is a single token like "claude" or
+      // "codex"). Parser is intentionally narrower than roles.
+      const rt = line.match(/^\s+([a-z0-9_-]+):\s*([a-z]+)\s*$/i);
+      if (rt) {
+        const [, agent, runtime] = rt;
+        if (!isValidAgentName(agent)) {
+          throw new Error(`runtime declared for invalid agent name "${agent}"`);
+        }
+        if (!ALLOWED_RUNTIMES.has(runtime.toLowerCase())) {
+          throw new Error(
+            `unknown runtime "${runtime}" for agent "${agent}" — allowed: ${[...ALLOWED_RUNTIMES].join(", ")}`,
+          );
+        }
+        out.runtimes[agent] = runtime.toLowerCase();
+      }
       continue;
     }
     if (section === "roles") {
@@ -891,6 +925,54 @@ export function relayPathTo(topo: Topology, from: string, to: string): string[] 
     }
   }
   return null;
+}
+
+// ── Round-15l: per-agent runtime selection ───────────────────────────────
+//
+// resolveRuntime returns the runtime adapter name for a given agent.
+// Resolution order (highest precedence first):
+//   1. $AGENT_CHAT_RUNTIME env var (per-shell test override)
+//   2. topology yaml `runtimes: { <agent>: <name> }`
+//   3. Auto-detect via PATH probe: prefer "claude" if on PATH, else "codex"
+//      if on PATH, else "claude" (the call into runClaude will then return
+//      a graceful "not-found" reason — same shape as if the binary were
+//      missing for any other reason).
+//
+// The wire protocol (CONVO.md, .turn, archives, .dots, .roles, .scratch)
+// is identical across runtimes — so a Claude agent on edge A and a Codex
+// agent on edge B can collaborate on the same petersen graph because the
+// state is filesystem-mediated, not adapter-mediated.
+export type RuntimeName = "claude" | "codex";
+export const ALL_RUNTIMES: readonly RuntimeName[] = ["claude", "codex"];
+
+let _pathProbeCache: { claude?: boolean; codex?: boolean } | null = null;
+function probeBinaryOnPath(name: string): boolean {
+  if (!_pathProbeCache) _pathProbeCache = {};
+  if (_pathProbeCache[name as RuntimeName] != null) return _pathProbeCache[name as RuntimeName]!;
+  try {
+    const r = require("node:child_process").spawnSync("which", [name], { encoding: "utf8" });
+    const found = r.status === 0 && !!(r.stdout ?? "").trim();
+    _pathProbeCache[name as RuntimeName] = found;
+    return found;
+  } catch {
+    _pathProbeCache[name as RuntimeName] = false;
+    return false;
+  }
+}
+
+export function resolveRuntime(topo: Topology, agent: string): RuntimeName {
+  const envOverride = process.env.AGENT_CHAT_RUNTIME?.toLowerCase();
+  if (envOverride && (ALL_RUNTIMES as readonly string[]).includes(envOverride)) {
+    return envOverride as RuntimeName;
+  }
+  const yamlValue = topo.runtimes?.[agent]?.toLowerCase();
+  if (yamlValue && (ALL_RUNTIMES as readonly string[]).includes(yamlValue)) {
+    return yamlValue as RuntimeName;
+  }
+  // Auto-detect: prefer claude (the original target), fall back to codex.
+  if (probeBinaryOnPath("claude")) return "claude";
+  if (probeBinaryOnPath("codex")) return "codex";
+  return "claude";
 }
 
 export function ensureControlDirs(): void {

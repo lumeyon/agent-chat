@@ -1662,6 +1662,74 @@ describe("Round 15h Concern-3 — Dot Collector aggregation + believability", ()
   });
 });
 
+describe("Round 15l — resolveRuntime + topology runtimes section", () => {
+  const fs15l = require("node:fs");
+  const path15l = require("node:path");
+  const os15l = require("node:os");
+
+  test("parseTopologyYaml accepts runtimes section with per-agent assignments", async () => {
+    const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}rt-yaml`);
+    const yaml =
+      "topology: pair\n" +
+      "agents:\n" +
+      "  - orion\n" +
+      "  - lumeyon\n" +
+      "edges:\n" +
+      "  - [orion, lumeyon]\n" +
+      "runtimes:\n" +
+      "  orion: claude\n" +
+      "  lumeyon: codex\n";
+    const t = fresh.parseTopologyYaml(yaml);
+    expect(t.runtimes).toEqual({ orion: "claude", lumeyon: "codex" });
+  });
+
+  const PAIR_YAML = (runtimesSection: string) =>
+    "topology: pair\n" +
+    "agents:\n  - orion\n  - lumeyon\n" +
+    "edges:\n  - [orion, lumeyon]\n" +
+    runtimesSection;
+
+  test("parseTopologyYaml refuses unknown runtime names", async () => {
+    const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}rt-bad`);
+    expect(() => fresh.parseTopologyYaml(PAIR_YAML("runtimes:\n  orion: gemini\n")))
+      .toThrow(/unknown runtime/);
+  });
+
+  test("resolveRuntime: env var beats yaml beats default", async () => {
+    const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}rt-prec`);
+    const topo = fresh.parseTopologyYaml(PAIR_YAML("runtimes:\n  orion: codex\n"));
+    const prevEnv = process.env.AGENT_CHAT_RUNTIME;
+    try {
+      // 1. env override wins.
+      process.env.AGENT_CHAT_RUNTIME = "claude";
+      expect(fresh.resolveRuntime(topo, "orion")).toBe("claude");
+      // 2. without env, yaml wins.
+      delete process.env.AGENT_CHAT_RUNTIME;
+      expect(fresh.resolveRuntime(topo, "orion")).toBe("codex");
+      // 3. agent without yaml entry falls through to auto-detect; accept
+      //    either if both binaries exist.
+      const r = fresh.resolveRuntime(topo, "lumeyon");
+      expect(["claude", "codex"]).toContain(r);
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_RUNTIME;
+      else process.env.AGENT_CHAT_RUNTIME = prevEnv;
+    }
+  });
+
+  test("resolveRuntime: invalid env value ignored, falls through to yaml", async () => {
+    const fresh = await import(`../scripts/lib.ts?bust=${Date.now()}rt-bad-env`);
+    const topo = fresh.parseTopologyYaml(PAIR_YAML("runtimes:\n  orion: codex\n"));
+    const prevEnv = process.env.AGENT_CHAT_RUNTIME;
+    try {
+      process.env.AGENT_CHAT_RUNTIME = "gemini"; // not in ALL_RUNTIMES
+      expect(fresh.resolveRuntime(topo, "orion")).toBe("codex");
+    } finally {
+      if (prevEnv == null) delete process.env.AGENT_CHAT_RUNTIME;
+      else process.env.AGENT_CHAT_RUNTIME = prevEnv;
+    }
+  });
+});
+
 describe("Round 15h Concern-2 — role override storage + overlay merge", () => {
   const fs15h = require("node:fs");
   const path15h = require("node:path");

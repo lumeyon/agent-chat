@@ -130,11 +130,16 @@ export async function dispatch(input: EphemeralDispatchInput): Promise<Ephemeral
       reason: "timeout",
     };
   }
+  // Round-15l: return reason="ok" on success for shape symmetry with the
+  // Claude adapter (runClaude returns "ok" — see llm.ts:289). Pre-fix this
+  // returned reason=undefined on success which forced cmdRun to do an
+  // ad-hoc `r.reason == null || r.reason === "ok"` check; symmetric shape
+  // lets the cross-runtime call site treat both adapters identically.
   return {
     stdout: r.stdout ?? null,
     stderr: r.stderr ?? "",
     code: r.status,
-    reason: r.status === 0 ? undefined : "error",
+    reason: r.status === 0 ? "ok" : "error",
   };
 }
 

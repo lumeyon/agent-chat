@@ -41,6 +41,8 @@ import {
   DOT_AXES, DOTS_DIR, type Dot, type DotAxis, type DotAggregate,
   // Round-15h Concern-4: relay path BFS
   relayPathTo,
+  // Round-15l: per-agent runtime selection (claude vs codex)
+  resolveRuntime, ALL_RUNTIMES, type RuntimeName,
   type SessionRecord, type CurrentSpeaker, type DefaultSpeakerResolution,
 } from "./lib.ts";
 
@@ -870,8 +872,50 @@ async function cmdDoctor(args: string[]): Promise<void> {
     }
     return;
   }
+  if (sub === "--runtimes") {
+    // Round-15l: show resolved runtime per agent in the current topology
+    // + which CLIs are on PATH. Helps diagnose dual-runtime install drift.
+    let topo;
+    try {
+      const id = resolveIdentity();
+      topo = loadTopology(id.topology);
+    } catch (err) {
+      die(`doctor --runtimes: ${(err as Error).message}`, 64);
+    }
+    const which = (bin: string) => {
+      const r = child_process.spawnSync("which", [bin], { encoding: "utf8" });
+      return r.status === 0 ? (r.stdout ?? "").trim() : "(not found)";
+    };
+    const claudePath = which("claude");
+    const codexPath = which("codex");
+    const envOverride = process.env.AGENT_CHAT_RUNTIME ?? null;
+    const rows = topo.agents.map((a) => ({
+      agent: a,
+      yaml: topo.runtimes?.[a] ?? null,
+      resolved: resolveRuntime(topo, a),
+    }));
+    if (args.includes("--json")) {
+      console.log(JSON.stringify({
+        topology: topo.topology,
+        env_override: envOverride,
+        path_probe: { claude: claudePath, codex: codexPath },
+        agents: rows,
+      }, null, 2));
+    } else {
+      console.log(`doctor --runtimes (topology=${topo.topology}):`);
+      console.log(`  $AGENT_CHAT_RUNTIME = ${envOverride ?? "(unset)"}`);
+      console.log(`  claude on PATH      = ${claudePath}`);
+      console.log(`  codex on PATH       = ${codexPath}`);
+      console.log(`  per-agent resolution:`);
+      for (const r of rows) {
+        const yamlNote = r.yaml ? ` (yaml: ${r.yaml})` : "";
+        console.log(`    ${r.agent.padEnd(12)} → ${r.resolved}${yamlNote}`);
+      }
+    }
+    return;
+  }
   if (sub !== "--liveness") {
-    die("usage: agent-chat.ts doctor --liveness [--json] | doctor --paths [--json]");
+    die("usage: agent-chat.ts doctor --liveness [--json] | doctor --paths [--json] | doctor --runtimes [--json]");
   }
   const wantJson = args.includes("--json");
   const sessions = listSessions().filter((r) => r.host === os.hostname());
@@ -1320,9 +1364,17 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   // here. Caller composes prompt with scratchpad prepended.
   const scratchContent = readScratch(id.name);
 
-  // Lazy-import safety + runClaude — keeps cmdRun decoupled from optional deps.
+  // Lazy-import safety + the per-agent runtime adapter. Round-15l: resolve
+  // the runtime once per cmdRun call (tied to id.name + topology); the
+  // result is the import path of the dispatch adapter that all edges
+  // processed by this tick will use. Future enhancement: per-edge runtime
+  // resolution if a topology declares mixed runtimes for paired agents.
   const { detectDestructive } = await import("./safety.ts");
-  const { runClaude } = await import("./llm.ts");
+  const runtimeName = resolveRuntime(topo, id.name);
+  const adapter = await import(`./runtimes/${runtimeName}.ts`);
+  const dispatch: (input: { prompt: string; timeoutMs?: number }) =>
+    Promise<{ stdout: string | null; stderr: string; code: number | null; reason?: string }> = adapter.dispatch;
+  console.error(`[agent-chat run] runtime: ${runtimeName} (resolved for ${id.name})`);
 
   // Round-15c (Contract A): if --speaker was passed, pre-write a
   // synthetic SessionRecord + current_speaker.json so any in-process
@@ -1509,14 +1561,17 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
     }
     let r;
     try {
-      r = await runClaude({ prompt, timeoutMs: 90_000 });
+      r = await dispatch({ prompt, timeoutMs: 90_000 });
     } catch (err) {
-      console.error(`[agent-chat run] runClaude threw on ${edge.id}: ${(err as Error).message}`);
+      console.error(`[agent-chat run] dispatch (${runtimeName}) threw on ${edge.id}: ${(err as Error).message}`);
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
       continue;
     }
+    // Round-15l: both adapters use reason="ok" on success (see codex.ts +
+    // llm.ts:289). Failure reasons: "not-found" (binary missing /
+    // AGENT_CHAT_NO_LLM=1), "reentrancy", "timeout", "error".
     if (r.reason !== "ok" || !r.stdout) {
-      console.error(`[agent-chat run] runClaude ${r.reason} on ${edge.id} (${r.code ?? "no-code"}); skipping.`);
+      console.error(`[agent-chat run] dispatch (${runtimeName}) ${r.reason ?? "no-stdout"} on ${edge.id} (${r.code ?? "no-code"}); skipping.`);
       try { require("node:child_process").spawnSync(process.execPath, [path.join(SKILL_ROOT, "scripts/turn.ts"), "unlock", edge.peer], { encoding: "utf8" }); } catch {}
       continue;
     }
