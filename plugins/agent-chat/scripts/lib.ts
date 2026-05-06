@@ -1158,6 +1158,106 @@ export function writeCurrentSpeaker(key: string, name: string): void {
   writeFileAtomic(currentSpeakerPath(key), json, { mode: 0o600 });
 }
 
+// ---------------------------------------------------------------------------
+// cwd-state — Round 15l (no-CLAUDE_SESSION_ID identity).
+//
+// Why: Claude Code's Stop hook spawns a subprocess chain
+// (stop-hook -> transcript-mirror -> record-turn). CLAUDE_SESSION_ID is
+// not propagated to those children, so the session_key derived from
+// stableSessionPid() is the bun process pid — which has no session record.
+// The chain therefore couldn't resolve identity without us forwarding env
+// vars manually, which leaks Claude-Code-specific knowledge into a
+// runtime-agnostic protocol.
+//
+// Fix: every process in the hook chain inherits cwd. So we key identity
+// by cwd as a stable fallback. `agent-chat init` writes the agent +
+// topology; `agent-chat speaker` adds the active speaker + edge_id.
+// resolveIdentity and fetchSpeaker fall back to this file when no
+// session record matches the current key.
+//
+// File path: <conv>/.cwd-state/<sha256(cwd)[:16]>.json
+// Schema: {agent, topology, speaker?, edge_id?, cwd, set_at}
+// The `cwd` field is an explicit echo so a hash collision can't be
+// silently misread as a different cwd.
+// ---------------------------------------------------------------------------
+
+export const CWD_STATE_DIR = path.join(CONVERSATIONS_DIR, ".cwd-state");
+
+export type CwdState = {
+  agent: string;
+  topology: string;
+  speaker?: string;
+  edge_id?: string;
+  cwd: string;
+  set_at: string;
+};
+
+export function cwdStateFile(cwd: string): string {
+  const hash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
+  return path.join(CWD_STATE_DIR, `${hash}.json`);
+}
+
+export function readCwdState(cwd: string = process.cwd()): CwdState | null {
+  const f = cwdStateFile(cwd);
+  if (!fs.existsSync(f)) return null;
+  try {
+    const obj = JSON.parse(fs.readFileSync(f, "utf8"));
+    if (typeof obj?.agent !== "string" || typeof obj?.topology !== "string") return null;
+    if (typeof obj?.cwd !== "string" || obj.cwd !== cwd) return null;
+    return obj as CwdState;
+  } catch (err) {
+    console.error(`[agent-chat] cwd-state file ${f} unreadable: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+export function writeCwdState(state: Omit<CwdState, "set_at">): void {
+  fs.mkdirSync(CWD_STATE_DIR, { recursive: true });
+  const full: CwdState = { ...state, set_at: utcStamp() };
+  const json = JSON.stringify(full, null, 2) + "\n";
+  writeFileAtomic(cwdStateFile(state.cwd), json, { mode: 0o600 });
+}
+
+// Update only the speaker (preserves agent/topology). Used by
+// `agent-chat speaker` to record who's typing without losing the
+// agent/topology that was written by `agent-chat init`.
+export function updateCwdStateSpeaker(cwd: string, speaker: string): void {
+  const cur = readCwdState(cwd);
+  if (!cur) {
+    // No init record yet for this cwd; defer — the explicit-speaker
+    // path is the rare case and the caller has agent/topology in scope
+    // via session record. The session-keyed speaker file still gets
+    // written, so this just means hook-driven captures need init to
+    // have run for THIS cwd at least once.
+    return;
+  }
+  const edgeId = [speaker, cur.agent].sort().join("-");
+  writeCwdState({
+    agent: cur.agent,
+    topology: cur.topology,
+    speaker,
+    edge_id: edgeId,
+    cwd,
+  });
+}
+
+export function clearCwdStateSpeaker(cwd: string): void {
+  const cur = readCwdState(cwd);
+  if (!cur) return;
+  writeCwdState({
+    agent: cur.agent,
+    topology: cur.topology,
+    cwd,
+  });
+}
+
+// Remove the cwd-state file entirely. Called by `agent-chat exit`.
+export function unlinkCwdState(cwd: string): void {
+  try { fs.unlinkSync(cwdStateFile(cwd)); } catch (e: any) {
+    if (e?.code !== "ENOENT") throw e;
+  }
+}
+
 // ENOENT-tolerant unlink. Shared by CLIs and tests that need cleanup
 // without importing from agent-chat.ts. Returns true if the file was removed,
 // false if it was already gone (peer race or already-cleaned). Throws on
@@ -1506,6 +1606,15 @@ export function resolveIdentity(cwd: string = process.cwd()): Identity {
       }
     } catch { /* malformed .agent-name — readAgentNameFile already warns */ }
     return { name: rec.agent, topology: rec.topology, source: `session:${key}` };
+  }
+  // 1.5 cwd-state — no-session_key fallback. Written by `agent-chat init`
+  //     (and refreshed by `agent-chat speaker`). The Claude Code Stop hook
+  //     spawns a subprocess chain that doesn't inherit CLAUDE_SESSION_ID;
+  //     by keying identity on cwd, those subprocesses still resolve to
+  //     the right agent without any runtime-specific env passthrough.
+  const cwdState = readCwdState(cwd);
+  if (cwdState) {
+    return { name: cwdState.agent, topology: cwdState.topology, source: `cwd-state:${cwd}` };
   }
   // 2. $AGENT_NAME + $AGENT_TOPOLOGY env vars
   const envName = process.env.AGENT_NAME;

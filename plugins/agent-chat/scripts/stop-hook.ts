@@ -34,6 +34,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as child_process from "node:child_process";
+import * as crypto from "node:crypto";
 
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
 const MIRROR_BIN = path.join(SCRIPT_DIR, "transcript-mirror.ts");
@@ -70,14 +71,40 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-function spawnQuiet(cmd: string, args: string[], timeoutMs: number = 30000): {
-  rc: number;
-  stdout: string;
-  stderr: string;
-} {
+// Round-15l: read cwd-state for the edge id / agent / speaker. Matches
+// lib.ts:cwdStateFile — sha256(cwd)[:16] as the filename, schema
+// {agent, topology, speaker?, edge_id?, cwd}. Inline to avoid importing
+// the lib bundle into the hook (cold-start cost).
+type CwdState = {
+  agent: string;
+  topology: string;
+  speaker?: string;
+  edge_id?: string;
+  cwd: string;
+};
+function readCwdStateFor(cwd: string): CwdState | null {
+  const hash = crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 16);
+  const f = path.join(CONV_DIR, ".cwd-state", `${hash}.json`);
+  if (!fs.existsSync(f)) return null;
+  try {
+    const obj = JSON.parse(fs.readFileSync(f, "utf-8"));
+    if (typeof obj?.agent !== "string" || typeof obj?.topology !== "string") return null;
+    if (typeof obj?.cwd !== "string" || obj.cwd !== cwd) return null;
+    return obj as CwdState;
+  } catch {
+    return null;
+  }
+}
+
+function spawnQuiet(
+  cmd: string,
+  args: string[],
+  opts: { timeoutMs?: number; cwd?: string } = {},
+): { rc: number; stdout: string; stderr: string } {
   const result = child_process.spawnSync(cmd, args, {
-    timeout: timeoutMs,
+    timeout: opts.timeoutMs ?? 30000,
     encoding: "utf-8",
+    cwd: opts.cwd,
     env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
   });
   return {
@@ -144,55 +171,20 @@ async function main(): Promise<void> {
 
   log(`hook fired: session=${payload.session_id ?? "?"} transcript=${transcript}`);
 
-  // Look up the agent-chat session that matched this hook (cwd match).
-  // Pass its agent + topology via env to subprocesses so record-turn's
-  // identity resolution doesn't have to walk the PPID tree (which
-  // doesn't reach our claude process from inside the spawn chain).
-  // Without this, the FIRST record-turn call crashes in
-  // resolveIdentity() and every subsequent retry hits the same crash.
-  let agentEnv: Record<string, string> = {};
-  const sessionsDirForEnv = path.join(CONV_DIR, ".sessions");
-  if (fs.existsSync(sessionsDirForEnv)) {
-    for (const f of fs.readdirSync(sessionsDirForEnv)) {
-      if (f.endsWith(".current_speaker.json") || !f.endsWith(".json")) continue;
-      try {
-        const s = JSON.parse(fs.readFileSync(path.join(sessionsDirForEnv, f), "utf-8"));
-        const sessCwd = s?.cwd ?? "";
-        if (sessCwd && (hookCwd === sessCwd || hookCwd.startsWith(sessCwd + "/"))) {
-          agentEnv = {
-            AGENT_NAME: s.agent,
-            AGENT_TOPOLOGY: s.topology,
-          };
-          // Pass the FULL session_key as CLAUDE_SESSION_ID. record-turn
-          // uses CLAUDE_SESSION_ID verbatim as the session_key, which is
-          // also the prefix of the speaker file (e.g.,
-          // "pid:2482580.current_speaker.json"). Stripping the "pid:"
-          // prefix here would cause the speaker lookup to miss.
-          if (s.session_key) agentEnv.CLAUDE_SESSION_ID = s.session_key;
-          break;
-        }
-      } catch { /* ignore */ }
-    }
-  }
-
-  // Patch spawnQuiet's env-extension to include agentEnv
-  function spawnQuietWithIdentity(cmd: string, args: string[], timeoutMs: number = 30000) {
-    const result = child_process.spawnSync(cmd, args, {
-      timeout: timeoutMs,
-      encoding: "utf-8",
-      env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR, ...agentEnv },
-    });
-    return {
-      rc: result.status ?? -1,
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-    };
-  }
+  // Round-15l: identity resolution uses the cwd-state file written by
+  // `agent-chat init` / `agent-chat speaker`. Subprocesses inherit
+  // `hookCwd` (the cwd Claude Code is running in), and resolveIdentity()
+  // / fetchSpeaker() read <conv>/.cwd-state/<sha256(cwd)>.json — the
+  // edge id `boss-orion` is derivable from cwd alone. No
+  // CLAUDE_SESSION_ID / AGENT_NAME / AGENT_TOPOLOGY forwarding required.
 
   // 1) Mirror new turns into CONVO.md (idempotent via record-turn ledger).
   // Bumped timeout 60s -> 180s: a backlog of 270+ pairs with retry
   // backoffs can legitimately need >60s to complete.
-  const mirror = spawnQuietWithIdentity("bun", [MIRROR_BIN, "--backfill", transcript], 180_000);
+  const mirror = spawnQuiet("bun", [MIRROR_BIN, "--backfill", transcript], {
+    timeoutMs: 180_000,
+    cwd: hookCwd,
+  });
   if (mirror.rc !== 0) {
     log(`mirror failed: rc=${mirror.rc} stderr=${mirror.stderr.slice(0, 800)}`);
   } else {
@@ -217,42 +209,35 @@ async function main(): Promise<void> {
     }
   }
 
-  // 2) Auto-archive the active edge for this turn.
+  // Round-15l: cwd-state IS the context. Read once, derive everything.
   //
-  //    `gc --auto-archive` only handles parked edges; we also need to
-  //    archive ACTIVE edges (where .turn is the speaker's name)
-  //    because that's where every user turn lands. archive.ts auto
-  //    --force overrides the parked check and seals everything older
-  //    than the fresh tail. If the edge is below threshold, it's a
-  //    fast no-op.
-  //
-  //    The edge is determined by the current_speaker (typically the
-  //    user, e.g. "boss"). archive.ts auto takes the peer name, which
-  //    is the OTHER agent on the edge — for an orion session with
-  //    speaker=boss, peer=boss.
-  //
-  //    Detached so a slow archive doesn't block the Claude Code
-  //    response cycle.
-  const archiveBin = path.join(SCRIPT_DIR, "archive.ts");
-  try {
-    // Find the speaker. The session has it in <conv>/.sessions/<key>.current_speaker.json
-    const speakers: string[] = [];
-    const sessionsDir = path.join(CONV_DIR, ".sessions");
-    if (fs.existsSync(sessionsDir)) {
-      for (const f of fs.readdirSync(sessionsDir)) {
-        if (!f.endsWith(".current_speaker.json")) continue;
-        try {
-          const sp = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
-          if (sp?.name && !speakers.includes(sp.name)) speakers.push(sp.name);
-        } catch { /* ignore */ }
-      }
-    }
+  // Before this round, steps 2+3 walked every session record under
+  // .sessions/ to figure out the speaker(s) and agent(s), then computed
+  // the edge id from the cross-product. That implicitly assumed sessions
+  // and speakers were the right unit of context — which is what we are
+  // explicitly moving away from. The cwd-state file already names the
+  // active edge for this hook's cwd:
+  //   { agent: "orion", speaker: "boss", edge_id: "boss-orion", ... }
+  // So the hook just reads it and uses edge_id verbatim.
+  const cwdState = readCwdStateFor(hookCwd);
+  const edgeId = cwdState?.edge_id ?? null;
+  const speaker = cwdState?.speaker ?? null;
+  if (!edgeId || !speaker) {
+    log(`cwd-state missing edge_id/speaker for ${hookCwd}; archive + kg skipped (run 'agent-chat init' + 'agent-chat speaker')`);
+  }
 
-    for (const speaker of speakers) {
+  // 2) Auto-archive the active edge. archive.ts auto --force seals
+  //    everything older than the fresh tail; if the edge is below the
+  //    line threshold this is a fast no-op. Detached so slow archive
+  //    work never blocks the response cycle.
+  const archiveBin = path.join(SCRIPT_DIR, "archive.ts");
+  if (speaker) {
+    try {
       const child = child_process.spawn(
         "bun",
         [archiveBin, "auto", speaker, "--force"],
         {
+          cwd: hookCwd,
           env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
           detached: true,
           stdio: "ignore",
@@ -260,77 +245,38 @@ async function main(): Promise<void> {
       );
       child.unref();
       log(`archive auto ${speaker} --force launched detached (pid=${child.pid})`);
-    }
 
-    // Also keep the parked-edge sweep for any edges that drifted into
-    // parked state since the last hook fire.
-    const gcChild = child_process.spawn(
-      "bun",
-      [AGENT_CHAT_BIN, "gc", "--auto-archive", "--archive-threshold=200"],
-      {
-        env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
-        detached: true,
-        stdio: "ignore",
-      },
-    );
-    gcChild.unref();
-    log(`gc --auto-archive launched detached (pid=${gcChild.pid})`);
-  } catch (e) {
-    log(`auto-archive launch failed: ${e}`);
+      // Parked-edge sweep — covers edges that drifted into parked state
+      // since the last hook fire (e.g., user moved to a different peer).
+      const gcChild = child_process.spawn(
+        "bun",
+        [AGENT_CHAT_BIN, "gc", "--auto-archive", "--archive-threshold=200"],
+        {
+          cwd: hookCwd,
+          env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      gcChild.unref();
+      log(`gc --auto-archive launched detached (pid=${gcChild.pid})`);
+    } catch (e) {
+      log(`auto-archive launch failed: ${e}`);
+    }
   }
 
-  // 3) Rebuild the per-edge knowledge graph for whichever edge(s) just
-  //    received a new turn. Detached so a slow KG build (embedding +
-  //    Poincaré projection) doesn't block the response cycle.
-  //
-  //    The KG build is incremental in practice because of the persistent
-  //    embedding cache — only NEW section sha256s require a fresh ONNX
-  //    forward pass. Cache hits are sub-millisecond.
-  //
-  //    We rebuild the KG for the FULL edge (active CONVO.md + all leaf
-  //    archives) because the kg.ts pipeline is single-pass; differential
-  //    updates can come later if perf demands.
+  // 3) Rebuild the per-edge knowledge graph. Incremental in practice
+  //    via the persistent embedding cache — only new section sha256s
+  //    require a fresh ONNX forward pass. Detached so embedding never
+  //    blocks the response cycle.
   const kgBin = path.join(SCRIPT_DIR, "kg.ts");
-  try {
-    // For each known speaker, the kg.ts targeting boss-orion (etc.) is
-    // determined by edge name. Speakers come from the same source we
-    // used in step 2 — re-derive briefly to avoid name pollution.
-    const sessionsDir = path.join(CONV_DIR, ".sessions");
-    const speakers: string[] = [];
-    if (fs.existsSync(sessionsDir)) {
-      for (const f of fs.readdirSync(sessionsDir)) {
-        if (!f.endsWith(".current_speaker.json")) continue;
-        try {
-          const sp = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
-          if (sp?.name && !speakers.includes(sp.name)) speakers.push(sp.name);
-        } catch { /* ignore */ }
-      }
-    }
-    // Determine my agent name from session record
-    const myAgents: string[] = [];
-    if (fs.existsSync(sessionsDir)) {
-      for (const f of fs.readdirSync(sessionsDir)) {
-        if (f.endsWith(".current_speaker.json") || !f.endsWith(".json")) continue;
-        try {
-          const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), "utf-8"));
-          if (s?.agent && !myAgents.includes(s.agent)) myAgents.push(s.agent);
-        } catch { /* ignore */ }
-      }
-    }
-    // For every (speaker, agent) pair we observed, compute edge id and rebuild.
-    const edgeIds: string[] = [];
-    for (const sp of speakers) {
-      for (const ag of myAgents) {
-        if (sp === ag) continue;
-        const edgeId = sp < ag ? `${sp}-${ag}` : `${ag}-${sp}`;
-        if (!edgeIds.includes(edgeId)) edgeIds.push(edgeId);
-      }
-    }
-    for (const edgeId of edgeIds) {
+  if (edgeId) {
+    try {
       const child = child_process.spawn(
         "bun",
         [kgBin, "build", edgeId],
         {
+          cwd: hookCwd,
           env: { ...process.env, AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR },
           detached: true,
           stdio: "ignore",
@@ -338,9 +284,9 @@ async function main(): Promise<void> {
       );
       child.unref();
       log(`kg build ${edgeId} launched detached (pid=${child.pid})`);
+    } catch (e) {
+      log(`kg build launch failed: ${e}`);
     }
-  } catch (e) {
-    log(`kg build launch failed: ${e}`);
   }
 
   // Hook always exits 0 — failures are logged, never block the response.

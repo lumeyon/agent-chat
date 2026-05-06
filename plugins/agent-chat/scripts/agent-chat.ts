@@ -33,6 +33,9 @@ import {
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
+  // Round-15l: cwd-state — no-CLAUDE_SESSION_ID identity fallback
+  readCwdState, writeCwdState, updateCwdStateSpeaker, clearCwdStateSpeaker,
+  unlinkCwdState,
   computeDiameter, readScratch, writeScratch, scratchPath, SCRATCH_DIR,
   // Round-15h Concern-2: agent-managed role overrides
   readRoleOverride, writeRoleOverride, clearRoleOverride, rolePath, ROLES_DIR, ROLE_MAX_BYTES,
@@ -227,6 +230,10 @@ function cmdInit(args: string[]): void {
   ensureControlDirs();
   const fs2 = require("node:fs") as typeof import("node:fs");
   writeFileAtomic(sessionFile(rec.session_key), JSON.stringify(rec, null, 2) + "\n");
+  // Round-15l: cwd-state for no-CLAUDE_SESSION_ID identity. Hook
+  // subprocesses inherit cwd but not session_key; cwd-state lets them
+  // resolve the right agent without runtime-specific env passthrough.
+  writeCwdState({ agent: name, topology, cwd });
   const presencePath = presenceFile(rec.agent);
   const presenceJson = JSON.stringify(rec, null, 2) + "\n";
   try {
@@ -425,6 +432,9 @@ async function cmdExit(args: string[]): Promise<void> {
   // Drop the session-scoped current_speaker.json so consumers don't see a
   // stale speaker after exit (cadence slice-2 lifecycle invariant).
   safeUnlink(currentSpeakerPath(key));
+  // Round-15l: also drop cwd-state so a fresh session in the same cwd
+  // starts clean (no stale agent identity bleeding into the next init).
+  unlinkCwdState(rec.cwd);
   deleteSessionRecord(rec);
   console.log(`✓ ${rec.agent}@${rec.topology} signed out (session ${key})`);
 }
@@ -1104,6 +1114,9 @@ function cmdSpeaker(args: string[]): void {
   if (args.length === 1 && args[0] === "--clear") {
     const cur = readCurrentSpeaker(key);
     const removed = safeUnlink(currentSpeakerPath(key));
+    // Round-15l: also clear cwd-state speaker so hook-driven captures
+    // see "no speaker" rather than the stale name.
+    clearCwdStateSpeaker(rec.cwd);
     if (removed && cur) {
       console.error(`[agent-chat] speaker cleared (was ${cur.name})`);
     } else if (removed) {
@@ -1133,6 +1146,9 @@ function cmdSpeaker(args: string[]): void {
   }
   const prev = readCurrentSpeaker(key);
   writeCurrentSpeaker(key, name);
+  // Round-15l: mirror the speaker into cwd-state so hook-driven captures
+  // (which can't see session_key) resolve the same speaker via cwd alone.
+  updateCwdStateSpeaker(rec.cwd, name);
   if (prev) {
     console.error(`[agent-chat] speaker: ${prev.name} → ${name}`);
   } else {
@@ -1164,8 +1180,16 @@ function recordedTurnsLedger(edgeDir: string): string {
 // Read current_speaker for a given session_key. The lib-exported
 // readCurrentSpeaker handles the file-direct read; this helper preserves
 // the async signature for backward-compat with cmdRecordTurn callers.
+//
+// Round-15l: falls back to cwd-state speaker when no session-keyed
+// speaker file exists. This makes hook-driven captures
+// (stop-hook -> mirror -> record-turn, where each subprocess has a
+// fresh bun pid that doesn't match any session record) succeed without
+// any CLAUDE_SESSION_ID forwarding — cwd alone is enough.
 async function fetchSpeaker(_agent: string, key: string): Promise<string | null> {
-  return readCurrentSpeaker(key)?.name ?? null;
+  const sessionScoped = readCurrentSpeaker(key)?.name ?? null;
+  if (sessionScoped) return sessionScoped;
+  return readCwdState()?.speaker ?? null;
 }
 
 function turnHash(speaker: string, user: string, assistant: string): string {
