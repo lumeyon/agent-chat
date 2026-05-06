@@ -33,5 +33,18 @@
   "engines": {
     "claudeCode": ">=2.0.0",
     "node": ">=20.0.0"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.ts"
+          }
+        ]
+      }
+    ]
   }
 }

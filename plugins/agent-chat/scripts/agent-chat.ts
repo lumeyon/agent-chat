@@ -2030,6 +2030,105 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
   return { workDone, pending };
 }
 
+// ----- install -------------------------------------------------------------
+//
+// Registers agent-chat's Claude Code Stop hook in ~/.claude/settings.json
+// (or per-project .claude/settings.json with --project). Idempotent — re-
+// running with the same target leaves the hook entry untouched.
+//
+// The plugin manifest at .claude-plugin/plugin.json also declares this
+// hook for plugin-marketplace auto-installs; this command exists for users
+// who set up agent-chat without going through the marketplace, or who
+// want to scope the hook to a single project.
+//
+// Usage:
+//   agent-chat install              — write hook to ~/.claude/settings.json
+//   agent-chat install --project    — write hook to .claude/settings.json (cwd)
+//   agent-chat install --uninstall  — remove the hook entry
+//   agent-chat install --print      — show what would be written without writing
+
+function cmdInstall(args: string[]): void {
+  const useProject = args.includes("--project");
+  const uninstall = args.includes("--uninstall");
+  const printOnly = args.includes("--print");
+
+  const home = process.env.HOME ?? "";
+  if (!home) die("HOME not set; cannot resolve settings.json", 70);
+
+  const settingsPath = useProject
+    ? path.join(process.cwd(), ".claude", "settings.json")
+    : path.join(home, ".claude", "settings.json");
+
+  // Find the script path. Prefer ${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.ts
+  // (substituted by Claude Code at runtime) when invoked via plugin install,
+  // otherwise resolve to the absolute path of stop-hook.ts in this checkout.
+  const scriptPath = path.join(SKILL_ROOT, "scripts", "stop-hook.ts");
+  const hookCommand = `bun ${scriptPath}`;
+
+  // Read existing settings (or start fresh)
+  let settings: any = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    } catch (e) {
+      die(`failed to parse ${settingsPath}: ${e}`, 70);
+    }
+  }
+
+  settings.hooks ??= {};
+  const stopHooks: any[] = settings.hooks.Stop ?? [];
+
+  // Filter out any prior agent-chat hook entries to keep it idempotent
+  const filtered = stopHooks.filter((entry: any) => {
+    const handlers: any[] = entry?.hooks ?? [];
+    return !handlers.some((h: any) =>
+      typeof h?.command === "string" && /agent-chat[\\/]+scripts[\\/]+stop-hook\.ts/.test(h.command)
+    );
+  });
+
+  if (uninstall) {
+    if (filtered.length === stopHooks.length) {
+      console.log(`agent-chat install: no agent-chat Stop hook found in ${settingsPath}`);
+      return;
+    }
+    if (filtered.length === 0) {
+      delete settings.hooks.Stop;
+      if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+    } else {
+      settings.hooks.Stop = filtered;
+    }
+    if (printOnly) {
+      console.log(JSON.stringify(settings, null, 2));
+      return;
+    }
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+    console.log(`agent-chat install: removed Stop hook from ${settingsPath}`);
+    return;
+  }
+
+  // Install
+  filtered.push({
+    matcher: "*",
+    hooks: [{ type: "command", command: hookCommand }],
+  });
+  settings.hooks.Stop = filtered;
+
+  if (printOnly) {
+    console.log(JSON.stringify(settings, null, 2));
+    return;
+  }
+
+  if (!fs.existsSync(path.dirname(settingsPath))) {
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  }
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  console.log(`agent-chat install: registered Stop hook in ${settingsPath}`);
+  console.log(`  command: ${hookCommand}`);
+  console.log(`  This hook fires after every Claude Code response and:`);
+  console.log(`    1) mirrors the latest user/assistant pair into CONVO.md`);
+  console.log(`    2) auto-archives any edge past the line threshold`);
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2054,6 +2153,7 @@ switch (cmd) {
   case "lessons":      cmdLessons(rest); break;
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
+  case "install":      cmdInstall(rest); break;
   case undefined:
   case "--help":
   case "-h":
