@@ -1,10 +1,65 @@
 # Codex Live App-Server Proposal
 
-Status: draft after Orion pressure test
-Date: 2026-05-06
+**Status: SUPERSEDED 2026-05-06 by Round-15p — ephemeral-spawn pattern**
+Original draft: 2026-05-06 (lumeyon)
 Local probe: `codex-cli 0.128.0`
+Phase A probe results: `docs/codex-app-server-phase-a-results.md`
+Cross-runtime integration test: `005c6a7` Phase A 16/16 PASS
 
-Phase A results: `docs/codex-app-server-phase-a-results.md`
+> **Why superseded.** Both empirical probes documented in
+> `docs/codex-app-server-phase-a-results.md` PASSED — `fs/watch` survives
+> rename-replace, `thread/resume` survives app-server restart. The
+> proposal is technically viable. We are NOT building it anyway.
+>
+> The deciding moment was Round-15p's cross-runtime integration test
+> (`commit 005c6a7`, `cross-runtime-integration-test.ts`) hitting 16/16
+> green: orion-via-Codex and lumeyon-via-Claude exchanged turns on a
+> shared CONVO.md edge with full token round-trip, clean lock release,
+> and correct turn-flip semantics — using only the existing
+> ephemeral-spawn pattern (`agent-chat run` + per-agent `runtime:` in
+> `agents.<topology>.yaml` + the Round-15l runtime-selection wiring).
+>
+> Both architectures cover the live-collaboration use case. The
+> ephemeral-spawn pattern is strictly simpler:
+>
+> | Concern | Ephemeral-spawn (chosen) | App-server (rejected) |
+> |---|---|---|
+> | Long-lived processes | Zero | One per live agent (the controller) |
+> | JSON-RPC client | Not needed | Required, ~scripts/codex-app/client.ts |
+> | Thread-id persistence | Not needed (each spawn rebuilds context from CONVO + scratchpad + lessons + roster) | Required, in presence record |
+> | Failure modes | Bounded — each spawn fails or succeeds independently | App-server crash + reconnect logic, expectedTurnId timing race |
+> | Cross-runtime parity | Already shipped (Round-15l) | Would require a separate runtime adapter |
+>
+> The mental model shift: **"Claude driver + ephemeral codex workers"**
+> (the pattern ruflo uses) replaces "two long-running interactive
+> terminals." Lower coordination cost, no zombie watchers, no per-turn
+> user typing in two windows, no app-server lifecycle management.
+>
+> What we kept from the proposal work:
+> - The empirical surface mapping (`codex exec` confirmed; bypass flags
+>   verified; `fs/watch` and `thread/resume` characterized)
+> - The architecture pressure-test (controller-owned-thread vs
+>   adapter-first decomposition) — applicable to future work
+> - The `docs/codex-app-server-phase-a-results.md` probe artifact —
+>   permanent reference for future revisits
+>
+> What we dropped:
+> - The JSON-RPC client implementation
+> - The `codex app-server` controller process
+> - `thread/start` / `turn/steer` / `thread/inject_items` orchestration
+> - A new `codex-app` runtime adapter alongside `claude` and `codex`
+>
+> If a future requirement demands true persistent live-thread continuity
+> across many turns (e.g. an IDE attaching mid-conversation, or a
+> shared-context model that can't rebuild from CONVO+scratchpad+lessons),
+> revisit this proposal. The probes and pressure-test are durable
+> investments; the implementation surface is small enough to land in
+> 1-2 commits when needed. Until then, ephemeral-spawn is the live
+> mechanism.
+>
+> Original proposal text preserved below for context.
+
+---
 
 ## Problem
 

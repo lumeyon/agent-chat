@@ -73,3 +73,19 @@ roles:
     Devil's-advocate reviewer and final-pass quality gate. Reviews work
     after primary implementation but before integration. Best-positioned
     for "what edge case did we miss?" questions.
+
+# Round-15p: per-agent runtime selection. orion drives interactively (Claude
+# Code session with the user), peer agents spawn as ephemeral codex children
+# when dispatched. This codifies the "Claude driver + ephemeral codex
+# workers" pattern — no long-running interactive lumeyon terminal needed.
+runtimes:
+  orion: claude
+  lumeyon: codex
+  carina: codex
+  keystone: codex
+  sentinel: codex
+  vanguard: codex
+  lyra: codex
+  pulsar: codex
+  cadence: codex
+  rhino: codex
