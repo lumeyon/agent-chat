@@ -186,29 +186,38 @@ function recordTurn(user: string, assistant: string, convDir: string): RecordRes
   // Use --stdin to avoid argv length limits (commonly hit for >4KB
   // bodies). Pass the JSON {user, assistant} on stdin.
   //
-  // Retry on rc=1 with bounded backoff. The most common failure is a
-  // concurrent writer holding boss-orion/CONVO.md.turn.lock — a few
-  // hundred ms is usually enough for the lock to release. Without the
-  // retry, a burst of concurrent hook firings can drop hundreds of
-  // turns silently (motivated by the 272-fail incident).
+  // Retry on rc=1 up to MAX_ATTEMPTS times unconditionally. record-turn's
+  // lock-contention error is "refuse: edge X locked by another live
+  // session ?@?:?" — by the time the lock releases, retry can succeed.
+  // The previous "isTransient regex" approach was fragile (kept dropping
+  // genuinely-transient errors). The cost of an extra retry is ~spawn
+  // overhead; the cost of dropping a turn is permanent data loss. So
+  // we ALWAYS retry up to MAX_ATTEMPTS — only success or repeated
+  // failure ends the loop.
   const payload = JSON.stringify({ user, assistant });
   const env = {
     ...process.env,
     AGENT_CHAT_CONVERSATIONS_DIR: convDir,
   };
-  const MAX_ATTEMPTS = 4;
-  // Backoff: 0, 100ms, 300ms, 700ms (jittered to avoid thundering herd).
-  const backoffsMs = [0, 100, 300, 700];
+  const MAX_ATTEMPTS = 5;
+  // Backoff: 0, 150, 400, 900, 1800 ms (+ 0-50ms jitter)
+  const backoffsMs = [0, 150, 400, 900, 1800];
 
   let lastResult: ReturnType<typeof child_process.spawnSync> | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
-      const base = backoffsMs[attempt];
+      const base = backoffsMs[attempt] ?? 1800;
       const jitter = Math.floor(Math.random() * 50);
       const sleepFor = base + jitter;
-      // Synchronous sleep — we're already inside spawnSync's blocking model
-      const end = Date.now() + sleepFor;
-      while (Date.now() < end) { /* spin */ }
+      // Use Bun.sleepSync (real syscall, no JIT-eliminable busy loop).
+      // Falls back to Atomics.wait if Bun is unavailable.
+      if (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.sleepSync) {
+        (globalThis as any).Bun.sleepSync(sleepFor);
+      } else {
+        const sab = new SharedArrayBuffer(4);
+        const i32 = new Int32Array(sab);
+        (Atomics as any).wait(i32, 0, 0, sleepFor);
+      }
     }
     lastResult = child_process.spawnSync(
       "bun",
@@ -222,16 +231,9 @@ function recordTurn(user: string, assistant: string, convDir: string): RecordRes
     );
     const rc = lastResult.status ?? -1;
     if (rc === 0) break;
-    // Only retry transient failures (lock contention errors print
-    // patterns like "lock held" / "edge is locked" / fs EBUSY-style).
-    // For unknown errors, retry once more before giving up; for
-    // explicit non-lock errors (bad input, malformed config), bail.
-    const stderr = lastResult.stderr ?? "";
-    const isTransient =
-      /lock|EBUSY|EAGAIN|ENOLCK|busy|contention|already in progress/i.test(
-        stderr.toString(),
-      );
-    if (!isTransient && attempt >= 1) break; // fail fast on real errors
+    // Always retry — no heuristic. If it's a real bug we'll see all
+    // MAX_ATTEMPTS failures in the logs and can fix it. If it's
+    // transient, retry covers it.
   }
   return {
     rc: lastResult?.status ?? -1,
