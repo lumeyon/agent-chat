@@ -204,9 +204,85 @@ function listEdges(convDir: string): EdgeDescriptor[] {
 
 // ─── Build ──────────────────────────────────────────────────────────────
 
+/**
+ * Per-edge file-based mutex. The same SQLite cache file (embeddings.db)
+ * + the same nodes.jsonl/edges.jsonl files cannot be safely written by
+ * two concurrent buildEdgeKG runs.
+ *
+ * acquireBuildLock() does an O_CREAT|O_EXCL write that succeeds for at
+ * most one writer per edge. If a stale lock is found (pid dead), take
+ * it over. If the lock is held by a live process, return null and the
+ * caller skips this build (the holder will write the latest manifest;
+ * the next hook fire will pick up any newer content).
+ */
+function acquireBuildLock(edge: EdgeDescriptor): { release: () => void; reason?: string } | null {
+  fs.mkdirSync(edge.kgDir, { recursive: true });
+  const lockPath = path.join(edge.kgDir, ".build.lock");
+  const myPid = process.pid;
+
+  // If a lock file exists, see if its holder is alive
+  if (fs.existsSync(lockPath)) {
+    try {
+      const content = fs.readFileSync(lockPath, "utf-8").trim();
+      const heldByPid = parseInt(content, 10);
+      if (Number.isFinite(heldByPid) && heldByPid !== myPid) {
+        try {
+          // kill -0 throws if the process doesn't exist
+          process.kill(heldByPid, 0);
+          // Process is alive — refuse
+          return null;
+        } catch {
+          // Stale lock — fall through and take it over
+        }
+      }
+    } catch { /* malformed lock file — treat as stale */ }
+  }
+
+  try {
+    // O_CREAT|O_EXCL semantics via wx flag
+    fs.writeFileSync(lockPath, String(myPid), { flag: "wx" });
+  } catch (e: any) {
+    if (e?.code === "EEXIST") {
+      // Race: another process grabbed it between our check and write.
+      // Re-read and decide once more — bail out cleanly to be safe.
+      return null;
+    }
+    throw e;
+  }
+
+  return {
+    release: () => {
+      try {
+        const content = fs.readFileSync(lockPath, "utf-8").trim();
+        if (content === String(myPid)) fs.unlinkSync(lockPath);
+      } catch { /* lock already gone */ }
+    },
+  };
+}
+
 export async function buildEdgeKG(edge: EdgeDescriptor): Promise<KGManifest> {
   fs.mkdirSync(edge.kgDir, { recursive: true });
 
+  const lock = acquireBuildLock(edge);
+  if (!lock) {
+    // Another process is building this edge's KG. Read the existing
+    // manifest (if any) and return it — the running build will produce
+    // the up-to-date version, and the next caller will pick up newer
+    // content. Returning instead of throwing means "just works" under
+    // concurrent hook fires.
+    const existing = getEdgeStats(edge);
+    if (existing) return existing;
+    throw new Error(`buildEdgeKG: lock held and no existing manifest for ${edge.edgeId}`);
+  }
+
+  try {
+    return await buildEdgeKGUnlocked(edge);
+  } finally {
+    lock.release();
+  }
+}
+
+async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
   const cache = new PersistentEmbeddingCache({
     dbPath: path.join(edge.kgDir, "embeddings.db"),
     maxSize: 50000,
