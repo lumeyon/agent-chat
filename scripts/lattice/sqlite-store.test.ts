@@ -64,6 +64,10 @@ describe("LatticeStore — Question CRUD", () => {
   test("setQuestionStatus updates lifecycle", () => {
     const q = makeQuestion();
     store.putQuestion(q);
+    // The K1 FK guard requires the best_answer_id to point at an
+    // existing accepted answer for this question.
+    const a = makeAnswer({ id: "ans:abc123def4567890", status: "accepted" });
+    store.putAnswer(a);
     store.setQuestionStatus(q.id, "answered", "ans:abc123def4567890");
     const fetched = store.getQuestion(q.id);
     expect(fetched?.status).toBe("answered");
@@ -352,6 +356,57 @@ describe("LatticeStore — stats and constraints", () => {
     expect(() =>
       store.setQuestionStatus(makeQuestion().id, "answered", null),
     ).toThrow(/best_answer_id|status/i);
+  });
+
+  // Regression for keystone's iter-6 K1 finding: best_answer_id was not
+  // FK-validated at setQuestionStatus. Pre-fix any non-empty string
+  // passed (including missing answers, answers for another question,
+  // or non-accepted answers).
+  test("setQuestionStatus rejects answered when best_answer_id points to non-existent answer", () => {
+    const q = makeQuestion();
+    store.putQuestion(q);
+    expect(() =>
+      store.setQuestionStatus(q.id, "answered", "ans:nonexistent"),
+    ).toThrow(/best_answer_id|nonexistent/i);
+  });
+
+  test("setQuestionStatus rejects answered when best_answer_id points to answer for a DIFFERENT question", () => {
+    const q1 = makeQuestion({ id: "v1:q-one" });
+    const q2 = makeQuestion({ id: "v1:q-two" });
+    store.putQuestion(q1);
+    store.putQuestion(q2);
+    // Create an answer for q2.
+    const a2 = makeAnswer({ id: "ans:for-q2", question_id: "v1:q-two" });
+    store.putAnswer(a2);
+    // Try to point q1 at q2's answer.
+    expect(() =>
+      store.setQuestionStatus(q1.id, "answered", "ans:for-q2"),
+    ).toThrow(/best_answer_id|question_id/i);
+  });
+
+  test("setQuestionStatus rejects answered when best_answer_id points to answer with status != accepted", () => {
+    const q = makeQuestion();
+    store.putQuestion(q);
+    // Create a "proposed" (not yet accepted) answer for q.
+    const a = makeAnswer({ id: "ans:proposed", status: "proposed" });
+    store.putAnswer(a);
+    expect(() =>
+      store.setQuestionStatus(q.id, "answered", "ans:proposed"),
+    ).toThrow(/best_answer_id|accepted|proposed/i);
+  });
+
+  test("setQuestionStatus accepts answered when best_answer_id points to a valid accepted answer", () => {
+    const q = makeQuestion();
+    store.putQuestion(q);
+    const a = makeAnswer({ id: "ans:happy", status: "accepted" });
+    store.putAnswer(a);
+    // Should NOT throw.
+    expect(() =>
+      store.setQuestionStatus(q.id, "answered", "ans:happy"),
+    ).not.toThrow();
+    const fetched = store.getQuestion(q.id)!;
+    expect(fetched.status).toBe("answered");
+    expect(fetched.best_answer_id).toBe("ans:happy");
   });
 });
 

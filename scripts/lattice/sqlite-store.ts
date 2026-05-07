@@ -152,6 +152,44 @@ function enforceQuestionStatusInvariant(
   }
 }
 
+/** Keystone's iter-6 K1 finding: best_answer_id was not FK-validated at
+ *  setQuestionStatus — any non-empty string passed, including missing
+ *  answers, answers for another question, or non-accepted answers.
+ *  Called from setQuestionStatus AFTER enforceQuestionStatusInvariant
+ *  has established that best_answer_id is a non-empty string when
+ *  status is answered/closed. Verifies (a) answer exists, (b) its
+ *  question_id matches, (c) its status === "accepted". putQuestion
+ *  does NOT call this — at insert time the answer typically doesn't
+ *  exist yet (production path is put-as-open then promote via
+ *  setQuestionStatus). The promotion choke-point is where the
+ *  invariant is checked. */
+function enforceBestAnswerReference(
+  db: Database,
+  question_id: string,
+  best_answer_id: string,
+): void {
+  const row = db
+    .query<{ question_id: string; status: string }, [string]>(
+      `SELECT question_id, status FROM answers WHERE id = ?`,
+    )
+    .get(best_answer_id);
+  if (!row) {
+    throw new Error(
+      `setQuestionStatus FK guard: best_answer_id="${best_answer_id}" does not reference any existing answer.`,
+    );
+  }
+  if (row.question_id !== question_id) {
+    throw new Error(
+      `setQuestionStatus FK guard: best_answer_id="${best_answer_id}" points to an answer whose question_id is "${row.question_id}", not "${question_id}".`,
+    );
+  }
+  if (row.status !== "accepted") {
+    throw new Error(
+      `setQuestionStatus FK guard: best_answer_id="${best_answer_id}" points to an answer with status="${row.status}", not "accepted". Only accepted answers can be a question's best_answer.`,
+    );
+  }
+}
+
 // ─── Cycle prevention for question_parents ─────────────────────────────────
 
 function questionAncestors(db: Database, questionId: string): Set<string> {
@@ -270,6 +308,13 @@ export class LatticeStore {
   /** Update the lifecycle status (and optional best_answer_id pointer). */
   setQuestionStatus(id: string, status: QuestionStatus, best_answer_id: string | null = null): void {
     enforceQuestionStatusInvariant(status, best_answer_id);
+    // K1: when promoting to answered/closed, validate the best_answer_id
+    // FK is real, matches this question, and is accepted. Iter-5's
+    // enforceQuestionStatusInvariant guarantees best_answer_id is a
+    // non-empty string here when status is answered/closed.
+    if ((status === "answered" || status === "closed") && best_answer_id) {
+      enforceBestAnswerReference(this.db, id, best_answer_id);
+    }
     this.stmts.updateQuestionStatus.run(status, best_answer_id, id);
   }
 

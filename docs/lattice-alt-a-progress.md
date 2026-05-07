@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T22:00Z
+## Current state — 2026-05-07T22:35Z
 
-**Phase: Self-improvement /loop iteration 6 — refilled the findings queue via keystone (codex) peer review of sqlite-store.ts. 3 fresh REAL findings (K1: best_answer_id existence validation; K2: schema CHECK fractional-tier vulnerability; K3: DAG cycle check race). Iter 7-9 will execute these.**
+**Phase: Self-improvement /loop iteration 7 — keystone's K1 closed at the runtime-guard layer. setQuestionStatus now validates best_answer_id existence + matching question_id + accepted status. Schema FK migration stays in the boss-approval queue. Lattice hits 400 questions.**
 
 ## Phase status
 
@@ -15,6 +15,47 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T22:35Z (Self-improvement /loop iteration 7: K1 runtime-guard for best_answer_id FK existence + matching + accepted)
+
+**Target category:** I (NEW BUG SURFACE — execute keystone's K1 from iter-6).
+
+**Peer used:** solo. Keystone's iter-6 finding was specific enough that no fresh peer call was needed.
+
+**Test-first protocol:**
+  1. Wrote 4 regression tests at sqlite-store.test.ts:359-413 (non-existent answer, mismatched question_id, non-accepted answer, happy-path).
+  2. Verified 3 of 4 FAILED pre-fix (the happy-path test passed pre-fix because there was no validation in either direction).
+  3. Applied fix: new helper `enforceBestAnswerReference(db, qid, ans_id)` called from setQuestionStatus AFTER iter-5's null/non-null guard. Verifies (a) answer exists, (b) its question_id matches, (c) its status === "accepted".
+  4. Verified all 4 PASS post-fix; full lattice suite 105 → 109 (+4).
+
+**Design decision (judgment call, journaled for boss visibility):** The guard is added to setQuestionStatus only, not putQuestion. Reason: at putQuestion insert-time the answer typically doesn't exist yet (production path is put-as-open then promote); FK validation at putQuestion would force test fixtures with placeholder best_answer_id strings to either pre-create answers or use put-as-open-then-promote. The setQuestionStatus choke-point IS the production promotion path, so K1 is enforced where it matters. A future iteration could tighten putQuestion further (e.g., reject status="answered"/"closed" entirely from putQuestion, forcing all promotions through setQuestionStatus). Not done in iter-7 to avoid breaking the 5 test fixtures iter-5 already updated.
+
+**Pre-existing test bugs caught + fixed:** sqlite-store.test.ts:64 ("setQuestionStatus updates lifecycle") used a placeholder best_answer_id without creating the matching answer. Updated to create the real accepted answer first. The test now exercises BOTH the lifecycle update AND the K1 FK validation as a positive case.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — authored a 745-byte explanation about the three-step guard chain, recorded into the lattice via recordAnswer + setQuestionStatus(answered).
+  - ✅ Function 5 (FORMAT-UNIFORM) — new question + answer carry full provenance.
+  - ✅ Citation DAG growth — iter-7 cites BOTH keystone's iter-6 review AND iter-5's joint-invariant answer (multi-parent semantic citation: keystone surfaced the bug, iter-5 established the put-as-open-then-promote pattern that iter-7 extends).
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 399 → **400** ← milestone: 400-question lattice
+  - Answers: 875 → 878 (+1 authored, +2 background)
+  - **AUTHORED: 3 → 4** (each iteration adds one)
+  - **CITATIONS: 4 → 6** (+2 from this iter; multi-parent citation pattern proven again)
+  - posed_by orion: 68 → 69
+  - by_agent orion: 421 → 422
+
+**Tests:** plugin 502/0/3 (no change). Lattice 105 → 109 (+4 K1 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/sqlite-store.ts (the new enforceBestAnswerReference helper + setQuestionStatus call)
+  - scripts/lattice/sqlite-store.test.ts (4 K1 regression tests + 1 pre-existing test fixed)
+  - docs/ephemeral-peer-reviews.md (mark K1 closed)
+  - docs/lattice-alt-a-progress.md (this iteration log)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 8):** Execute keystone's K3 (DAG cycle check + insert not atomic). Wrap addCitation and addQuestionParent's check+insert in `BEGIN IMMEDIATE...COMMIT`. Test approach: regression test that demonstrates the race window (two concurrent connections each passing opposite-edge cycle checks then both inserting). Bun:sqlite supports BEGIN IMMEDIATE. K2 (fractional quality_tier CHECK) stays in the boss-approval queue with iter-3 NOT NULL and iter-6 K1 schema FK.
 
 ### 2026-05-07T22:00Z (Self-improvement /loop iteration 6: keystone peer-review of sqlite-store.ts → 3 fresh REAL findings)
 
