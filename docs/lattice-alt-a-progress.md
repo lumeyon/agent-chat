@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T23:05Z
+## Current state — 2026-05-07T23:30Z
 
-**Phase: Self-improvement /loop iteration 8 — keystone's K3 closed (atomic DAG cycle checks via BEGIN IMMEDIATE). authored_count hits 5 — study-turn category E now eligible. Two of three K-findings closed at code level; K2 alone remains in the boss-approval queue alongside two iter-1/iter-3 schema migrations.**
+**Phase: Self-improvement /loop iteration 9 — first study-turn run against authored Q/A. 5/5 ran, 0/5 passed 0.85 threshold, avg cosine 0.745 (vs 0.55 conversational baseline — meaningful uplift). FIRST non-zero predictive_lift values in lattice history. Substrate's full forcing-function loop verified end-to-end on real data.**
 
 ## Phase status
 
@@ -15,6 +15,64 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T23:30Z (Self-improvement /loop iteration 9: first study-turn against authored — full forcing-function loop verified end-to-end)
+
+**Target category:** E (STUDY-TURN AGAINST AUTHORED). Unblocked at iter-8 when authored_count hit 5.
+
+**Peer used:** none (study-turn uses claude predictor as a "self-review" mechanism — not a peer dispatch).
+
+**What ran:** `agent-chat study-turn --n 5 --runtime claude` against the lattice. 5 candidates selected (the 5 authored Q/A from iters 2/3/5/7/8). For each: claude predictor produces a prediction; embedding-cosine grader compares prediction to actual answer body; applyGradeToLift updates predictive_lift via `(cosine - 0.5) * 2 * lr` (lr=0.1 default).
+
+**Results:**
+
+| # | cosine | passed | lift Δ | answer (truncated) |
+|---|--------|--------|--------|--------------------|
+| 1 | 0.716 | ✗ | +0.043 | iter-8 K3 (atomic DAG cycles) |
+| 2 | 0.745 | ✗ | +0.049 | iter-7 K1 (best_answer_id FK guard) |
+| 3 | 0.737 | ✗ | +0.047 | iter-5 (joint status/best_answer_id) |
+| 4 | 0.735 | ✗ | +0.047 | iter-3 (explanation invariant) |
+| 5 | 0.793 | ✗ | +0.059 | iter-2 (quality_tier_min semantics) |
+
+**Avg cosine 0.745. 0/5 passed the 0.85 threshold. avg lift Δ +0.049.**
+
+**Comparison to iter-15j (conversational corpus):** conversational Q/A produced cosines 0.42-0.65 (avg ~0.55). Authored Q/A: 0.716-0.793 (avg 0.745). **+0.19 lift on average — structured authored content is meaningfully more predictable than conversational chatter, exactly what the substrate's design predicts.** But still under the 0.85 threshold.
+
+**Why didn't they pass 0.85?**
+  - Claude predictor's response style differs LEXICALLY from orion's authored content (different word-choice for the same concept).
+  - Questions reference specific code internals (file paths, function names like `enforceQuestionStatusInvariant`, line numbers); claude predicts general technical reasoning, not exact code references.
+  - The 384-dim Xenova/all-MiniLM-L6-v2 embedding gives cosines in [0.6, 0.85] for "same topic, different phrasing" rather than for "literally same answer". 0.85 is calibrated for near-identical strings.
+  - The cosine threshold IS configurable via `grade_threshold` option (study-turn.ts:247), default 0.85; the CLI doesn't expose it as a flag yet.
+
+**Substrate's full forcing-function loop now verified on real data:**
+  - F2 (study turn) exercised end-to-end ✓
+  - F3 (selection pressure) exercised — applyGradeToLift updated 5 answers ✓
+  - Predictor → grader → lift-update flow ran 5 times without errors ✓
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 401 → 401 (no new this iter; reads only)
+  - Answers: 881 → 883 (+2 from background record-turns)
+  - **predictive_lift max: 0.000 → 0.059** ← FIRST non-zero value in the entire lattice history (every single answer was 0.000 since lattice-creation; iter-9 produced the first signal).
+  - predictive_lift mean: stays at 0.000 because 878/883 answers (auto-imported tail) remain at 0; the 5 authored ones now have ~0.04-0.06 each.
+  - Authored: 5 → 5 (no new this iter)
+  - Citations: 8 → 8
+
+**Tests:** plugin 502/0/3, lattice 111/0 (no change — no code changes this iteration).
+
+**Files touched (1):**
+  - docs/lattice-alt-a-progress.md (this iteration log + progress doc current state)
+
+**Note on file-change minimality:** this is a "verify the substrate works on real data" iteration. The substrate produced new lattice state (predictive_lift values), but the verification is journaling, not new code. Per principle 3, the metric delta (first non-zero predictive_lift) justifies the commit even though no code changed.
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 10):** Two natural follow-ups, pick whichever has higher leverage:
+
+  **Option A — Add `--threshold` flag to study-turn CLI** so future runs can be calibrated (e.g., 0.70 for "good enough", 0.85 for "near-identical-string"). Small code change (1-2 lines in agent-chat.ts cmdStudyTurn). Lets future iterations explore the threshold space empirically without touching study-turn.ts.
+
+  **Option B — Run study-turn AGAIN with the same n=5 to see lift accumulation.** Each pass adds ~0.05 to lift via applyGradeToLift. After 5-6 passes, the 5 authored answers should have lift in [0.25, 0.30] — visible in the histogram. Demonstrates selection pressure (forcing function 3) accumulating.
+
+  **Recommendation: A first, then B in iter 11.** A enables empirical threshold exploration; B becomes more meaningful once we can see how lift behaves under different thresholds.
 
 ### 2026-05-07T23:05Z (Self-improvement /loop iteration 8: K3 atomic DAG cycle checks via BEGIN IMMEDIATE)
 
