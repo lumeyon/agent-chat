@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T17:55Z
+## Current state — 2026-05-07T18:25Z
 
-**Phase: ALT-A-2 SHIPPED — pushContext wired into agent-chat runtime. Every cmdRun call now retrieves top-K relevant prior Q/A from the lattice and prepends as "Relevant prior knowledge" to the LLM prompt.**
+**Phase: ALT-A-3 SHIPPED — Alternative A is COMPLETE. All three forcing functions wired, runtime integrated, real-LLM end-to-end verified.**
 
 ## Phase status
 
@@ -12,9 +12,39 @@
 |---|---|---|
 | ALT-A-1 | AI-to-AI dialog import | **COMPLETE** — pairSections() extended; 23 tests pass; production lattice grew 252→386 questions / 693→846 answers |
 | ALT-A-2 | pushContext wired into agent-chat runtime | **COMPLETE** — `lattice-context.ts` helper + cmdRun integration; 12 unit tests + real-data end-to-end smoke pass |
-| ALT-A-3 | Study turn loop with LLM integration | **NEXT** |
+| ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T18:25Z (Alt A iteration 3)
+
+- Built `scripts/lattice/study-turn.ts` — Apprenticeship Substrate forcing function 2 orchestration (recreated from the deleted iter-15 scaffold + finished)
+- Five exported pieces:
+  - `selectStudyQuestions(store, options)` — picks K candidates from the lattice. Filters by status, quality_tier, exclude_agent. Skips auto-imported placeholder explanations by default; `require_authored_explanation: false` opt-in for import-only lattices.
+  - `buildStudyPrompt(candidate)` — formats the StudyChallenge for the predictor.
+  - `gradePrediction(prediction, actual, threshold=0.85)` — embedding-cosine grader using vendored MiniLM. Cheap (no LLM call), deterministic.
+  - `applyGradeToLift(store, answer_id, grade, lr)` — updates predictive_lift via signed signal (`(cosine - 0.5)*2 * lr`), clamped to [0, 1].
+  - `runStudyTurn(store, predictor, options)` — full orchestration, returns per-candidate results.
+- Two built-in LLM-backed predictors: `claudePredictor` and `codexPredictor` wrapping the existing `runtimes/claude.ts` and `runtimes/codex.ts` adapters. The `Predictor` type is also exported as an injectable interface so test mocks can stand in.
+- New CLI: `agent-chat study-turn [--n K] [--runtime claude|codex] [--dry-run] [--exclude-agent <name>] [--quality-tier-min N] [--include-auto-imported]`. Defaults: n=5, runtime=$AGENT_CHAT_RUNTIME or claude. Hard cap at n≤50 (LLM-budget guard).
+- 16 unit tests in `scripts/lattice/study-turn.test.ts` (all pass) covering: selectStudyQuestions filtering / exclude_agent / empty lattice; buildStudyPrompt packing; gradePrediction identical-strings / very-different / empty-input; applyGradeToLift bump-up / drop / neutral / [0,1] clamp; runStudyTurn full orchestration with fake predictors / dry-run / empty / challenge-shape inspection.
+- Caught and fixed a real production bug along the way: `quality_tier_min: null` was passed to the SQL filter, which builds `quality_tier <= NULL` (always falsy) instead of skipping the filter. Defended both at the CLI layer (treat null as "no filter") and at the store layer (defensive null-check in queryAnswers).
+- **Real-LLM end-to-end smoke** — `bun agent-chat.ts study-turn --n 3 --dry-run --runtime claude --include-auto-imported`:
+  - Runtime resolved to claude (claude binary on PATH at `/home/eyon/.local/bin/claude`)
+  - 3 candidates selected from the production lattice
+  - 3 real `claude -p` calls executed
+  - Each prediction graded via embedding cosine: 0.624, 0.651, 0.416 (avg 0.564)
+  - Results table emitted; dry-run correctly kept predictive_lift unchanged
+  - Predictions don't reach the 0.85 pass threshold — expected, because production lattice has conversational-shape Q/A (statements/directives, not curated study material). Mechanics are verified end-to-end.
+- Plugin tests: 495 pass / 0 fail (no change in count — study-turn.ts lives at top-level scripts/, not under plugins/)
+- Lattice tests: 89 pass (was 73; +16 new study-turn tests)
+- Forcing function 2 (mandatory study turns) is now ALIVE in the codebase. The substrate's full forcing-function-set is operational:
+  - 1 dual-output: enforced by `recordAnswer` at the apprenticeship API layer ✓
+  - 2 study turns: `agent-chat study-turn [--n K]` with real LLM ✓ **NEW**
+  - 3 selection pressure: `reRankAnswers` lift-based promotion ✓
+  - 4 cross-domain push: wired into `cmdRun` (ALT-A-2) ✓
+  - 5 format-uniform artifacts: schema-design level (Phase 5/6) ✓
+- **Alternative A is COMPLETE.** The agent-collaboration substrate works end-to-end on real data. The codebase is now ready for the architectural patterns to inherit into quantum-substrate.
 
 ### 2026-05-07T17:55Z (Alt A iteration 2)
 

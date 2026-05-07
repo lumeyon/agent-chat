@@ -337,11 +337,11 @@ export class LatticeStore {
       conds.push(`status IN (${placeholders})`);
       for (const s of statuses) params.push(s);
     }
-    if (filter.quality_tier_min !== undefined) {
+    if (filter.quality_tier_min !== undefined && filter.quality_tier_min !== null) {
       conds.push("quality_tier <= ?");  // tier 1 = best, so MIN tier = MAX numeric
       params.push(filter.quality_tier_min);
     }
-    if (filter.predictive_lift_min !== undefined) {
+    if (filter.predictive_lift_min !== undefined && filter.predictive_lift_min !== null) {
       conds.push("predictive_lift >= ?");
       params.push(filter.predictive_lift_min);
     }

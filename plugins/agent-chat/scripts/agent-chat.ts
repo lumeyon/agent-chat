@@ -2434,6 +2434,92 @@ function cmdSetupCodex(args: string[]): void {
   console.log(`[setup-codex] ✓ done. ${agent}@${topology} is configured. Flip a turn to ${agent} on any of its edges to test.`);
 }
 
+// ALT-A-3: study-turn CLI — runs N apprenticeship-substrate study turns
+// against the global lattice. Each turn picks a question, calls the
+// configured runtime LLM to predict the answer, grades the prediction
+// via embedding cosine, and updates predictive_lift on the original
+// answer. Real LLM cost: 1 call per turn.
+async function cmdStudyTurn(args: string[]): Promise<void> {
+  let n = 5;
+  let runtime: "claude" | "codex" | null = null;
+  let dryRun = false;
+  let qualityTierMin: number | null = null;
+  let excludeAgent: string | null = null;
+  let includeAutoImported = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--n" || a === "-n") n = parseInt(args[++i], 10);
+    else if (a === "--runtime") runtime = args[++i] as "claude" | "codex";
+    else if (a === "--dry-run") dryRun = true;
+    else if (a === "--quality-tier-min") qualityTierMin = parseInt(args[++i], 10);
+    else if (a === "--exclude-agent") excludeAgent = args[++i];
+    else if (a === "--include-auto-imported") includeAutoImported = true;
+    else if (a.startsWith("--")) die(`study-turn: unknown option ${a}`, 70);
+  }
+  if (!Number.isInteger(n) || n <= 0 || n > 50) {
+    die("study-turn: --n must be a positive integer ≤ 50 (LLM-budget guard)", 70);
+  }
+
+  // Resolve runtime — default to AGENT_CHAT_RUNTIME env or 'claude'.
+  if (!runtime) {
+    const envRuntime = process.env.AGENT_CHAT_RUNTIME;
+    runtime = (envRuntime === "codex" || envRuntime === "claude") ? envRuntime : "claude";
+  }
+
+  // Resolve lattice DB path: <conv>/lattice.db.
+  const latticeDbPath = path.join(CONVERSATIONS_DIR, "lattice.db");
+  if (!fs.existsSync(latticeDbPath)) {
+    die(
+      `study-turn: lattice DB not found at ${latticeDbPath}. ` +
+      `Run \`bun scripts/lattice/import-from-kg.ts --all\` first to populate it.`,
+      66,
+    );
+  }
+
+  console.error(`[study-turn] runtime=${runtime} n=${n} dry_run=${dryRun} db=${latticeDbPath}`);
+
+  const { LatticeStore } = await import("../../../scripts/lattice/sqlite-store.ts");
+  const studyMod = await import("../../../scripts/lattice/study-turn.ts");
+  const predictor = runtime === "codex" ? studyMod.codexPredictor : studyMod.claudePredictor;
+
+  const store = new LatticeStore(latticeDbPath);
+  try {
+    const results = await studyMod.runStudyTurn(store, predictor, {
+      k: n,
+      apply_updates: !dryRun,
+      quality_tier_min: qualityTierMin === null ? undefined : (qualityTierMin as any),
+      exclude_agent: excludeAgent ?? undefined,
+      require_authored_explanation: !includeAutoImported,
+    });
+
+    if (results.length === 0) {
+      console.log("study-turn: no eligible candidates in the lattice. Nothing to do.");
+      return;
+    }
+
+    console.log(`\n# Study turn results (n=${results.length}, runtime=${runtime})\n`);
+    console.log(`| # | cosine | passed | lift Δ | answer_id | by | question (truncated) |`);
+    console.log(`|---|---|---|---|---|---|---|`);
+    let totalCos = 0, passed = 0;
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      totalCos += r.grade.cosine;
+      if (r.grade.passed) passed++;
+      const q = r.candidate.question.framing.replace(/\s+/g, " ").slice(0, 60);
+      console.log(
+        `| ${i + 1} | ${r.grade.cosine.toFixed(3)} | ${r.grade.passed ? "✓" : "✗"} | ${r.lift_update.delta >= 0 ? "+" : ""}${r.lift_update.delta.toFixed(3)} | ${r.lift_update.answer_id} | ${r.candidate.actual_answer.by_agent} | ${q} |`,
+      );
+    }
+    const avgCos = totalCos / results.length;
+    console.log(`\n**Summary:** avg cosine ${avgCos.toFixed(3)}, passed ${passed}/${results.length} (threshold ${(results[0]?.grade.threshold ?? 0.85).toFixed(2)})`);
+    if (dryRun) {
+      console.log(`\n_(--dry-run: predictive_lift updates were NOT applied to the lattice)_`);
+    }
+  } finally {
+    store.close();
+  }
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2461,6 +2547,7 @@ switch (cmd) {
   case "install":      cmdInstall(rest); break;
   case "install-codex-hooks": cmdInstallCodexHooks(rest); break;
   case "setup-codex":  cmdSetupCodex(rest); break;
+  case "study-turn":   void cmdStudyTurn(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -2511,6 +2598,13 @@ switch (cmd) {
       `      agent identity — the service handles every turn. Pass --peer to\n` +
       `      enable autowatch (required for autonomy); --no-service to skip\n` +
       `      the systemd install and run autowatch manually instead.\n\n` +
+      `  study-turn [--n K] [--runtime claude|codex] [--dry-run] [--exclude-agent <name>] [--quality-tier-min N]\n` +
+      `      Apprenticeship Substrate forcing function 2: run K study turns\n` +
+      `      against the global lattice. Each turn picks a question, calls\n` +
+      `      the configured LLM to predict the answer, grades the prediction\n` +
+      `      via embedding cosine, and updates predictive_lift on the\n` +
+      `      answer. Real LLM cost: 1 call per turn. Default K=5; max 50\n` +
+      `      (LLM-budget guard). --dry-run skips the predictive_lift writes.\n\n` +
       `  self-test [--json]\n` +
       `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +
