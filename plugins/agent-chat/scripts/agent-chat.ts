@@ -2553,6 +2553,22 @@ async function cmdLatticeStats(args: string[]): Promise<void> {
   }
 }
 
+// CLI thin wrapper around scripts/ephemeral-peer-review.ts. Drives a
+// one-shot peer code review: orion (this agent) composes a review prompt
+// with the peer's role + module source, dispatches via the peer's runtime
+// adapter, records both sections to CONVO.md, parks the edge, and triggers
+// a lattice import. The /loop driver uses this when a target needs peer
+// input. Restricted to orion's neighbors in petersen (lumeyon, keystone,
+// carina); other peers must go through a relay.
+async function cmdEphemeralPeerReview(args: string[]): Promise<void> {
+  const scriptPath = path.join(SKILL_ROOT, "scripts/ephemeral-peer-review.ts");
+  const r = require("node:child_process").spawnSync(
+    process.execPath, [scriptPath, ...args],
+    { stdio: "inherit" },
+  );
+  process.exit(r.status ?? 1);
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2582,6 +2598,7 @@ switch (cmd) {
   case "setup-codex":  cmdSetupCodex(rest); break;
   case "study-turn":   void cmdStudyTurn(rest); break;
   case "lattice-stats": void cmdLatticeStats(rest); break;
+  case "ephemeral-peer-review": void cmdEphemeralPeerReview(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -2644,6 +2661,16 @@ switch (cmd) {
       `      participant distribution, quality-tier breakdown, predictive_lift\n` +
       `      histogram, citation/parent-DAG sizes. Useful for debugging,\n` +
       `      demos, and tracking lattice growth over time.\n\n` +
+      `  ephemeral-peer-review --peer <name> --module <path>\n` +
+      `                        [--task <text>] [--runtime claude|codex]\n` +
+      `                        [--no-import] [--review-cap-bytes <N>]\n` +
+      `      Drive a one-shot peer code review. Composes a focused prompt\n` +
+      `      from the peer's role + module source, shells out to the peer's\n` +
+      `      runtime, appends the request/response pair to CONVO.md on the\n` +
+      `      orion-<peer> edge, parks the edge, then imports into the lattice.\n` +
+      `      Peer must be one of orion's neighbors in petersen (lumeyon,\n` +
+      `      keystone, carina). Used by the autonomous /loop to find real\n` +
+      `      issues by exercising the substrate against its own code.\n\n` +
       `  self-test [--json]\n` +
       `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +
