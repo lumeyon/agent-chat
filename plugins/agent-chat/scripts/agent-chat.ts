@@ -1740,6 +1740,14 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       pending++;
       continue;
     }
+    // Debug emit: when AGENT_CHAT_DEBUG_PROMPT=1, log the fully-composed
+    // prompt to stderr just before dispatch. Used by integration tests
+    // (and ad-hoc inspection) to verify the prompt-composition pipeline
+    // — including the ALT-A-2 pushedContextBlock — is producing the
+    // expected output. Default off; production runs see no extra output.
+    if (process.env.AGENT_CHAT_DEBUG_PROMPT === "1") {
+      console.error(`[agent-chat run] AGENT_CHAT_DEBUG_PROMPT=1 — composed prompt for edge ${edge.id}:\n${"=".repeat(60)}\n${prompt}\n${"=".repeat(60)}`);
+    }
     let r;
     try {
       r = await dispatch({ prompt, timeoutMs: 90_000 });
@@ -2520,6 +2528,31 @@ async function cmdStudyTurn(args: string[]): Promise<void> {
   }
 }
 
+// CLI thin wrapper around scripts/lattice/stats.ts. Surfaces the global
+// lattice's contents (counts, distributions, quality-tier breakdown,
+// predictive_lift histogram) for debugging, demos, and ongoing tracking
+// of the substrate's growth.
+async function cmdLatticeStats(args: string[]): Promise<void> {
+  const dbIdx = args.indexOf("--db");
+  const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : path.join(CONVERSATIONS_DIR, "lattice.db");
+  const jsonMode = args.includes("--json");
+
+  if (!fs.existsSync(dbPath)) {
+    die(
+      `lattice-stats: lattice DB not found at ${dbPath}. ` +
+      `Run \`bun scripts/lattice/import-from-kg.ts --all\` to populate it.`,
+      66,
+    );
+  }
+  const { getStats, formatHumanReadable } = await import("../../../scripts/lattice/stats.ts");
+  const stats = getStats(dbPath);
+  if (jsonMode) {
+    console.log(JSON.stringify(stats, null, 2));
+  } else {
+    console.log(formatHumanReadable(stats));
+  }
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2548,6 +2581,7 @@ switch (cmd) {
   case "install-codex-hooks": cmdInstallCodexHooks(rest); break;
   case "setup-codex":  cmdSetupCodex(rest); break;
   case "study-turn":   void cmdStudyTurn(rest); break;
+  case "lattice-stats": void cmdLatticeStats(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -2605,6 +2639,11 @@ switch (cmd) {
       `      via embedding cosine, and updates predictive_lift on the\n` +
       `      answer. Real LLM cost: 1 call per turn. Default K=5; max 50\n` +
       `      (LLM-budget guard). --dry-run skips the predictive_lift writes.\n\n` +
+      `  lattice-stats [--db <path>] [--json]\n` +
+      `      Surface the global lattice's contents: question/answer counts,\n` +
+      `      participant distribution, quality-tier breakdown, predictive_lift\n` +
+      `      histogram, citation/parent-DAG sizes. Useful for debugging,\n` +
+      `      demos, and tracking lattice growth over time.\n\n` +
       `  self-test [--json]\n` +
       `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +

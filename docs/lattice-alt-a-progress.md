@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T18:25Z
+## Current state — 2026-05-07T19:00Z
 
-**Phase: ALT-A-3 SHIPPED — Alternative A is COMPLETE. All three forcing functions wired, runtime integrated, real-LLM end-to-end verified.**
+**Phase: ALT-A polish iteration — `lattice-stats` CLI for visibility + AGENT_CHAT_DEBUG_PROMPT switch for cmdRun introspection. Alt A architecture complete; iterating on observability.**
 
 ## Phase status
 
@@ -15,6 +15,35 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T19:00Z (Alt A polish iteration)
+
+- Built `scripts/lattice/stats.ts` and wired `agent-chat lattice-stats [--db <path>] [--json]` into the CLI. Surfaces the global lattice's contents:
+  - Question/answer totals
+  - By-status / by-posed_by / by-agent distributions
+  - Date range, depth distribution
+  - Quality-tier breakdown
+  - Authored vs auto-imported counts and percentage
+  - predictive_lift histogram (min/max/mean/median)
+  - Citation and question-parent DAG sizes
+  - Both human-readable markdown and `--json` for downstream tooling
+- 7 unit tests in `scripts/lattice/stats.test.ts`; all pass
+- Real-data exercise against production lattice (`bun agent-chat.ts lattice-stats`):
+  - 387 questions, 852 answers, 3.5MB DB
+  - 6 distinct posed_by (boss=257, orion=64, lumeyon=24, carina=20, keystone=19, rhino=3)
+  - 10 distinct by_agent (orion=400, lumeyon=356, keystone=28, carina=20, vanguard=10, lyra=9, cadence=8, sentinel=8, pulsar=7, rhino=6)
+  - 100% auto-imported (authored=0) — confirms the visibility the lattice needs to grow into authored-quality content
+  - All depth=0 (no recursive subgraph spawning yet)
+  - All quality_tier=5 (raw)
+  - Citations=0, question_parents=0 (DAG structure unpopulated; future work)
+- Added `AGENT_CHAT_DEBUG_PROMPT=1` switch to cmdRun: when set, logs the full composed prompt to stderr right before dispatch. Lets future integration tests assert on the ALT-A-2 pushed-context-block wiring without intrusive instrumentation. Default off; production runs see no extra output.
+- Plugin tests: 495 pass / 0 fail
+- Lattice tests: 96 pass (was 89; +7 stats tests)
+- Loop CONTINUES — next iteration could:
+  - Author a small set of real explanations to demonstrate study-turn passing predictions
+  - Add citation-DAG population to the importer (currently 0 citations)
+  - Implement the lattice merge tool (cross-instance mergeability)
+  - Or: pivot to quantum-substrate Alt-B work if you redirect
 
 ### 2026-05-07T18:25Z (Alt A iteration 3)
 
