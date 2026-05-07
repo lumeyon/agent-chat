@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/task-source.sh — unified task discovery for the orion driver.
+# tools/orion-autopilot/task-source.sh — unified task discovery for the orion driver.
 #
 # Inspired by ruflo's autopilot task-source layer (TaskList / MCP swarm /
 # file-checklist). Yields candidate tasks from multiple sources as JSON
@@ -15,7 +15,7 @@
 #     "slug": "<short kebab-case identifier>",
 #     "title": "<human-readable title>",
 #     "repo": "<owner/repo for dispatch context>",
-#     "handler": "<scripts/board/handlers/<name>.sh>"  // future
+#     "handler": "<tools/orion-autopilot/handlers/<name>.sh>"  // future
 #   }
 #
 # Priority encoding:

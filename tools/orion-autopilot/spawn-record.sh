@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/spawn-record.sh — write a permanent CONVO.md-shape record
+# tools/orion-autopilot/spawn-record.sh — write a permanent CONVO.md-shape record
 # of an ephemeral spawn's conversation (orion → codex/claude → response).
 #
 # The agent-chat topology rules (record-turn requires the speaker to be a

@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/cost-track.sh — filesystem-native per-spawn cost ledger.
+# tools/orion-autopilot/cost-track.sh — filesystem-native per-spawn cost ledger.
 #
 # Inspired by ruflo's ruflo-cost-tracker plugin
 # (/data/eyon/git/ruflo/plugins/ruflo-cost-tracker/) but using JSONL on

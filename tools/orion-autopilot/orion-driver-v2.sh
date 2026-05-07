@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/orion-driver-v2.sh — generalized autopilot driver.
+# tools/orion-autopilot/orion-driver-v2.sh — generalized autopilot driver.
 #
 # Closes the ruflo autopilot-loop pattern (status → predict → execute →
 # log → schedule) using agent-chat's three primitives:
@@ -34,7 +34,7 @@
 #
 # Usage:
 #   AGENT_CHAT_CONVERSATIONS_DIR=/data/lumeyon/agent-chat/conversations \
-#     scripts/board/orion-driver-v2.sh
+#     tools/orion-autopilot/orion-driver-v2.sh
 #     [--once]      # default; one cycle then exit
 #     [--loop]      # run continuously (sleeps POLL_SEC between cycles)
 #     [--poll-sec N]
@@ -225,7 +225,7 @@ orion (claude) writes a tight prompt at:
 
 scoped to investigate-only (no file edits). Then dispatches via:
 
-  \`scripts/board/dispatch-codex.sh \\
+  \`tools/orion-autopilot/dispatch-codex.sh \\
     --slug issue-${ref}-investigate \\
     --prompt-file <conv>/dispatches/issue-${ref}-investigate-prompt.md \\
     --estimate-usd 3.00 \\

@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/dispatch-claude.sh — claude-runtime sibling of dispatch-codex.sh.
+# tools/orion-autopilot/dispatch-claude.sh — claude-runtime sibling of dispatch-codex.sh.
 #
 # When to use which:
 #   dispatch-codex.sh — non-security work (architecture, docs, generic

@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/board/dispatch-codex.sh — wrap the codex-spawn pattern with
+# tools/orion-autopilot/dispatch-codex.sh — wrap the codex-spawn pattern with
 # pre-flight budget gate, background dispatch, and post-hoc cost log.
 #
 # Captures the pattern proved out in tick 6 (north-star-execution.md):

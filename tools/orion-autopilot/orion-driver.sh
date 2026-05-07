@@ -1,17 +1,17 @@
 #!/bin/bash
-# scripts/board/orion-driver.sh — long-running orion-as-orchestrator driver.
+# tools/orion-autopilot/orion-driver.sh — long-running orion-as-orchestrator driver.
 #
 # Equivalent to ruflo's daemon pattern but using agent-chat's filesystem-
 # mediated wire protocol. orion (this process) is the identity; the loop
 # below is the orchestrator. When reasoning is needed, it shells out to
 # `claude -p` for that specific decision (per-PR review uses ephemeral
-# codex via scripts/board/review.sh).
+# codex via tools/orion-autopilot/review.sh).
 #
 # Lifecycle:
 #   1. Acquire orion presence record (refuse if another live orion exists)
 #   2. Poll upstream PR list every POLL_SEC seconds
 #   3. For each unreviewed-recently PR, dispatch the 9-agent board review
-#      via scripts/board/review.sh (self-contained pipeline)
+#      via tools/orion-autopilot/review.sh (self-contained pipeline)
 #   4. If the consensus is ambiguous (e.g. high disagreement, low
 #      reliability mean), invoke `claude -p` for a tie-break decision
 #      before posting
@@ -21,7 +21,7 @@
 #
 # Usage:
 #   AGENT_CHAT_CONVERSATIONS_DIR=/data/lumeyon/agent-chat/conversations \
-#     scripts/board/orion-driver.sh \
+#     tools/orion-autopilot/orion-driver.sh \
 #     [--upstream <owner/repo>] [--threshold N] [--poll-sec N] [--max-prs N]
 #     [--once]   # process at most one PR then exit (for testing)
 #
