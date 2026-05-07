@@ -53,8 +53,15 @@ export interface Answer {
   id: string;
   question_id: string;
   body: string;
-  /** Apprenticeship Substrate's dual-output: WHY this answers it. */
-  explanation: string | null;
+  /** Apprenticeship Substrate's dual-output: WHY this answers it.
+   *  Required and non-empty (whitespace-trimmed). Enforced at runtime
+   *  by both `recordAnswer` (apprenticeship.ts) and `putAnswer`
+   *  (sqlite-store.ts) so callers cannot bypass the invariant by
+   *  going around the apprenticeship API. The SQL schema column is
+   *  still TEXT (nullable in DDL) for backwards-compat with existing
+   *  databases; tightening to NOT NULL requires a migration step
+   *  pending boss approval — see docs/lattice-alt-a-progress.md. */
+  explanation: string;
   by_agent: string;
   /** Running score updated by peer study turns. */
   predictive_lift: number;

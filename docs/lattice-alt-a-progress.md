@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T19:55Z
+## Current state — 2026-05-07T20:00Z
 
-**Phase: Self-improvement /loop iteration 2 — first authored answer in the lattice. Forcing function 1 (dual-output) exercised end-to-end on real production data; lumeyon's iter-1 doc finding closed.**
+**Phase: Self-improvement /loop iteration 3 — explanation invariant tightened at type + persistence layer. First citation in the lattice DAG. Boss-approval question journaled (SQL NOT NULL migration).**
 
 ## Phase status
 
@@ -15,6 +15,50 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T20:00Z (Self-improvement /loop iteration 3: explanation invariant — TS type + persistence guard; first citation)
+
+**Target category:** I (NEW BUG SURFACE — execute lumeyon's REAL #2 from iter-1's smoke).
+
+**Peer used:** solo. The bug was specific enough (Answer.explanation typed as nullable despite recordAnswer enforcing non-empty) that a fresh peer call wasn't needed.
+
+**Test-first protocol applied:**
+  1. Wrote 3 regression tests at sqlite-store.test.ts:281-307 covering (null, empty-string, whitespace-only) explanation in putAnswer.
+  2. Verified all 3 FAIL pre-fix (existing putAnswer accepted these silently — bug confirmed).
+  3. Applied fix: types.ts Answer.explanation `string | null` → `string`; sqlite-store.ts putAnswer adds the same non-empty-string guard recordAnswer has.
+  4. Verified all 3 PASS post-fix; full lattice suite 96 → 99 (+3).
+
+**Schema migration BOSS-APPROVAL QUESTION (journaled per stopping condition 2):**
+  The TS-side fix tightens the type and adds a runtime guard at putAnswer.
+  But the SQL schema column is still `explanation TEXT` (nullable in DDL).
+  In the production lattice (866 rows), all explanations are non-null
+  (auto-imported placeholders or authored). Tightening to `TEXT NOT NULL`
+  via migration is safe in DATA terms but is a destructive schema change
+  on a live database. **Question for boss:** approve a migration step
+  (CREATE TABLE answers_new with NOT NULL → INSERT INTO answers_new
+  SELECT * FROM answers → DROP/RENAME) for the next iteration touching
+  this area? Or accept the current state where the type+guard pair is
+  the enforcement and the schema stays permissive? Iter-3 takes the
+  conservative path (no schema change) until boss decides.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — recordAnswer with real explanation
+  - ✅ Function 5 (FORMAT-UNIFORM) — quality_tier=2, validator_id=null, full provenance
+  - ✅ **Citation DAG populated for the first time** — my new answer cites lumeyon's iter-1 review answer (parent=mine, child=lumeyon's). The DAG arrow says "this answer's reasoning rests on that prior answer's finding."
+
+**Lattice metrics (BEFORE → AFTER) — TWO new metrics moved:**
+  - Questions: 395 → 396 (+1)
+  - Answers: 866 → 867 (+1 authored)
+  - **AUTHORED: 1 → 2** (forcing function 1 exercised again)
+  - **CITATIONS: 0 → 1** ← first ever — graph-structure metric finally non-zero
+  - posed_by orion: 66 → 67
+  - by_agent orion: 410 → 411
+
+**Tests:** plugin 502/0/3 (no change), lattice 96 → 99 (+3 regression tests).
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 4):** Category C (POPULATE CITATION DAG) is now interesting because we've proven the DAG works end-to-end. Pick a recent answer in the lattice and identify its 1-3 prior-answer citations via lumeyon (codex). Goal: citations 1 → 4-5 in one iteration. After that, iter 5 can revisit lumeyon's REAL #3 (Question.status / best_answer_id consistency).
 
 ### 2026-05-07T19:55Z (Self-improvement /loop iteration 2: types.ts doc clarification + first authored answer)
 

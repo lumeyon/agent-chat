@@ -284,6 +284,31 @@ describe("LatticeStore — stats and constraints", () => {
     store.putAnswer(makeAnswer({ id: "ans:a" }));
     expect(() => store.addCitation("ans:a", "ans:does_not_exist")).toThrow(/FOREIGN KEY/);
   });
+
+  // Regression for lumeyon's iter-1 REAL #2 finding: putAnswer accepted
+  // null/empty explanation silently, contradicting the dual-output forcing
+  // function. Pre-fix the SQL-level INSERT succeeded; post-fix putAnswer
+  // throws before the INSERT runs.
+  test("putAnswer rejects null explanation (dual-output invariant)", () => {
+    store.putQuestion(makeQuestion());
+    expect(() =>
+      store.putAnswer(makeAnswer({ explanation: null as any })),
+    ).toThrow(/explanation/i);
+  });
+
+  test("putAnswer rejects empty-string explanation (dual-output invariant)", () => {
+    store.putQuestion(makeQuestion());
+    expect(() =>
+      store.putAnswer(makeAnswer({ explanation: "" })),
+    ).toThrow(/explanation/i);
+  });
+
+  test("putAnswer rejects whitespace-only explanation", () => {
+    store.putQuestion(makeQuestion());
+    expect(() =>
+      store.putAnswer(makeAnswer({ explanation: "   \n\t  " })),
+    ).toThrow(/explanation/i);
+  });
 });
 
 describe("LatticeStore — quality_tier semantics (dual-audience fusion)", () => {

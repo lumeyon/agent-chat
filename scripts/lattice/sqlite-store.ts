@@ -288,11 +288,23 @@ export class LatticeStore {
   // ─── Answer operations ──────────────────────────────────────────────────
 
   putAnswer(a: Answer): void {
+    // Apprenticeship Substrate forcing function 1 (dual-output): every
+    // Answer must carry a non-empty explanation. recordAnswer() enforces
+    // this at the apprenticeship API layer (apprenticeship.ts:55-63);
+    // we enforce it again here so direct putAnswer callers cannot
+    // bypass the invariant. Lumeyon's iter-1 review flagged the original
+    // typed-as-nullable surface as a real type-safety hole.
+    if (typeof a.explanation !== "string" || a.explanation.trim().length === 0) {
+      throw new Error(
+        `putAnswer: dual-output invariant — explanation must be a non-empty ` +
+        `string (got ${a.explanation === null ? "null" : a.explanation === undefined ? "undefined" : "empty/whitespace string"}).`,
+      );
+    }
     this.stmts.insertAnswer.run(
       a.id,
       a.question_id,
       a.body,
-      a.explanation ?? null,
+      a.explanation,
       a.by_agent,
       a.predictive_lift,
       a.status,
