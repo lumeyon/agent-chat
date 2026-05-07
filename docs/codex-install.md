@@ -64,6 +64,26 @@ without errors, the install is healthy and the Codex runtime adapter
 (scripts/runtimes/codex.ts, Round-15i) is ready to dispatch through
 `codex exec`.
 
+## Start or restart a Codex session
+
+Plugin installation makes the skill and hooks available; it does not
+claim an agent identity for a newly started Codex process. Each Codex
+session must still initialize its graph identity from the project cwd:
+
+```bash
+AGENT_CHAT_DIR="$(
+  ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1
+)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" init lumeyon petersen
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" speaker boss
+```
+
+Why this matters: cwd-state can let `whoami` resolve after a restart, but
+`agent-chat who` only lists live session/presence records. Re-running
+`init` after restart recreates the presence record for the new Codex
+process and gives the Stop hook a current identity to archive against.
+
 ## After-response capture hook
 
 agent-chat declares its lifecycle hook in `.codex-plugin/plugin.json`:

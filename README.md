@@ -226,6 +226,11 @@ The runtime adapter itself (`codex exec` wrapping) works once the
 plugin is enabled. See [`docs/codex-install.md`](docs/codex-install.md)
 for the full install notes and compatibility path.
 
+Installing the plugin does not claim a live graph identity. After every
+new Claude or Codex session starts, run `agent-chat init <name> <topology>`
+for that session before expecting it to appear in `agent-chat who` or to
+record turns through the Stop hook.
+
 **Option B — Direct symlink (legacy, pre-plugin path):**
 
 ```bash
@@ -253,6 +258,21 @@ knows to do it on its own):
 ```bash
 bun ~/.claude/skills/agent-chat/scripts/agent-chat.ts init orion petersen
 ```
+
+For Codex installs, the same rule applies after restart:
+
+```bash
+AGENT_CHAT_DIR="$(
+  ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1
+)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" init lumeyon petersen
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" speaker boss
+```
+
+`whoami` may resolve from cwd-state after a restart, but `who` only lists
+live session/presence records. Re-running `init` is what recreates that
+live presence record for the new Codex process.
 
 That single command claims the identity, writes a per-session file under
 `conversations/.sessions/`, refuses if another live session already

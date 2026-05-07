@@ -60,6 +60,11 @@ the session and presence files under the shared conversations directory,
 auto-resolves the current human speaker when configured, and prints the
 agent's neighbors. It does not start any background process.
 
+Run `init` once per newly started Claude or Codex session, including after
+restarts. A stale cwd-state file may let `whoami` resolve, but `who` only
+lists live session/presence records; `init` recreates that live presence
+record for the new process.
+
 Useful identity commands:
 
 ```bash
