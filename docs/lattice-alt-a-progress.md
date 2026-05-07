@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T20:00Z
+## Current state — 2026-05-07T20:08Z
 
-**Phase: Self-improvement /loop iteration 3 — explanation invariant tightened at type + persistence layer. First citation in the lattice DAG. Boss-approval question journaled (SQL NOT NULL migration).**
+**Phase: Self-improvement /loop iteration 4 — first depth=1 question + first question_parent edge in the lattice DAG. Boss-approval question (from iter-3 journal) promoted to a first-class lattice node. Sparse-citation finding documented.**
 
 ## Phase status
 
@@ -15,6 +15,35 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T20:08Z (Self-improvement /loop iteration 4: depth=1 spawn + sparse-citation finding)
+
+**Target category:** D (SPAWN DEPTH>0 QUESTIONS) primary, plus opportunistic C (citation patch).
+
+**Pivoted from category C as planned in iter-3:** The original plan was "spawn lumeyon to identify 1-3 prior-answer citations, target citations 1 → 4-5." Reality check: ran pushContext on iter-2 and iter-3 framings, top-K hits (excluding self-match at cosine=1.0) had cosine 0.21–0.31. The auto-imported lattice content is mostly conversational coordination ("got it", "GREEN-with-CONCERN"), so semantic similarity from a structured technical question to auto-imported chat fragments stays low. Lesson: **citations naturally form at peer-review hubs and authored-content seeds; the auto-imported tail won't surface meaningful citation candidates via embedding alone**. Iter-1's lumeyon review functions as the hub — both iter-2 and iter-3 cite it.
+
+**What was done:**
+  1. **First depth=1 question spawned:** Promoted iter-3's journaled boss-approval question ("Should the SQL schema migration to TEXT NOT NULL be performed in the next iteration touching the lattice schema, or should the type+runtime-guard pair stay as the sole enforcement?") to a first-class lattice node. status=open, posed_by=orion, depth=1. parent=iter-3's question (v1:477192c96d6e8abb) via the question_parents DAG edge.
+  2. **iter-2 → lumeyon citation patched:** When iter-2 was authored, I missed adding the citation that should have existed (iter-2's quality_tier-fix answer rests on lumeyon's iter-1 finding #1). Added now: parent=iter-2 ans:e2f37..., child=lumeyon ans:791b1...
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (PUSH-CONTEXT) — exercised end-to-end on production data; revealed the sparse-citation finding (top-K hits all cosine < 0.32 for authored queries against auto-imported corpus).
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — depth=1 question carries full provenance (id, framing, status, posed_at, posed_by, posed_in_context, depth).
+  - ⚠️ Function 1 (DUAL-OUTPUT) intentionally NOT exercised on the new depth=1 question — it's posed open for boss to answer, since the migration question is an architectural decision per inviolable principle 4.
+
+**Lattice metrics (BEFORE → AFTER) — TWO new DAG-structure metrics moved:**
+  - Questions: 396 → 397 (+1 depth=1 child)
+  - **question_parents: 0 → 1** ← first ever DAG edge in the question hierarchy
+  - **depth=1: 0 → 1** ← depth_distribution gains a new bucket
+  - **citations: 1 → 2** (+1 iter-2 → lumeyon patch)
+  - Authored: 2 → 2 (no change; new question is open, no authored answer yet)
+  - posed_by orion: 67 → 68
+
+**Tests:** plugin 502/0/3, lattice 99/0 (no change — no code changes this iteration, only lattice writes).
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 5):** **STOPPING CONDITION CHECK** — boss has TWO open architectural decisions journaled: (1) the SQL schema migration (now also represented as the depth=1 lattice question), (2) the routing-table/petersen-neighbors mismatch from iter-1. Iter 5 should NOT pile on more decisions; instead, execute lumeyon's REAL #3 (Question.status / best_answer_id consistency) — same shape as iter-3 (TS type tightening + runtime guard at putQuestion). That maintains forward motion without compounding boss-approval debt. Per the rotate-categories rule, iter 5 returns to category I.
 
 ### 2026-05-07T20:00Z (Self-improvement /loop iteration 3: explanation invariant — TS type + persistence guard; first citation)
 
