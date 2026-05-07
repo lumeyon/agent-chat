@@ -2,19 +2,45 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T17:30Z
+## Current state — 2026-05-07T17:55Z
 
-**Phase: ALT-A-1 SHIPPED — AI-to-AI dialog import lands real Q/A from agent-to-agent edges.**
+**Phase: ALT-A-2 SHIPPED — pushContext wired into agent-chat runtime. Every cmdRun call now retrieves top-K relevant prior Q/A from the lattice and prepends as "Relevant prior knowledge" to the LLM prompt.**
 
 ## Phase status
 
 | Phase | Deliverable | Status |
 |---|---|---|
 | ALT-A-1 | AI-to-AI dialog import | **COMPLETE** — pairSections() extended; 23 tests pass; production lattice grew 252→386 questions / 693→846 answers |
-| ALT-A-2 | pushContext wired into agent-chat runtime | **NEXT** |
-| ALT-A-3 | Study turn loop with LLM integration | blocked on ALT-A-2 |
+| ALT-A-2 | pushContext wired into agent-chat runtime | **COMPLETE** — `lattice-context.ts` helper + cmdRun integration; 12 unit tests + real-data end-to-end smoke pass |
+| ALT-A-3 | Study turn loop with LLM integration | **NEXT** |
 
 ## Iteration log
+
+### 2026-05-07T17:55Z (Alt A iteration 2)
+
+- Built `plugins/agent-chat/scripts/lattice-context.ts` — helper module bridging cmdRun to the global lattice's pushContext()
+- Two exported functions:
+  - `composePushedContextBlock({query, latticeDbPath, k, exclude_agent, ...})` — returns formatted markdown block with top-K prior Q/A from the lattice. Empty string if lattice missing, query empty, or no peer hits after filtering.
+  - `extractMostRecentPeerBody(sections, myAgentName)` — walks CONVO.md sections in reverse, finds the most recent peer (not-this-agent) section's body. Used as the natural retrieval query (what THIS agent is about to respond to).
+- Wired into `agent-chat.ts:cmdRun` in the prompt-composition pipeline: `roleBlock + ... + pushedContextBlock + tailBlock`
+  - Lazy-imported so the module loads only when cmdRun is invoked
+  - Lattice retrieval failures are caught and logged but never block the response cycle
+  - Each pushed answer truncated to 600-byte body budget so the block stays bounded
+  - Auto-imported placeholder explanations are stripped (they're noise that would crowd out signal)
+- 12 new tests in `plugins/agent-chat/tests/lattice-context.test.ts`; all pass:
+  - `extractMostRecentPeerBody`: 5 tests covering peer extraction, self-exclusion, malformed sections, AI-to-AI dialog
+  - `composePushedContextBlock`: 7 tests covering missing DB, empty query, no priors, formatted output, agent-self exclusion, peer-vs-self mixed, auto-imported-explanation suppression
+- **Real-data end-to-end smoke** against the production lattice (386Q/846A):
+  - Query: "What is the deadline?"
+  - Result: 3 hits returned, formatted block produced (2640 chars)
+  - Top hits ranked by embedding cosine (0.36, 0.25, 0.24)
+  - Auto-imported explanations correctly suppressed
+  - Orion's own answers correctly excluded — top hits are by lumeyon, keystone, vanguard
+  - Confirms pushContext flows end-to-end against real production data
+- Plugin tests: 495 pass / 0 fail (was 480; added 12 new + 3 unrelated tests appearing in the run)
+- Lattice tests: 73 pass (was 67; one of those moved from a different file count or the AI-to-AI tests added 6 new ones)
+- The forcing function 4 (cross-domain push) is now ALIVE in the runtime: every agent response is preceded by automatic retrieval of relevant prior Q/A from the lattice. The substrate pushes; the agent doesn't query.
+- Loop CONTINUES — next iteration starts ALT-A-3 (study turn loop)
 
 ### 2026-05-07T17:30Z (Alt A iteration 1)
 

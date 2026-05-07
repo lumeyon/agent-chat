@@ -1615,6 +1615,29 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
       const peerRolesBlock = rosterLines.length > 0
         ? `Network roster — every agent in topology "${id.topology}" with role, peer-dot composite score, and how to reach them. Use <dispatch peer="<neighbor>">...</dispatch> for direct neighbors; for non-neighbors, dispatch to the named relay hop.\n\n${rosterLines.join("\n\n")}\n\n---\n\n`
         : "";
+      // ALT-A-2: Apprenticeship Substrate forcing function 4 (cross-domain push).
+      // Before generating a response, retrieve top-K most-similar prior Q/A
+      // from the global lattice and prepend as "Relevant prior knowledge."
+      // The agent doesn't query — the substrate pushes context. Excludes
+      // answers BY this agent (don't push our own words back to us).
+      let pushedContextBlock = "";
+      try {
+        const { composePushedContextBlock, extractMostRecentPeerBody } = await import("./lattice-context.ts");
+        const peerQuery = extractMostRecentPeerBody(sections, id.name);
+        if (peerQuery) {
+          const latticeDbPath = path.join(CONVERSATIONS_DIR, "lattice.db");
+          pushedContextBlock = await composePushedContextBlock({
+            query: peerQuery,
+            latticeDbPath,
+            k: 3,
+            exclude_agent: id.name,
+          });
+        }
+      } catch (err) {
+        // Lattice retrieval failures must NOT block the response cycle.
+        console.error(`[agent-chat run] pushContext skipped: ${(err as Error).message}`);
+      }
+
       prompt =
         roleBlock +
         `You are agent "${id.name}" in topology "${id.topology}", currently in conversation with "${edge.peer}".\n\n` +
@@ -1622,6 +1645,7 @@ async function cmdRun(args: string[]): Promise<{ workDone: boolean; pending: num
         scratchBlock +
         lessonsBlock +
         subRelayBlock +
+        pushedContextBlock +
         `Recent conversation tail (last 4 sections):\n\n${tail}\n\n` +
         `Compose your response as a single Markdown section beginning with the canonical header ` +
         `"## ${id.name} — <topic> (UTC <stamp>)" and ending with "→ ${edge.peer}" or "→ parked". ` +
