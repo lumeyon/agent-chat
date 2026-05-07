@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T19:45Z
+## Current state — 2026-05-07T19:55Z
 
-**Phase: Self-improvement /loop iteration 1 — built `ephemeral-peer-review` CLI so orion can drive ephemeral peer agents (lumeyon/keystone/carina) to peer-review the substrate's own code. Boss has committed orion to managing all peers; this CLI is the wiring. Alt A architecture complete; the substrate now eats its own dog food.**
+**Phase: Self-improvement /loop iteration 2 — first authored answer in the lattice. Forcing function 1 (dual-output) exercised end-to-end on real production data; lumeyon's iter-1 doc finding closed.**
 
 ## Phase status
 
@@ -15,6 +15,32 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T19:55Z (Self-improvement /loop iteration 2: types.ts doc clarification + first authored answer)
+
+**Target category:** I (NEW BUG SURFACE — execute lumeyon's REAL #1 from iter-1's smoke).
+
+**Peer used:** solo. Lumeyon's iter-1 finding was specific enough that no fresh peer call was needed; the existing test at sqlite-store.test.ts:300 already documents the correct semantic interpretation.
+
+**Fix:** types.ts QualityTier doc comment. Old: "filter to ≥3 for high-stakes contexts" (ambiguous; numeric reading INCLUDES the worst tiers). New: "pass `quality_tier_min: 3` for high-stakes contexts (returns tiers 1-3 — the top three quality levels — and excludes 4,5). Internally this becomes SQL `quality_tier <= 3`." Plus an explicit "Numeric ordering is INVERTED from quality ordering" paragraph.
+
+**Dog-food check:**
+  - ✅ Forcing function 1 (DUAL-OUTPUT) exercised: `recordAnswer()` enforced a non-empty explanation; I authored a real one (570 bytes) explaining WHY the parameter is named the way it is, citing the iter-1 finding and the existing test.
+  - ✅ Forcing function 5 (FORMAT-UNIFORM ARTIFACTS) exercised: the new answer carries quality_tier=2 (peer-validated, since lumeyon raised the question), validator_id=null (could be promoted later), proper provenance.
+
+**Lattice metrics (BEFORE → AFTER) — focus on authored_count:**
+  - Questions: 394 → 395 (+1: my "what does quality_tier_min do" question)
+  - Answers: 861 → 864 (+1 from this iteration's authored answer; +2 from background record-turns)
+  - **AUTHORED: 0 → 1 (+1, the first ever)** ← the substantive metric move
+  - Authored %: 0.0% → 0.1%
+  - posed_by orion: 65 → 66
+  - by_agent orion: 408 → 409 (+1 authored, the rest auto-imported from CONVO.md)
+
+**Tests:** plugin 502/0/3 (no change), lattice 96/0 (no change). Doc-only code change.
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 3):** Category I — execute lumeyon's REAL #2 (Answer.explanation nullable type-hole). Multi-file change: types.ts (string | null → string), sqlite-store.ts schema (TEXT → TEXT NOT NULL via migration), audit putAnswer call sites. Write the test FIRST: a regression test that proves a bypass-via-putAnswer-with-null currently succeeds (it should), then tighten the type and verify the test fails to compile or rejects at runtime.
 
 ### 2026-05-07T19:45Z (Self-improvement /loop iteration 1: ephemeral-peer-review CLI)
 

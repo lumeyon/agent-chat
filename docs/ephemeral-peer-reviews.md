@@ -12,7 +12,7 @@ no row are eligible targets for the next "category A" iteration.
 
 | Module | Peer | Date | Status | Issues filed | Dismissed | Commit |
 |---|---|---|---|---|---|---|
-| `scripts/lattice/types.ts` | lumeyon (codex) | 2026-05-07 | reviewed | 9 raised: #1 quality-tier doc inversion (REAL, queued for iter 2), #2 explanation nullable type-hole (REAL, queued for iter 2), #3 status/best_answer_id consistency (REAL, queued for iter 2) | #4 depth-vs-DAG (design call), #5 Question lacks tier (design call), #6 Answer.cites missing (design call), #7 first-class Explanation type (refactor preference), #8 Question.embedding (design call), #9 branded ID types (refactor preference) | (smoke) b08e63f |
+| `scripts/lattice/types.ts` | lumeyon (codex) | 2026-05-07 | reviewed | 9 raised: #1 quality-tier doc inversion (FIXED iter 2), #2 explanation nullable type-hole (queued iter 3), #3 status/best_answer_id consistency (queued iter 4) | #4 depth-vs-DAG, #5 Question lacks tier, #6 Answer.cites missing, #7 first-class Explanation type, #8 Question.embedding, #9 branded ID types (all design calls or refactor preferences) | b08e63f, iter-2 |
 
 ## Notes
 

@@ -11,15 +11,21 @@ export type QuestionStatus = "open" | "answered" | "closed" | "reopened";
 export type AnswerStatus = "proposed" | "accepted" | "superseded" | "refuted";
 
 /** Quality tier per docs/inquiry-lattice.md "Dual-audience fusion".
- * 1 = top-shelf human-verified gold standard
+ * 1 = top-shelf human-verified gold standard (highest quality)
  * 2 = peer-validated, high predictive lift
  * 3 = standard agent contribution with positive validation signals
  * 4 = lightly validated; usable but not premium
- * 5 = raw lattice contribution, unvalidated
+ * 5 = raw lattice contribution, unvalidated (lowest quality)
+ *
+ * Numeric ordering is INVERTED from quality ordering: lower numbers are
+ * better. The `quality_tier_min` filter parameter takes the WORST numeric
+ * tier you'll accept (which equals the MIN quality tier you'll accept).
  *
  * Used by:
- * - Agent retrieval (filter to ≥3 for high-stakes contexts)
- * - Buyer pricing (tier 1 datasets cost more than tier 4)
+ * - Agent retrieval: pass `quality_tier_min: 3` for high-stakes contexts
+ *   (returns tiers 1-3 — the top three quality levels — and excludes 4,5).
+ *   Internally this becomes SQL `quality_tier <= 3`.
+ * - Buyer pricing: tier 1 datasets cost more than tier 4.
  */
 export type QualityTier = 1 | 2 | 3 | 4 | 5;
 
