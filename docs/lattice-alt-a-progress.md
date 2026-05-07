@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T20:25Z
+## Current state — 2026-05-07T22:00Z
 
-**Phase: Self-improvement /loop iteration 5 — joint-consistency invariant (Question.status ↔ best_answer_id) enforced. All three of lumeyon's iter-1 REAL findings now closed. Production violations cleaned. Importer + 5 test files updated to the put-as-open-then-promote pattern.**
+**Phase: Self-improvement /loop iteration 6 — refilled the findings queue via keystone (codex) peer review of sqlite-store.ts. 3 fresh REAL findings (K1: best_answer_id existence validation; K2: schema CHECK fractional-tier vulnerability; K3: DAG cycle check race). Iter 7-9 will execute these.**
 
 ## Phase status
 
@@ -15,6 +15,42 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T22:00Z (Self-improvement /loop iteration 6: keystone peer-review of sqlite-store.ts → 3 fresh REAL findings)
+
+**Target category:** A (PEER REVIEW UNCOVERED MODULE).
+
+**Peer used:** keystone (codex). 19381-byte review prompt, 1225-byte response, ~3 min wall clock.
+
+**Routing call:** /loop's routing table maps SQL/protocol/locking → keystone, and `sqlite-store.ts` is exactly that domain. Petersen yaml's keystone role ("Documentation, community, and manifest comparison specialist") is a less-perfect match, but the per-edge runtime config (codex) and the protocol-discipline focus the prompt forced are aligned. Outcome: keystone returned 3 strictly REAL findings — no nitpicks, no design preferences, all citing exact line numbers.
+
+**Findings (all REAL per QUALITY BAR rule):**
+  - **K1 — best_answer_id not FK-validated and not checked for existence/matching/accepted.** Iter-5's joint-invariant guard checks null vs non-null but never verifies the pointed-to answer exists, has matching question_id, or is status="accepted". Pre-K1, an "answered" question can have best_answer_id="ans:nonexistent" or "ans:wrong-question". **Fix split:** code-only runtime guard at iter 7 (extends enforceQuestionStatusInvariant); schema FK constraint pending boss approval (joins the migration queue).
+  - **K2 — CHECK(quality_tier BETWEEN 1 AND 5) allows fractional values like 2.5.** SQLite's BETWEEN is a numeric range, not a discrete-set check. Type contract `QualityTier = 1 | 2 | 3 | 4 | 5` is discrete only; schema is permissive. Fix: `CHECK(quality_tier IN (1,2,3,4,5))`. **Pending boss approval** (schema migration on production).
+  - **K3 — DAG cycle checks (addCitation, addQuestionParent) are read-then-insert without a transaction.** Two LatticeStore connections can concurrently pass opposite-edge cycle checks then insert a cycle. Fix: wrap check+insert in `BEGIN IMMEDIATE...COMMIT`. **Code-only fix, queued iter 8.**
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — keystone's review section appended to keystone-orion CONVO.md, imported to lattice as Q/A pair with full provenance.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 398 → 399 (+1: orion's review request)
+  - Answers: 872 → 875 (+1: keystone's response, +2 background)
+  - **by_agent keystone: 28 → 29** ← PEER DIVERSITY moved (different distribution than iter 1 lumeyon-only)
+  - Authored: 3 → 3 (keystone's response was imported via auto-imported placeholder; the importer doesn't yet distinguish ephemeral-peer-review content from historical CONVO.md scrape)
+  - Citations: 4 → 4 (no new this iteration)
+
+**OBSERVATION worth flagging for future work:** the importer auto-tags imported answers with the auto-imported placeholder regardless of whether the section is fresh ephemeral-peer-review content (which IS substantive reasoning) or historical CONVO.md scrape. A future iteration could detect "ephemeral peer review response:" descriptions and use the section body itself as a quality-tier-3 explanation. Adding to the queue but not as REAL bug — current behavior is consistent with the "auto-import is conservative" design.
+
+**Tests:** plugin 502/0/3, lattice 105/0 (no change — code wasn't touched this iteration).
+
+**Files touched (3):**
+  - docs/ephemeral-peer-reviews.md (mark sqlite-store.ts as reviewed; queue K1/K2/K3)
+  - docs/lattice-alt-a-progress.md (this iteration log)
+  - (production lattice + production CONVO.md modified by the peer-review CLI; not git-tracked)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 7):** Execute K1's code-only part — extend enforceQuestionStatusInvariant in sqlite-store.ts so that when status in {answered, closed}, the best_answer_id MUST point to an EXISTING answer with matching question_id and status="accepted". This is a 1-file source change + 3-4 regression tests. Schema FK migration stays in the boss-approval queue with K2 and the iter-3 NOT NULL question.
 
 ### 2026-05-07T20:25Z (Self-improvement /loop iteration 5: joint-consistency invariant — Question.status ↔ best_answer_id)
 
