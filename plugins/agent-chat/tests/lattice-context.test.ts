@@ -26,10 +26,14 @@ afterEach(() => {
 });
 
 function seedQuestion(store: LatticeStore, overrides: Partial<Question> = {}): Question {
+  // Natural starting state per the iter-5 joint-consistency invariant
+  // (sqlite-store.ts:enforceQuestionStatusInvariant). Tests that need
+  // status="answered" must call setQuestionStatus(id, "answered", ans.id)
+  // after the answer is recorded.
   const q: Question = {
     id: `v1:q-${Math.random().toString(36).slice(2, 10)}`,
     framing: "What is the deadline?",
-    status: "answered",
+    status: "open",
     best_answer_id: null,
     posed_at: 1000,
     posed_by: "boss",
@@ -116,7 +120,7 @@ describe("composePushedContextBlock", () => {
   test("returns formatted block when lattice has relevant priors", async () => {
     const store = new LatticeStore(dbPath);
     const q = seedQuestion(store, { framing: "How do I deploy to production?" });
-    recordAnswer(store, {
+    const a = recordAnswer(store, {
       question_id: q.id,
       body: "Run `bun deploy.ts`.",
       by_agent: "lumeyon",
@@ -124,7 +128,7 @@ describe("composePushedContextBlock", () => {
       status: "accepted",
       quality_tier: 2,
     });
-    store.setQuestionStatus(q.id, "answered", null);  // best_answer_id will fall back to query
+    store.setQuestionStatus(q.id, "answered", a.id);
     store.close();
 
     const block = await composePushedContextBlock({
@@ -143,7 +147,7 @@ describe("composePushedContextBlock", () => {
   test("excludes answers by the current agent", async () => {
     const store = new LatticeStore(dbPath);
     const q = seedQuestion(store, { framing: "What is the deadline?" });
-    recordAnswer(store, {
+    const a = recordAnswer(store, {
       question_id: q.id,
       body: "Friday, says orion.",
       by_agent: "orion",
@@ -151,6 +155,7 @@ describe("composePushedContextBlock", () => {
       status: "accepted",
       quality_tier: 2,
     });
+    store.setQuestionStatus(q.id, "answered", a.id);
     store.close();
 
     const block = await composePushedContextBlock({
@@ -167,20 +172,22 @@ describe("composePushedContextBlock", () => {
     const store = new LatticeStore(dbPath);
     const q1 = seedQuestion(store, { id: "v1:q-self", framing: "Question A" });
     const q2 = seedQuestion(store, { id: "v1:q-peer", framing: "Question B" });
-    recordAnswer(store, {
+    const a1 = recordAnswer(store, {
       question_id: q1.id,
       body: "Self answer",
       by_agent: "orion",
       explanation: "x",
       status: "accepted",
     });
-    recordAnswer(store, {
+    store.setQuestionStatus(q1.id, "answered", a1.id);
+    const a2 = recordAnswer(store, {
       question_id: q2.id,
       body: "Peer answer",
       by_agent: "lumeyon",
       explanation: "y",
       status: "accepted",
     });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
     store.close();
 
     const block = await composePushedContextBlock({
@@ -196,7 +203,7 @@ describe("composePushedContextBlock", () => {
   test("auto-imported explanations are NOT shown (they're noise)", async () => {
     const store = new LatticeStore(dbPath);
     const q = seedQuestion(store, { framing: "What is X?" });
-    recordAnswer(store, {
+    const a = recordAnswer(store, {
       question_id: q.id,
       body: "It is X.",
       by_agent: "lumeyon",
@@ -204,6 +211,7 @@ describe("composePushedContextBlock", () => {
       status: "accepted",
       quality_tier: 5,
     });
+    store.setQuestionStatus(q.id, "answered", a.id);
     store.close();
 
     const block = await composePushedContextBlock({

@@ -83,9 +83,9 @@ describe("LatticeStore — multi-axis question query", () => {
     // Seed a varied set of questions for filtering tests.
     const seeds: Question[] = [
       makeQuestion({ id: "v1:q1", posed_at: 100, posed_by: "boss",  status: "open",     depth: 0 }),
-      makeQuestion({ id: "v1:q2", posed_at: 200, posed_by: "boss",  status: "answered", depth: 1 }),
-      makeQuestion({ id: "v1:q3", posed_at: 300, posed_by: "orion", status: "answered", depth: 2 }),
-      makeQuestion({ id: "v1:q4", posed_at: 400, posed_by: "orion", status: "closed",   depth: 0 }),
+      makeQuestion({ id: "v1:q2", posed_at: 200, posed_by: "boss",  status: "answered", depth: 1, best_answer_id: "ans:q2-best" }),
+      makeQuestion({ id: "v1:q3", posed_at: 300, posed_by: "orion", status: "answered", depth: 2, best_answer_id: "ans:q3-best" }),
+      makeQuestion({ id: "v1:q4", posed_at: 400, posed_by: "orion", status: "closed",   depth: 0, best_answer_id: "ans:q4-best" }),
       makeQuestion({ id: "v1:q5", posed_at: 500, posed_by: "john",  status: "reopened", depth: 1 }),
     ];
     for (const q of seeds) store.putQuestion(q);
@@ -308,6 +308,50 @@ describe("LatticeStore — stats and constraints", () => {
     expect(() =>
       store.putAnswer(makeAnswer({ explanation: "   \n\t  " })),
     ).toThrow(/explanation/i);
+  });
+
+  // Regression for lumeyon's iter-1 REAL #3 finding: Question.status and
+  // best_answer_id were not jointly constrained — types.ts:39 documents
+  // "Pointer into answers.id when status is answered or closed", but pre-fix
+  // putQuestion / setQuestionStatus accepted any combination silently.
+  test("putQuestion rejects open status with non-null best_answer_id", () => {
+    expect(() =>
+      store.putQuestion(makeQuestion({ status: "open", best_answer_id: "ans:bogus" })),
+    ).toThrow(/best_answer_id|status/i);
+  });
+
+  test("putQuestion rejects reopened status with non-null best_answer_id", () => {
+    expect(() =>
+      store.putQuestion(makeQuestion({ status: "reopened", best_answer_id: "ans:bogus" })),
+    ).toThrow(/best_answer_id|status/i);
+  });
+
+  test("putQuestion rejects answered status with null best_answer_id", () => {
+    expect(() =>
+      store.putQuestion(makeQuestion({ status: "answered", best_answer_id: null })),
+    ).toThrow(/best_answer_id|status/i);
+  });
+
+  test("putQuestion rejects closed status with null best_answer_id", () => {
+    expect(() =>
+      store.putQuestion(makeQuestion({ status: "closed", best_answer_id: null })),
+    ).toThrow(/best_answer_id|status/i);
+  });
+
+  test("setQuestionStatus rejects open status with non-null best_answer_id", () => {
+    store.putQuestion(makeQuestion({ status: "answered", best_answer_id: "ans:x" }));
+    store.putAnswer(makeAnswer({ id: "ans:x" }));
+    expect(() =>
+      store.setQuestionStatus(makeQuestion().id, "open", "ans:x"),
+    ).toThrow(/best_answer_id|status/i);
+  });
+
+  test("setQuestionStatus rejects answered status with null best_answer_id", () => {
+    store.putQuestion(makeQuestion({ status: "answered", best_answer_id: "ans:x" }));
+    store.putAnswer(makeAnswer({ id: "ans:x" }));
+    expect(() =>
+      store.setQuestionStatus(makeQuestion().id, "answered", null),
+    ).toThrow(/best_answer_id|status/i);
   });
 });
 

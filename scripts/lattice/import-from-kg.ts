@@ -285,11 +285,16 @@ function importPairs(
     if (existing) {
       qDup++;
     } else {
+      // Insert as "open" first, then promote to "answered" via
+      // setQuestionStatus after the answer is recorded. Pre-iter-5 this
+      // was status="answered"+best_answer_id=null, which transiently
+      // violated the joint-consistency invariant the iter-5 guard now
+      // enforces (sqlite-store.ts:enforceQuestionStatusInvariant).
       const q: Question = {
         id: questionId,
         framing: user.body,
-        status: "answered",
-        best_answer_id: null,  // set after the answer is inserted
+        status: "open",
+        best_answer_id: null,
         posed_at: posedAt,
         posed_by: user.agent,
         posed_in_context: context,

@@ -116,17 +116,21 @@ describe("recordAnswer — dual-output enforcement (forcing function 1)", () => 
 describe("pushContext — cross-domain push retrieval (forcing function 4)", () => {
   beforeEach(() => {
     // Seed a small set of varied answered questions.
+    // Seed all as "open" first; the setQuestionStatus call below promotes
+    // each to "answered" once its accepted answer exists (per the joint
+    // status / best_answer_id invariant added in iter-5).
     const qs: Question[] = [
-      makeQuestion({ id: "v1:q-deadline",  framing: "What is the deadline?",         status: "answered", posed_at: 100 }),
-      makeQuestion({ id: "v1:q-config",    framing: "Where is the config file?",     status: "answered", posed_at: 200 }),
-      makeQuestion({ id: "v1:q-deploy",    framing: "How do I deploy to production?", status: "answered", posed_at: 300 }),
-      makeQuestion({ id: "v1:q-build",     framing: "Why is the build slow?",        status: "answered", posed_at: 400 }),
-      makeQuestion({ id: "v1:q-open",      framing: "How do I run tests?",            status: "open",      posed_at: 500 }),
+      makeQuestion({ id: "v1:q-deadline",  framing: "What is the deadline?",         status: "open", posed_at: 100 }),
+      makeQuestion({ id: "v1:q-config",    framing: "Where is the config file?",     status: "open", posed_at: 200 }),
+      makeQuestion({ id: "v1:q-deploy",    framing: "How do I deploy to production?", status: "open", posed_at: 300 }),
+      makeQuestion({ id: "v1:q-build",     framing: "Why is the build slow?",        status: "open", posed_at: 400 }),
+      makeQuestion({ id: "v1:q-open",      framing: "How do I run tests?",            status: "open", posed_at: 500 }),
     ];
     for (const q of qs) store.putQuestion(q);
 
-    // Each answered question gets one accepted answer.
-    for (const q of qs.filter((q) => q.status === "answered")) {
+    // Each question except the explicit "stay-open" one gets one accepted
+    // answer + status promotion to "answered".
+    for (const q of qs.filter((q) => q.id !== "v1:q-open")) {
       const a = recordAnswer(store, {
         question_id: q.id,
         body: `Answer to: ${q.framing}`,

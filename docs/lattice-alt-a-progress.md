@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T20:08Z
+## Current state — 2026-05-07T20:25Z
 
-**Phase: Self-improvement /loop iteration 4 — first depth=1 question + first question_parent edge in the lattice DAG. Boss-approval question (from iter-3 journal) promoted to a first-class lattice node. Sparse-citation finding documented.**
+**Phase: Self-improvement /loop iteration 5 — joint-consistency invariant (Question.status ↔ best_answer_id) enforced. All three of lumeyon's iter-1 REAL findings now closed. Production violations cleaned. Importer + 5 test files updated to the put-as-open-then-promote pattern.**
 
 ## Phase status
 
@@ -15,6 +15,53 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T20:25Z (Self-improvement /loop iteration 5: joint-consistency invariant — Question.status ↔ best_answer_id)
+
+**Target category:** I (NEW BUG SURFACE — execute lumeyon's REAL #3 from iter-1's smoke).
+
+**Peer used:** solo. Lumeyon's iter-1 finding was specific enough that no fresh peer call was needed.
+
+**Test-first protocol:**
+  1. Wrote 6 regression tests at sqlite-store.test.ts:289-356 (3 cases each for putQuestion and setQuestionStatus violations).
+  2. Verified all 6 FAIL pre-fix.
+  3. Applied fix: `enforceQuestionStatusInvariant()` helper called from both putQuestion (insert) and setQuestionStatus (update). Status in {open, reopened} → best_answer_id MUST be null. Status in {answered, closed} → best_answer_id MUST be a non-empty string.
+  4. Verified all 6 PASS post-fix.
+
+**Production audit + cleanup:**
+  - Pre-fix: 2 production violations (both my own iter-2/iter-3 puts that left best_answer_id=null after a status="answered" insert).
+  - Post-fix: 0 violations of either type. Manually set best_answer_id on both via setQuestionStatus.
+
+**Production code fix:**
+  - `import-from-kg.ts:288-298` was using the same anti-pattern (putQuestion with status="answered" + null, then setQuestionStatus to set the FK after recordAnswer). Rewrote to put-as-open-then-promote pattern. The transient invariant violation that pre-existed is gone.
+
+**5 test files updated to comply with the new invariant:**
+  - sqlite-store.test.ts: multi-axis-question-query seeds now provide best_answer_id placeholder strings for status=answered/closed seeds
+  - apprenticeship.test.ts: pushContext seeds now seed as "open" + promote to "answered" via setQuestionStatus after recordAnswer
+  - stats.test.ts: 5 inline fixtures now provide best_answer_id placeholders
+  - study-turn.test.ts: seedQuestion default changed to "open"; 4 affected tests now do setQuestionStatus after recordAnswer; new seedAnsweredQuestion helper added for future-test-author convenience
+  - plugins/agent-chat/tests/lattice-context.test.ts: same treatment as study-turn
+
+**Dog-food check (multiple forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — authored a 765-byte explanation about the invariant and how it's enforced
+  - ✅ Function 5 (FORMAT-UNIFORM) — new question + answer carry full provenance
+  - ✅ **Citation DAG growth** — iter-5 authored answer cites BOTH lumeyon's iter-1 review AND iter-3's authored answer (multi-parent semantic citation, since iter-5's reasoning rests on both: lumeyon for surfacing the bug, iter-3 for establishing the put-as-open-then-promote pattern that iter-5 generalizes)
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 397 → 398 (+1)
+  - Answers: 869 → 872 (+1 authored, +2 from background)
+  - **AUTHORED: 2 → 3** (function 1 exercised again on real production data)
+  - **CITATIONS: 2 → 4** (+2: iter-5 → lumeyon + iter-5 → iter-3)
+  - Production violations: 2 → 0 (data-cleanup metric not in lattice-stats but real)
+
+**Tests:** plugin 502/0/3 (no change — the test-fixture updates kept the count the same; the lattice-context.test changes were inside the existing suite). Lattice 99 → 105 (+6 regression tests).
+
+**Files touched (9 files; coherent-feature exemption from 5-file cap):**
+  scripts/lattice/sqlite-store.ts, sqlite-store.test.ts, import-from-kg.ts, apprenticeship.test.ts, stats.test.ts, study-turn.test.ts, plugins/agent-chat/tests/lattice-context.test.ts, docs/ephemeral-peer-reviews.md, docs/lattice-alt-a-progress.md
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 6):** All three lumeyon iter-1 REAL findings are now closed. Two boss-approval questions still pending (SQL NOT NULL migration + petersen routing-table). With no queued REAL findings, iter 6 should rotate categories: pick A (PEER REVIEW UNCOVERED MODULE) — pick `scripts/lattice/sqlite-store.ts` (the most invariant-rich module after types.ts) and spawn keystone (codex; protocol-discipline reviewer per yaml role) for an audit. Goal: surface 1-2 fresh REAL findings to refill the queue.
 
 ### 2026-05-07T20:08Z (Self-improvement /loop iteration 4: depth=1 spawn + sparse-citation finding)
 

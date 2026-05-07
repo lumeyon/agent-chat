@@ -121,6 +121,37 @@ export function makeAnswerId(question_id: string, body: string, by_agent: string
   return `ans:${h.digest("hex").slice(0, 16)}`;
 }
 
+// ─── Question status / best_answer_id joint invariant ─────────────────────
+
+/** Lumeyon's iter-1 REAL #3 finding: types.ts:39 documents that
+ *  best_answer_id is "Pointer into answers.id when status is answered or
+ *  closed", but pre-fix putQuestion / setQuestionStatus accepted any
+ *  combination silently. The invariant the docs claim:
+ *    - status in {open, reopened} → best_answer_id MUST be null
+ *    - status in {answered, closed} → best_answer_id MUST be non-null
+ *  Enforced at write-time in both putQuestion and setQuestionStatus.
+ *  pushContext's fallback (apprenticeship.ts) for null best_answer_id
+ *  on an answered question stays — defense in depth on the read side. */
+function enforceQuestionStatusInvariant(
+  status: QuestionStatus,
+  best_answer_id: string | null | undefined,
+): void {
+  const hasBestAnswer = typeof best_answer_id === "string" && best_answer_id.length > 0;
+  if ((status === "open" || status === "reopened") && hasBestAnswer) {
+    throw new Error(
+      `question status invariant: status="${status}" requires best_answer_id=null ` +
+      `(got "${best_answer_id}"). An open/reopened question cannot already point at an answer.`,
+    );
+  }
+  if ((status === "answered" || status === "closed") && !hasBestAnswer) {
+    throw new Error(
+      `question status invariant: status="${status}" requires best_answer_id to be a non-empty string ` +
+      `(got ${best_answer_id === null ? "null" : best_answer_id === undefined ? "undefined" : "empty string"}). ` +
+      `An answered/closed question must point at the accepted answer (see types.ts:39).`,
+    );
+  }
+}
+
 // ─── Cycle prevention for question_parents ─────────────────────────────────
 
 function questionAncestors(db: Database, questionId: string): Set<string> {
@@ -218,6 +249,7 @@ export class LatticeStore {
   // ─── Question operations ────────────────────────────────────────────────
 
   putQuestion(q: Question): void {
+    enforceQuestionStatusInvariant(q.status, q.best_answer_id);
     this.stmts.insertQuestion.run(
       q.id,
       q.framing,
@@ -237,6 +269,7 @@ export class LatticeStore {
 
   /** Update the lifecycle status (and optional best_answer_id pointer). */
   setQuestionStatus(id: string, status: QuestionStatus, best_answer_id: string | null = null): void {
+    enforceQuestionStatusInvariant(status, best_answer_id);
     this.stmts.updateQuestionStatus.run(status, best_answer_id, id);
   }
 

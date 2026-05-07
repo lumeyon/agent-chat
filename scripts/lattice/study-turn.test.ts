@@ -26,11 +26,15 @@ afterEach(() => {
   store.close();
 });
 
+// Seeds a question in the natural starting state ("open" with no best_answer_id).
+// Callers that need the question in "answered" state must call setQuestionStatus
+// after recording the answer, per the iter-5 joint-consistency invariant
+// enforced in sqlite-store.ts:enforceQuestionStatusInvariant.
 function seedQuestion(store: LatticeStore, overrides: Partial<Question> = {}): Question {
   const q: Question = {
     id: `v1:q-${Math.random().toString(36).slice(2, 10)}`,
     framing: "What is the deadline?",
-    status: "answered",
+    status: "open",
     best_answer_id: null,
     posed_at: 1000,
     posed_by: "boss",
@@ -42,11 +46,33 @@ function seedQuestion(store: LatticeStore, overrides: Partial<Question> = {}): Q
   return q;
 }
 
+// Convenience: seeds a question + answer + sets the question status to
+// "answered" with best_answer_id pointing at the new answer. Mirrors
+// the production workflow that future iterations should also use.
+function seedAnsweredQuestion(
+  store: LatticeStore,
+  qOverrides: Partial<Question> = {},
+  aOverrides: { body?: string; explanation?: string; by_agent?: string; quality_tier?: 1 | 2 | 3 | 4 | 5; predictive_lift?: number } = {},
+): { q: Question; a: import("./types.ts").Answer } {
+  const q = seedQuestion(store, qOverrides);
+  const a = recordAnswer(store, {
+    question_id: q.id,
+    body: aOverrides.body ?? `Answer to: ${q.framing}`,
+    by_agent: aOverrides.by_agent ?? "orion",
+    explanation: aOverrides.explanation ?? `Real explanation for ${q.framing}`,
+    status: "accepted",
+    quality_tier: aOverrides.quality_tier ?? 2,
+    predictive_lift: aOverrides.predictive_lift ?? 0,
+  });
+  store.setQuestionStatus(q.id, "answered", a.id);
+  return { q, a };
+}
+
 describe("selectStudyQuestions", () => {
   test("returns up to k candidates with valid actual_answers", () => {
     for (let i = 0; i < 4; i++) {
       const q = seedQuestion(store, { id: `v1:q${i}`, framing: `Question ${i}` });
-      recordAnswer(store, {
+      const a = recordAnswer(store, {
         question_id: q.id,
         body: `Answer ${i}`,
         by_agent: "orion",
@@ -54,6 +80,7 @@ describe("selectStudyQuestions", () => {
         status: "accepted",
         quality_tier: 2,
       });
+      store.setQuestionStatus(q.id, "answered", a.id);
     }
     const candidates = selectStudyQuestions(store, { k: 3 });
     expect(candidates.length).toBe(3);
@@ -65,23 +92,25 @@ describe("selectStudyQuestions", () => {
 
   test("skips questions whose accepted answers have empty explanations", () => {
     const q = seedQuestion(store, { id: "v1:q-no-expl", framing: "X" });
-    recordAnswer(store, {
+    const a = recordAnswer(store, {
       question_id: q.id,
       body: "answer",
       by_agent: "orion",
       explanation: "non-empty",  // record requires non-empty
       status: "accepted",
     });
+    store.setQuestionStatus(q.id, "answered", a.id);
     // Manually clear the explanation to simulate auto-imported placeholder later.
     // (recordAnswer enforces non-empty, so we use the placeholder pattern instead.)
     const q2 = seedQuestion(store, { id: "v1:q-auto", framing: "Y" });
-    recordAnswer(store, {
+    const a2 = recordAnswer(store, {
       question_id: q2.id,
       body: "answer2",
       by_agent: "orion",
       explanation: "(auto-imported from CONVO.md; no original explanation captured at write time. Subsequent answers in the lattice will require explanations per Apprenticeship Substrate forcing function 1.)",
       status: "accepted",
     });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
 
     const candidates = selectStudyQuestions(store, { k: 5 });
     // Only the non-auto-imported question should make it in.
@@ -92,20 +121,22 @@ describe("selectStudyQuestions", () => {
   test("excludes answers by exclude_agent", () => {
     const q1 = seedQuestion(store, { id: "v1:q1", framing: "A" });
     const q2 = seedQuestion(store, { id: "v1:q2", framing: "B" });
-    recordAnswer(store, {
+    const a1 = recordAnswer(store, {
       question_id: q1.id,
       body: "by orion",
       by_agent: "orion",
       explanation: "x",
       status: "accepted",
     });
-    recordAnswer(store, {
+    store.setQuestionStatus(q1.id, "answered", a1.id);
+    const a2 = recordAnswer(store, {
       question_id: q2.id,
       body: "by lumeyon",
       by_agent: "lumeyon",
       explanation: "y",
       status: "accepted",
     });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
     const out = selectStudyQuestions(store, { k: 5, exclude_agent: "orion" });
     expect(out.length).toBe(1);
     expect(out[0].actual_answer.by_agent).toBe("lumeyon");
@@ -213,7 +244,7 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
   test("runs N turns, applies lift updates by default", async () => {
     for (let i = 0; i < 3; i++) {
       const q = seedQuestion(store, { id: `v1:q${i}`, framing: `Question ${i}` });
-      recordAnswer(store, {
+      const a = recordAnswer(store, {
         question_id: q.id,
         body: `Answer ${i}`,
         by_agent: "orion",
@@ -221,6 +252,7 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
         predictive_lift: 0.5,
         status: "accepted",
       });
+      store.setQuestionStatus(q.id, "answered", a.id);
     }
     // Fake predictor returns the actual answer (perfect prediction).
     let predictionCalls = 0;
@@ -250,6 +282,7 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
       predictive_lift: 0.5,
       status: "accepted",
     });
+    store.setQuestionStatus(q.id, "answered", a.id);
     const constantPredictor: Predictor = async () => "completely different content";
     const results = await runStudyTurn(store, constantPredictor, { k: 1, apply_updates: false });
     expect(results.length).toBe(1);
@@ -267,13 +300,14 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
 
   test("predictor receives StudyChallenge with question_framing and peer_explanations", async () => {
     const q = seedQuestion(store, { id: "v1:q1", framing: "What is the deadline?" });
-    recordAnswer(store, {
+    const a = recordAnswer(store, {
       question_id: q.id,
       body: "Friday at 5pm.",
       by_agent: "lumeyon",
       explanation: "From the project plan.",
       status: "accepted",
     });
+    store.setQuestionStatus(q.id, "answered", a.id);
     let captured: StudyChallenge | null = null;
     const inspector: Predictor = async (challenge: StudyChallenge) => {
       captured = challenge;

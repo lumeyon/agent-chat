@@ -38,7 +38,7 @@ describe("getStats — counts", () => {
         id: `v1:q${i}`,
         framing: `Question ${i}`,
         status: "answered",
-        best_answer_id: null,
+        best_answer_id: `ans:placeholder-${i}`,
         posed_at: 1000 + i,
         posed_by: "boss",
         posed_in_context: null,
@@ -65,12 +65,12 @@ describe("getStats — distributions", () => {
     const store = new LatticeStore(dbPath);
     store.putQuestion({
       id: "v1:q1", framing: "Q1", status: "answered",
-      best_answer_id: null, posed_at: 100, posed_by: "boss",
+      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     store.putQuestion({
       id: "v1:q2", framing: "Q2", status: "answered",
-      best_answer_id: null, posed_at: 200, posed_by: "orion",
+      best_answer_id: "ans:p2", posed_at: 200, posed_by: "orion",
       posed_in_context: null, depth: 1,
     });
     recordAnswer(store, {
@@ -101,12 +101,12 @@ describe("getStats — auto-imported vs authored", () => {
     const store = new LatticeStore(dbPath);
     store.putQuestion({
       id: "v1:q1", framing: "Q1", status: "answered",
-      best_answer_id: null, posed_at: 100, posed_by: "boss",
+      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     store.putQuestion({
       id: "v1:q2", framing: "Q2", status: "answered",
-      best_answer_id: null, posed_at: 200, posed_by: "boss",
+      best_answer_id: "ans:p2", posed_at: 200, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     recordAnswer(store, {
@@ -135,7 +135,7 @@ describe("getStats — predictive_lift histogram", () => {
     for (let i = 0; i < lifts.length; i++) {
       store.putQuestion({
         id: `v1:q${i}`, framing: `Q${i}`, status: "answered",
-        best_answer_id: null, posed_at: 100 + i, posed_by: "boss",
+        best_answer_id: `ans:p${i}`, posed_at: 100 + i, posed_by: "boss",
         posed_in_context: null, depth: 0,
       });
       recordAnswer(store, {
@@ -170,7 +170,7 @@ describe("formatHumanReadable", () => {
     const store = new LatticeStore(dbPath);
     store.putQuestion({
       id: "v1:q1", framing: "Q", status: "answered",
-      best_answer_id: null, posed_at: 100, posed_by: "boss",
+      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     recordAnswer(store, {
