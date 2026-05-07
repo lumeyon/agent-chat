@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T22:35Z
+## Current state — 2026-05-07T23:05Z
 
-**Phase: Self-improvement /loop iteration 7 — keystone's K1 closed at the runtime-guard layer. setQuestionStatus now validates best_answer_id existence + matching question_id + accepted status. Schema FK migration stays in the boss-approval queue. Lattice hits 400 questions.**
+**Phase: Self-improvement /loop iteration 8 — keystone's K3 closed (atomic DAG cycle checks via BEGIN IMMEDIATE). authored_count hits 5 — study-turn category E now eligible. Two of three K-findings closed at code level; K2 alone remains in the boss-approval queue alongside two iter-1/iter-3 schema migrations.**
 
 ## Phase status
 
@@ -15,6 +15,46 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T23:05Z (Self-improvement /loop iteration 8: K3 atomic DAG cycle checks via BEGIN IMMEDIATE)
+
+**Target category:** I (NEW BUG SURFACE — execute keystone's K3 from iter-6).
+
+**Peer used:** solo. The fix was straightforward — same pattern as fts.ts's existing withWriter helper.
+
+**The bug:** addCitation and addQuestionParent did read-then-insert without a transaction. Two LatticeStore connections to the same file could each pass opposite-edge cycle checks (each seeing a state where the other's edge doesn't exist yet) and then both INSERT — producing X→Y→X. Real race window between SELECT-release and INSERT-acquire of the writer-mutex.
+
+**The fix:** New `withImmediateWriter(db, fn)` helper wraps fn in `BEGIN IMMEDIATE...COMMIT` (with ROLLBACK on throw). addCitation and addQuestionParent now run their cycle-check + INSERT inside this helper. SQLite's writer-mutex serializes all immediate transactions, so the second writer's BEGIN blocks until the first commits — by then its read sees the new edge and correctly detects the cycle. Mirrors fts.ts:108 (the FTS5 index uses the same pattern; lattice version is sync without retry because contention is rare).
+
+**Test approach:**
+  1. Two new multi-connection regression tests at sqlite-store.test.ts (one for addCitation, one for addQuestionParent) using a file-backed DB with two LatticeStore connections to the same file. The tests demonstrate functional correctness across connections — storeA writes a citation, storeB on the OTHER connection then sees the committed state under BEGIN IMMEDIATE and correctly refuses the cycle-creating opposite edge.
+  2. Note: the actual interleaving race is hard to reproduce deterministically without real concurrency primitives. The functional multi-connection test verifies the integration path; the protection itself comes from BEGIN IMMEDIATE serializing writers (a SQLite primitive). Comment in the source explains the rationale.
+
+**Pre-existing single-thread cycle tests still pass:** BEGIN IMMEDIATE is a strict superset of the previous unwrapped behavior; existing tests exercise the same function signatures, just now under a transaction wrapper.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — authored a 928-byte explanation citing both keystone's iter-6 review AND iter-7's K1 answer.
+  - ✅ Function 5 (FORMAT-UNIFORM) — full provenance on new Q/A.
+  - ✅ Citation DAG growth — multi-parent citations re-confirmed (iter-8 cites both keystone iter-6 + iter-7).
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 400 → 401 (+1)
+  - Answers: 878 → 881 (+1 authored + ~2 background)
+  - **AUTHORED: 4 → 5** ← STUDY-TURN ELIGIBILITY THRESHOLD REACHED (category E unblocks at >= 5)
+  - **CITATIONS: 6 → 8** (+2 from iter-8 multi-parent)
+  - posed_by orion: 69 → 70
+
+**Tests:** plugin 502/0/3 (no change). Lattice 109 → 111 (+2 multi-connection K3 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/sqlite-store.ts (withImmediateWriter helper + addCitation/addQuestionParent wrapped)
+  - scripts/lattice/sqlite-store.test.ts (2 multi-connection regression tests)
+  - docs/ephemeral-peer-reviews.md (mark K3 closed)
+  - docs/lattice-alt-a-progress.md (this iteration log)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 9):** **Category E (STUDY-TURN AGAINST AUTHORED) is now eligible** — authored_count >= 5. Run `agent-chat study-turn --n 3` against the 5 authored answers (iter-2 quality_tier, iter-3 explanation invariant, iter-5 joint consistency, iter-7 K1 FK, iter-8 K3 atomic). Expectation: claude predictor against these substantive Q/A pairs may produce passes (cosine ≥ 0.85) for the more direct technical questions, vs the conversational corpus that produced 0 passes in iter-15j. Lattice metric: predictive_lift histogram shifts. If passes happen, that's the strongest signal yet that the substrate WORKS. If not, root-cause: predictor too generic, threshold too strict, or genuine knowledge gap.
 
 ### 2026-05-07T22:35Z (Self-improvement /loop iteration 7: K1 runtime-guard for best_answer_id FK existence + matching + accepted)
 

@@ -152,6 +152,31 @@ function enforceQuestionStatusInvariant(
   }
 }
 
+/** Keystone's iter-6 K3 finding: addCitation / addQuestionParent's
+ *  read-then-insert (cycle check followed by INSERT) was NOT wrapped in
+ *  a transaction. Two LatticeStore connections to the same file could
+ *  each pass opposite-edge cycle checks (each seeing a state where the
+ *  other's edge doesn't exist yet) and then both INSERT, producing a
+ *  cycle. Wrap each check+insert in BEGIN IMMEDIATE: SQLite's
+ *  writer-mutex serializes all immediate transactions, so the second
+ *  writer's BEGIN IMMEDIATE blocks until the first commits — by then
+ *  the read inside the second transaction sees the new edge and
+ *  correctly detects the cycle. Mirrors the withWriter pattern already
+ *  proven in fts.ts:108 for the FTS5 index. SYNC version (lattice ops
+ *  are synchronous; no retry/backoff — contention is so rare that a
+ *  raw SQLITE_BUSY surface is acceptable). */
+function withImmediateWriter<T>(db: Database, fn: () => T): T {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const out = fn();
+    db.exec("COMMIT");
+    return out;
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    throw e;
+  }
+}
+
 /** Keystone's iter-6 K1 finding: best_answer_id was not FK-validated at
  *  setQuestionStatus — any non-empty string passed, including missing
  *  answers, answers for another question, or non-accepted answers.
@@ -461,16 +486,21 @@ export class LatticeStore {
     if (parent_answer_id === child_answer_id) {
       throw new Error(`citation: self-citation refused (${parent_answer_id})`);
     }
-    // Cycle check: would adding (parent → child) create a cycle?
-    // Yes iff parent is a DESCENDANT of child. Walk descendants of child
-    // via citations(parent_answer_id = X) — if we reach parent, refuse.
-    const descendantsOfChild = answerAncestors(this.db, child_answer_id);
-    if (descendantsOfChild.has(parent_answer_id)) {
-      throw new Error(
-        `citation: would create cycle ${parent_answer_id} → ... → ${child_answer_id} → ${parent_answer_id}`,
-      );
-    }
-    this.stmts.insertCitation.run(parent_answer_id, child_answer_id);
+    // K3: cycle check + insert atomic under BEGIN IMMEDIATE. Pre-fix two
+    // concurrent connections could each see opposite-edge-not-present
+    // and both insert, producing a cycle.
+    withImmediateWriter(this.db, () => {
+      // Cycle check: would adding (parent → child) create a cycle?
+      // Yes iff parent is a DESCENDANT of child. Walk descendants of child
+      // via citations(parent_answer_id = X) — if we reach parent, refuse.
+      const descendantsOfChild = answerAncestors(this.db, child_answer_id);
+      if (descendantsOfChild.has(parent_answer_id)) {
+        throw new Error(
+          `citation: would create cycle ${parent_answer_id} → ... → ${child_answer_id} → ${parent_answer_id}`,
+        );
+      }
+      this.stmts.insertCitation.run(parent_answer_id, child_answer_id);
+    });
   }
 
   /** Get answers cited BY this parent answer (i.e., its sub-answers). */
@@ -493,14 +523,17 @@ export class LatticeStore {
     if (parent_id === child_id) {
       throw new Error(`question_parent: self-parent refused (${parent_id})`);
     }
-    // Cycle check on the question DAG.
-    const ancestors = questionAncestors(this.db, parent_id);
-    if (ancestors.has(child_id)) {
-      throw new Error(
-        `question_parent: would create cycle in question DAG`,
-      );
-    }
-    this.stmts.insertQuestionParent.run(parent_id, child_id);
+    // K3: same atomicity contract as addCitation — read+insert under
+    // BEGIN IMMEDIATE so two connections cannot interleave a cycle.
+    withImmediateWriter(this.db, () => {
+      const ancestors = questionAncestors(this.db, parent_id);
+      if (ancestors.has(child_id)) {
+        throw new Error(
+          `question_parent: would create cycle in question DAG`,
+        );
+      }
+      this.stmts.insertQuestionParent.run(parent_id, child_id);
+    });
   }
 
   getQuestionParents(child_id: string): QuestionParent[] {

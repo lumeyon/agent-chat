@@ -242,6 +242,38 @@ describe("LatticeStore — Citation DAG", () => {
     store.addCitation("ans:a", "ans:d");
     expect(store.getCitedAnswers("ans:a").length).toBe(2);
   });
+
+  // Regression for keystone's iter-6 K3 finding: pre-iter-8 the cycle
+  // check + INSERT pair was not transactional, so two connections to the
+  // same file could interleave and produce a cycle. Iter-8 wraps both
+  // operations in BEGIN IMMEDIATE. This test verifies the multi-connection
+  // path: cycle detection sees the OTHER connection's committed state.
+  test("multi-connection cycle detection — second connection sees first's committed citation", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "k3-citation-"));
+    const dbFile = path.join(tmp, "race.db");
+    try {
+      const storeA = new LatticeStore(dbFile);
+      const storeB = new LatticeStore(dbFile);
+      storeA.putQuestion(makeQuestion({ id: "v1:q-shared" }));
+      const a1 = makeAnswer({ id: "ans:r1", question_id: "v1:q-shared" });
+      const a2 = makeAnswer({ id: "ans:r2", question_id: "v1:q-shared" });
+      storeA.putAnswer(a1);
+      storeA.putAnswer(a2);
+
+      // storeA writes (r1 → r2). storeB then tries (r2 → r1). storeB MUST
+      // see storeA's committed citation under BEGIN IMMEDIATE and refuse.
+      storeA.addCitation("ans:r1", "ans:r2");
+      expect(() => storeB.addCitation("ans:r2", "ans:r1")).toThrow(/cycle/);
+
+      storeA.close();
+      storeB.close();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("LatticeStore — Question DAG", () => {
@@ -264,6 +296,29 @@ describe("LatticeStore — Question DAG", () => {
     store.addQuestionParent("v1:q1", "v1:q2");
     store.addQuestionParent("v1:q2", "v1:q3");
     expect(() => store.addQuestionParent("v1:q3", "v1:q1")).toThrow(/cycle/);
+  });
+
+  // K3 sibling test for question DAG (mirrors the addCitation
+  // multi-connection regression added above).
+  test("multi-connection cycle detection — second connection sees first's committed question_parent", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "k3-qparent-"));
+    const dbFile = path.join(tmp, "race.db");
+    try {
+      const storeA = new LatticeStore(dbFile);
+      const storeB = new LatticeStore(dbFile);
+      for (const id of ["v1:rq1", "v1:rq2"]) storeA.putQuestion(makeQuestion({ id }));
+
+      storeA.addQuestionParent("v1:rq1", "v1:rq2");
+      expect(() => storeB.addQuestionParent("v1:rq2", "v1:rq1")).toThrow(/cycle/);
+
+      storeA.close();
+      storeB.close();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
