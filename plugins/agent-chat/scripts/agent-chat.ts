@@ -2333,6 +2333,83 @@ function cmdInstallCodexHooks(args: string[]): void {
   console.log(`  conversations: ${DEFAULT_CONVERSATIONS_DIR}`);
 }
 
+// One-shot Codex setup: marketplace add gives you the plugin files; this
+// command turns them into a live, autonomous agent. Orchestrates the
+// four steps a fresh install needs:
+//
+//   1. agent-chat init <agent> <topology>     — claim graph identity for this cwd
+//   2. agent-chat speaker <name>              — register the current human
+//      (skipped when --speaker is omitted; users.yaml default still applies
+//      at record-turn time)
+//   3. agent-chat install-codex-hooks         — config.toml + hooks.json
+//   4. autowatch systemd service              — the no-terminal driver that
+//      auto-responds to turn flips via ephemeral `codex exec`. Requires
+//      --peer to know which edge to watch; pass --no-service to skip and
+//      run autowatch manually instead.
+//
+// After this command, the operator never opens a Codex terminal as the
+// agent identity — peer agents (or the human via record-turn) flip the
+// turn, autowatch fires `codex exec`, the response lands in CONVO.md, the
+// Stop hook indexes it into the per-edge KG. Symmetric with the Claude
+// side's stop-hook + monitor pairing.
+function cmdSetupCodex(args: string[]): void {
+  const positional: string[] = [];
+  let peer: string | undefined;
+  let speaker: string | undefined;
+  let noService = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--peer") peer = args[++i];
+    else if (a === "--speaker") speaker = args[++i];
+    else if (a === "--no-service") noService = true;
+    else if (a.startsWith("--")) die(`setup-codex: unknown option ${a}`, 70);
+    else positional.push(a);
+  }
+  const [agent, topology] = positional;
+  if (!agent || !topology) {
+    die(
+      "usage: agent-chat.ts setup-codex <agent> <topology> [--speaker <name>] " +
+      "[--peer <peer>] [--no-service]\n" +
+      "  Orchestrates init + speaker + install-codex-hooks + autowatch-service.\n" +
+      "  After this, codex auto-responds to turn flips with no human-in-the-loop\n" +
+      "  terminal session needed.",
+      70,
+    );
+  }
+
+  console.log(`[setup-codex] step 1/4: claim ${agent}@${topology} identity for ${process.cwd()}`);
+  cmdInit([agent, topology]);
+
+  if (speaker) {
+    console.log(`[setup-codex] step 2/4: set current speaker = ${speaker}`);
+    cmdSpeaker([speaker]);
+  } else {
+    console.log(`[setup-codex] step 2/4: no --speaker passed; users.yaml default resolution applies at record-turn time`);
+  }
+
+  console.log(`[setup-codex] step 3/4: register Codex Stop hook + plugin enable in ~/.codex/`);
+  cmdInstallCodexHooks([]);
+
+  if (peer && !noService) {
+    console.log(`[setup-codex] step 4/4: install autowatch systemd service (peer=${peer})`);
+    const r = child_process.spawnSync("bun", [
+      path.join(SKILL_ROOT, "scripts/install-autowatch-systemd.ts"),
+      agent, topology,
+      "--peer", peer,
+      "--runtime", "codex",
+    ], { stdio: "inherit", env: process.env });
+    if (r.status !== 0) die(`[setup-codex] autowatch service install failed (rc=${r.status})`, 71);
+  } else if (peer && noService) {
+    console.log(`[setup-codex] step 4/4: --no-service set; skipping systemd install`);
+    console.log(`  to run autowatch manually: bun ${path.join(SKILL_ROOT, "scripts/agent-chat.ts")} autowatch ${agent} ${topology} --peer ${peer} --runtime codex`);
+  } else {
+    console.log(`[setup-codex] step 4/4: no --peer specified; skipping autowatch`);
+    console.log(`  re-run with --peer <name> to enable autonomous turn-flip handling, or run autowatch manually later`);
+  }
+
+  console.log(`[setup-codex] ✓ done. ${agent}@${topology} is configured. Flip a turn to ${agent} on any of its edges to test.`);
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2359,6 +2436,7 @@ switch (cmd) {
   case "dots":         cmdDots(rest); break;
   case "install":      cmdInstall(rest); break;
   case "install-codex-hooks": cmdInstallCodexHooks(rest); break;
+  case "setup-codex":  cmdSetupCodex(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -2401,6 +2479,14 @@ switch (cmd) {
       `      Register the Codex Stop hook in ~/.codex/hooks.json and enable\n` +
       `      [features].codex_hooks in ~/.codex/config.toml. Uses the global\n` +
       `      ${DEFAULT_CONVERSATIONS_DIR} conversation root.\n\n` +
+      `  setup-codex <agent> <topology> [--speaker <name>] [--peer <peer>] [--no-service]\n` +
+      `      One-shot Codex install: claim identity (init), set speaker,\n` +
+      `      register the Stop hook, and install the autowatch systemd service\n` +
+      `      that auto-responds to turn flips via ephemeral \`codex exec\`. After\n` +
+      `      this command the operator never opens a Codex terminal as the\n` +
+      `      agent identity — the service handles every turn. Pass --peer to\n` +
+      `      enable autowatch (required for autonomy); --no-service to skip\n` +
+      `      the systemd install and run autowatch manually instead.\n\n` +
       `  self-test [--json]\n` +
       `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +

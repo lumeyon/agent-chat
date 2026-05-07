@@ -11,6 +11,29 @@ no-human-in-the-loop agents.
 codex plugin marketplace add lumeyon/agent-chat
 ```
 
+After Codex restarts and the plugin is enabled, run **one command** from
+the project cwd to claim identity, register the Stop hook, and install
+the autowatch service that auto-responds to turn flips:
+
+```bash
+AGENT_CHAT_DIR="$(ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" setup-codex \
+    lumeyon petersen --speaker boss --peer orion
+```
+
+That's the headline install. After it finishes, `lumeyon` is a fully
+autonomous member of the petersen graph: peer agents flip the turn, a
+systemd-managed `codex exec` fires within ~2s, the response lands in
+`CONVO.md`, the Stop hook indexes it into the per-edge KG. **You do not
+open an interactive Codex terminal as `lumeyon` going forward** — the
+operator drives from the human side via `record-turn` (or via a peer
+agent like `orion`); `lumeyon` is on call as a service.
+
+`setup-codex` orchestrates four discrete commands you can also run by
+hand if you need finer control: `init`, `speaker`, `install-codex-hooks`,
+and `autowatch-service`. See "Manual install" below for the breakdown.
+
 The repo ships a Codex-shaped marketplace at
 `.agents/plugins/marketplace.json`. Restart Codex after adding the
 marketplace and enable `agent-chat` from Codex's plugin directory if your
