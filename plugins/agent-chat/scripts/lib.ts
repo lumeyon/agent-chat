@@ -108,9 +108,9 @@ export const SKILL_ROOT = path.resolve(
 );
 
 // Plugin config: ~/.claude/data/agent-chat/config.json. Read once at module
-// load. Used to let the Claude-Code plugin and the (future) Codex plugin point
-// at the SAME conversations dir without each user fiddling with env vars in
-// every shell. The file is optional; if absent, defaults apply.
+// load. Used to let the Claude-Code plugin and the Codex plugin point at the
+// SAME conversations dir without each user fiddling with env vars in every
+// shell. The file is optional; if absent, defaults apply.
 //
 // Schema (fields are all optional):
 //   {
@@ -181,12 +181,17 @@ function loadConfig(): AgentChatConfig {
 
 export const CONFIG: AgentChatConfig = loadConfig();
 
+// User-global default for this deployment. Do not default to a plugin-cache
+// path or a per-runtime home directory: Codex and Claude plugin installs must
+// talk through the same filesystem graph.
+export const DEFAULT_CONVERSATIONS_DIR = "/data/lumeyon/agent-chat/conversations";
+
 // Conversations directory: user-global by default so state is shared across
 // projects, plugin-cache version dirs, AND across runtimes (Claude + Codex
 // plugins read the same config.json). Resolution order:
 //   1. $AGENT_CHAT_CONVERSATIONS_DIR env var (highest — tests & per-shell)
 //   2. config.json `conversations_dir` field (cross-runtime sharing)
-//   3. ~/.claude/data/agent-chat/conversations/ (default)
+//   3. /data/lumeyon/agent-chat/conversations (deployment-global default)
 //
 // Topology yaml files always live under SKILL_ROOT — only runtime state
 // (CONVO.md, .turn, archives, .sessions, .presence) follows this override.
@@ -199,7 +204,7 @@ export const CONVERSATIONS_DIR = process.env.AGENT_CHAT_CONVERSATIONS_DIR
   ? path.resolve(process.env.AGENT_CHAT_CONVERSATIONS_DIR)
   : CONFIG.conversations_dir
     ? path.resolve(CONFIG.conversations_dir)
-    : path.join(os.homedir(), ".claude", "data", "agent-chat", "conversations");
+    : DEFAULT_CONVERSATIONS_DIR;
 
 // Tiny YAML parser for our limited schema:
 //   topology: <name>

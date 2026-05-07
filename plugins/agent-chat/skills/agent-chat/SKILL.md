@@ -42,7 +42,7 @@ plugins/agent-chat/
     runtimes/codex.ts   # Codex adapter
 ```
 
-Runtime state defaults to `~/.claude/data/agent-chat/conversations/` and
+Runtime state defaults to `/data/lumeyon/agent-chat/conversations/` and
 can be overridden by `~/.claude/data/agent-chat/config.json`:
 
 ```json
@@ -51,6 +51,20 @@ can be overridden by `~/.claude/data/agent-chat/config.json`:
 
 That shared directory is the cross-runtime contract; Claude and Codex
 sessions interoperate because they read and write the same files.
+
+For Codex after-response capture, the plugin ships a bundled Stop hook at
+`hooks/hooks.json` and advertises it from `.codex-plugin/plugin.json`.
+On Codex builds where bundled plugin hooks are not active yet, install the
+compatibility user-level Stop hook once per user:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks
+```
+
+That writes `~/.codex/config.toml` and `~/.codex/hooks.json`, enables the
+agent-chat plugin entry, points Codex Stop events at this plugin's
+`scripts/codex-stop-hook.ts`, and forces the shared conversation root
+above.
 
 ## Identity
 

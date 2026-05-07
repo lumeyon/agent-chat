@@ -31,6 +31,7 @@ import {
   readTurn, writeTurnAtomic, resolveIdentity, loadUsers, parseSections,
   exclusiveWriteOrFail, writeFileAtomic, safeUnlink,
   SKILL_ROOT, SESSIONS_DIR, PRESENCE_DIR, CONVERSATIONS_DIR,
+  DEFAULT_CONVERSATIONS_DIR,
   CURRENT_SPEAKER_FILE_SUFFIX, currentSpeakerPath, readCurrentSpeaker,
   writeCurrentSpeaker, resolveDefaultSpeaker, prepareEphemeralIdentity,
   // Round-15l: cwd-state — no-CLAUDE_SESSION_ID identity fallback
@@ -2153,6 +2154,185 @@ function cmdInstall(args: string[]): void {
   console.log(`    2) auto-archives any edge past the line threshold`);
 }
 
+// ----- Codex hook install --------------------------------------------------
+//
+// Codex 0.128 exposes stable user/project hooks (`codex_hooks`) and keeps
+// plugin-root hooks behind a separate experimental feature. This installer is
+// intentionally plugin-owned but writes the stable user-level Codex hook file,
+// so one plugin install captures every Codex project through the same global
+// conversations directory.
+
+const CODEX_STOP_STATUS = "Recording agent-chat turn";
+const CODEX_PLUGIN_TABLE = 'plugins."agent-chat@agent-chat-marketplace"';
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function ensureTomlBoolInTable(text: string, table: string, key: string, value: boolean): string {
+  const wanted = `${key} = ${value ? "true" : "false"}`;
+  const hadTrailingNewline = text.endsWith("\n") || text.length === 0;
+  const lines = text.length > 0 ? text.replace(/\r\n/g, "\n").split("\n") : [];
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+
+  let tableStart = -1;
+  let tableEnd = lines.length;
+  const tableRe = new RegExp(`^\\s*\\[${escapeRegExp(table)}\\]\\s*(?:#.*)?$`);
+  for (let i = 0; i < lines.length; i++) {
+    if (tableRe.test(lines[i])) {
+      tableStart = i;
+      tableEnd = lines.length;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(lines[j])) {
+          tableEnd = j;
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  if (tableStart >= 0) {
+    const re = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`);
+    for (let i = tableStart + 1; i < tableEnd; i++) {
+      if (re.test(lines[i])) {
+        lines[i] = wanted;
+        return lines.join("\n") + "\n";
+      }
+    }
+    lines.splice(tableStart + 1, 0, wanted);
+    return lines.join("\n") + "\n";
+  }
+
+  if (lines.length > 0) lines.push("");
+  lines.push(`[${table}]`, wanted);
+  return lines.join("\n") + (hadTrailingNewline ? "\n" : "\n");
+}
+
+function ensureTomlBoolFeature(text: string, feature: string, value: boolean): string {
+  return ensureTomlBoolInTable(text, "features", feature, value);
+}
+
+function codexHookCommand(): string {
+  const hookScript = path.join(SKILL_ROOT, "scripts", "codex-stop-hook.ts");
+  return `AGENT_CHAT_CONVERSATIONS_DIR=${shellQuote(DEFAULT_CONVERSATIONS_DIR)} bun ${shellQuote(hookScript)}`;
+}
+
+function buildCodexHookEntry(): any {
+  return {
+    hooks: [
+      {
+        type: "command",
+        command: codexHookCommand(),
+        timeout: 180,
+        statusMessage: CODEX_STOP_STATUS,
+      },
+    ],
+  };
+}
+
+function isAgentChatCodexHookEntry(entry: any): boolean {
+  const handlers = Array.isArray(entry?.hooks) ? entry.hooks : [];
+  return handlers.some((h: any) =>
+    h?.statusMessage === CODEX_STOP_STATUS ||
+    (typeof h?.command === "string" && /codex-stop-hook\.ts/.test(h.command))
+  );
+}
+
+function mergeCodexHooks(existing: any, uninstall: boolean): any {
+  const out = existing && typeof existing === "object" && !Array.isArray(existing)
+    ? existing
+    : {};
+  out.hooks = out.hooks && typeof out.hooks === "object" && !Array.isArray(out.hooks)
+    ? out.hooks
+    : {};
+  const priorStop = Array.isArray(out.hooks.Stop) ? out.hooks.Stop : [];
+  const filtered = priorStop.filter((entry: any) => !isAgentChatCodexHookEntry(entry));
+
+  if (uninstall) {
+    if (filtered.length === 0) delete out.hooks.Stop;
+    else out.hooks.Stop = filtered;
+    if (Object.keys(out.hooks).length === 0) delete out.hooks;
+    return out;
+  }
+
+  filtered.push(buildCodexHookEntry());
+  out.hooks.Stop = filtered;
+  return out;
+}
+
+function cmdInstallCodexHooks(args: string[]): void {
+  const allowed = new Set(["--uninstall", "--print"]);
+  for (const a of args) {
+    if (!allowed.has(a)) die(`install-codex-hooks: unknown option ${a}`, 70);
+  }
+  const uninstall = args.includes("--uninstall");
+  const printOnly = args.includes("--print");
+
+  const home = process.env.HOME ?? os.homedir();
+  if (!home) die("HOME not set; cannot resolve ~/.codex", 70);
+  const codexDir = path.join(home, ".codex");
+  const configPath = path.join(codexDir, "config.toml");
+  const hooksPath = path.join(codexDir, "hooks.json");
+
+  let configToml = "";
+  if (fs.existsSync(configPath)) {
+    try {
+      configToml = fs.readFileSync(configPath, "utf8");
+    } catch (e) {
+      die(`failed to read ${configPath}: ${e}`, 70);
+    }
+  }
+  let nextConfigToml = configToml;
+  if (!uninstall) {
+    nextConfigToml = ensureTomlBoolFeature(nextConfigToml, "codex_hooks", true);
+    nextConfigToml = ensureTomlBoolInTable(nextConfigToml, CODEX_PLUGIN_TABLE, "enabled", true);
+  }
+
+  let hooksJson: any = {};
+  if (fs.existsSync(hooksPath)) {
+    try {
+      hooksJson = JSON.parse(fs.readFileSync(hooksPath, "utf8"));
+    } catch (e) {
+      die(`failed to parse ${hooksPath}: ${e}`, 70);
+    }
+  }
+  const nextHooksJson = mergeCodexHooks(hooksJson, uninstall);
+
+  if (printOnly) {
+    console.log(JSON.stringify({
+      config_path: configPath,
+      config_toml: nextConfigToml,
+      hooks_path: hooksPath,
+      hooks_json: nextHooksJson,
+      conversations_dir: DEFAULT_CONVERSATIONS_DIR,
+      command: codexHookCommand(),
+    }, null, 2));
+    return;
+  }
+
+  fs.mkdirSync(codexDir, { recursive: true });
+  if (!uninstall) {
+    fs.writeFileSync(configPath, nextConfigToml);
+  }
+  fs.writeFileSync(hooksPath, JSON.stringify(nextHooksJson, null, 2) + "\n");
+
+  if (uninstall) {
+    console.log(`agent-chat install-codex-hooks: removed Stop hook from ${hooksPath}`);
+    return;
+  }
+
+  console.log(`agent-chat install-codex-hooks: enabled codex_hooks in ${configPath}`);
+  console.log(`agent-chat install-codex-hooks: enabled agent-chat plugin in ${configPath}`);
+  console.log(`agent-chat install-codex-hooks: registered Stop hook in ${hooksPath}`);
+  console.log(`  command: ${codexHookCommand()}`);
+  console.log(`  conversations: ${DEFAULT_CONVERSATIONS_DIR}`);
+}
+
 // ----- dispatcher ----------------------------------------------------------
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -2178,6 +2358,7 @@ switch (cmd) {
   case "dot":          cmdDot(rest); break;
   case "dots":         cmdDots(rest); break;
   case "install":      cmdInstall(rest); break;
+  case "install-codex-hooks": cmdInstallCodexHooks(rest); break;
   case undefined:
   case "--help":
   case "-h":
@@ -2216,6 +2397,10 @@ switch (cmd) {
       `      Emits a handoff section on the OLD edge when the speaker changes.\n` +
       `      Exit codes: 64=no current speaker, 65=unknown speaker, 66=no edge,\n` +
       `      70=bad args, 71/72=lock blocked.\n\n` +
+      `  install-codex-hooks [--uninstall] [--print]\n` +
+      `      Register the Codex Stop hook in ~/.codex/hooks.json and enable\n` +
+      `      [features].codex_hooks in ~/.codex/config.toml. Uses the global\n` +
+      `      ${DEFAULT_CONVERSATIONS_DIR} conversation root.\n\n` +
       `  self-test [--json]\n` +
       `      End-to-end smoke test (~5–10s). Spawns subprocesses against a tmp\n` +
       `      conversations dir and verifies plugin layout, doctor surfaces,\n` +

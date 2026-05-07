@@ -1,8 +1,9 @@
 # Installing agent-chat on Codex CLI
 
 This page documents the Codex side of agent-chat's dual-runtime support:
-plugin discovery, the Codex runtime adapter, and the plugin-owned
-autonomous watcher used for no-human-in-the-loop agents.
+plugin discovery, the Codex runtime adapter, the bundled after-response
+Stop hook, and the plugin-owned autonomous watcher used for
+no-human-in-the-loop agents.
 
 ## TL;DR
 
@@ -11,19 +12,50 @@ codex plugin marketplace add lumeyon/agent-chat
 ```
 
 The repo ships a Codex-shaped marketplace at
-`.agents/plugins/marketplace.json`. If your Codex build still does not
-auto-enable the plugin after adding the marketplace, add this fallback
-entry to `~/.codex/config.toml`:
+`.agents/plugins/marketplace.json`. Restart Codex after adding the
+marketplace and enable `agent-chat` from Codex's plugin directory if your
+build does not auto-enable newly added plugins.
 
-```toml
-[plugins."agent-chat@agent-chat-marketplace"]
-enabled = true
+The plugin follows the documented Codex layout:
+
+```text
+plugins/agent-chat/
+  .codex-plugin/plugin.json
+  skills/
+  hooks/hooks.json
 ```
+
+For local development from this checkout:
+
+```bash
+codex plugin marketplace add /path/to/agent-chat
+```
+
+Compatibility fallback for Codex builds where bundled plugin hooks are
+not active yet:
+
+```bash
+AGENT_CHAT_DIR="$(
+  ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1
+)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks
+```
+
+That command enables `[features].codex_hooks` and
+`[plugins."agent-chat@agent-chat-marketplace"].enabled` in
+`~/.codex/config.toml`, then writes `~/.codex/hooks.json` with a user-level
+Stop hook pointing at `scripts/codex-stop-hook.ts`. The hook always uses
+`/data/lumeyon/agent-chat/conversations`, so all Codex projects and
+plugin cache versions share the same KG-backed conversation graph.
 
 Verify the runtime adapter works:
 
 ```bash
-AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+AGENT_CHAT_DIR="$(
+  ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1
+)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
 bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" doctor --paths
 ```
 
@@ -31,6 +63,38 @@ If `bun` is on PATH and the script prints SKILL_ROOT + CONVERSATIONS_DIR
 without errors, the install is healthy and the Codex runtime adapter
 (scripts/runtimes/codex.ts, Round-15i) is ready to dispatch through
 `codex exec`.
+
+## After-response capture hook
+
+agent-chat declares its lifecycle hook in `.codex-plugin/plugin.json`:
+
+```json
+{
+  "hooks": "./hooks/hooks.json"
+}
+```
+
+The bundled `hooks/hooks.json` registers a `Stop` hook that runs
+`scripts/codex-stop-hook.ts` after each Codex response.
+
+Codex CLI 0.128.0 exposes stable user/project hooks behind the
+`codex_hooks` feature, while plugin hooks may be gated depending on the
+build. For those builds, use the fallback installer:
+
+The installer is idempotent:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks
+```
+
+The fallback preserves unrelated hooks, replaces only older agent-chat
+`codex-stop-hook.ts` entries, and can remove its entry with:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks --uninstall
+```
+
+Prefer the bundled plugin hook whenever your Codex build supports it.
 
 ## Autonomous watcher
 
@@ -79,6 +143,10 @@ on what happens next:
   `policy`, and `category`. Older Codex builds or already-cloned older
   marketplace revisions may still need the `[plugins."<name>@<marketplace>"]`
   manual enable switch in `~/.codex/config.toml`.
+
+Separately, `install-codex-hooks` writes `[features].codex_hooks = true`
+because the Stop hook is the surface that captures the current
+interactive boss-agent conversation after every Codex reply.
 
 ## The empirical schema diff
 

@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
-import { SKILL_ROOT } from "../scripts/lib.ts";
+import { DEFAULT_CONVERSATIONS_DIR, SKILL_ROOT } from "../scripts/lib.ts";
 
 const LIB_PATH = path.join(SKILL_ROOT, "scripts/lib.ts");
 const PRINT = `import('${LIB_PATH}').then(m => console.log(JSON.stringify({c: m.CONVERSATIONS_DIR, p: m.CONFIG_PATH, cfg: m.CONFIG})))`;
@@ -29,11 +29,11 @@ function runWithHome(home: string, env: Record<string, string | undefined> = {})
 }
 
 describe("Round 15g — CONVERSATIONS_DIR resolution order", () => {
-  test("default: ~/.claude/data/agent-chat/conversations when no env, no config", () => {
+  test("default: global /data/lumeyon conversation root when no env, no config", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ac-cfg-default-"));
     try {
       const out = runWithHome(tmp);
-      expect(out.c).toBe(path.join(tmp, ".claude/data/agent-chat/conversations"));
+      expect(out.c).toBe(DEFAULT_CONVERSATIONS_DIR);
       expect(out.cfg).toEqual({});
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -76,7 +76,7 @@ describe("Round 15g — CONVERSATIONS_DIR resolution order", () => {
       fs.mkdirSync(cfgDir, { recursive: true });
       fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({ conversations_dir: "relative/path" }));
       const out = runWithHome(tmp);
-      expect(out.c).toBe(path.join(tmp, ".claude/data/agent-chat/conversations"));
+      expect(out.c).toBe(DEFAULT_CONVERSATIONS_DIR);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -89,7 +89,7 @@ describe("Round 15g — CONVERSATIONS_DIR resolution order", () => {
       fs.mkdirSync(cfgDir, { recursive: true });
       fs.writeFileSync(path.join(cfgDir, "config.json"), "{ this is not json");
       const out = runWithHome(tmp);
-      expect(out.c).toBe(path.join(tmp, ".claude/data/agent-chat/conversations"));
+      expect(out.c).toBe(DEFAULT_CONVERSATIONS_DIR);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -102,7 +102,7 @@ describe("Round 15g — CONVERSATIONS_DIR resolution order", () => {
       fs.mkdirSync(cfgDir, { recursive: true });
       fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify(["nope"]));
       const out = runWithHome(tmp);
-      expect(out.c).toBe(path.join(tmp, ".claude/data/agent-chat/conversations"));
+      expect(out.c).toBe(DEFAULT_CONVERSATIONS_DIR);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -225,11 +225,12 @@ describe("Round 15k Item-8 — configurable Dot axes via config.json", () => {
     try {
       const cfgDir = path.join(tmp, ".claude/data/agent-chat");
       fs.mkdirSync(cfgDir, { recursive: true });
+      const convDir = path.join(tmp, ".claude/data/agent-chat/conversations");
       fs.writeFileSync(path.join(cfgDir, "config.json"), JSON.stringify({
+        conversations_dir: convDir,
         dot_axes: ["correctness", "speed"],
       }));
       // Plant a dot directly in the conv dir, then aggregate via subprocess.
-      const convDir = path.join(tmp, ".claude/data/agent-chat/conversations");
       const dotsDir = path.join(convDir, ".dots");
       fs.mkdirSync(dotsDir, { recursive: true });
       fs.writeFileSync(path.join(dotsDir, "alice.jsonl"),

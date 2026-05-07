@@ -21,12 +21,25 @@ export AGENT_CHAT_DIR="${CLAUDE_PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-}}"
 # 3. Legacy direct-symlink path (`~/git/agent-chat → ~/.claude/skills/agent-chat`).
 [ -z "$AGENT_CHAT_DIR" ] && [ -d ~/.claude/skills/agent-chat ] && AGENT_CHAT_DIR=~/.claude/skills/agent-chat
 # 4. Codex marketplace clone (after `codex plugin marketplace add lumeyon/agent-chat`).
-#    Note: requires the manual `config.toml` enable step until Codex automates
-#    per-plugin enable — see docs/codex-install.md.
+#    Note: bundled plugin hooks should capture Codex Stop events. If your
+#    Codex build does not run plugin hooks yet, use the compatibility
+#    `agent-chat install-codex-hooks` path — see docs/codex-install.md.
 [ -z "$AGENT_CHAT_DIR" ] && [ -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat ] \
   && AGENT_CHAT_DIR=~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat
 [ -z "$AGENT_CHAT_DIR" ] && echo "ERROR: agent-chat not installed (see docs/codex-install.md for Codex)" && return 1
 ```
+
+For Codex sessions, the plugin ships a bundled after-response Stop hook.
+If your Codex build does not run bundled plugin hooks yet, install the
+compatibility hook once per user:
+
+```bash
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks
+```
+
+This writes the stable user-level Codex hook configuration and points it
+at `/data/lumeyon/agent-chat/conversations`, so every project shares the
+same boss-agent and agent-agent graph.
 
 ## Step 1 — claim identity
 

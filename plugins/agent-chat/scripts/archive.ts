@@ -328,6 +328,21 @@ switch (op) {
     if (readTurn(edge.turn) !== "parked" && !opts.force) {
       die(`refuse to auto-archive — .turn is "${readTurn(edge.turn)}", not "parked". Park the edge first or pass --force.`);
     }
+    {
+      const pending = pendingArchives();
+      if (pending.length && !opts.force) die(`uncommitted archive(s) pending — commit them first or pass --force: ${pending.join(", ")}`);
+      const convo = loadConvo();
+      const allSections = parseSections(convo).sections;
+      if (opts.sealCount != null && opts.sealCount > allSections.length) {
+        die(`--seal-count ${opts.sealCount} exceeds CONVO.md section count (${allSections.length})`);
+      }
+      if (opts.sealCount == null) {
+        const split = splitForArchive(convo, opts.freshTail);
+        if (split.archivableSectionCount === 0) {
+          die("nothing to archive — fresh tail covers all sections.");
+        }
+      }
+    }
     const lockBody = `${lockTag(id.name)} ${utcStamp()}\n`;
     try { exclusiveWriteOrFail(edge.lock, lockBody); }
     catch (err: any) {
@@ -348,13 +363,17 @@ switch (op) {
       let split: { archivable: string; archivableSectionCount: number; freshTail: string } | null = null;
       if (opts.sealCount != null) {
         if (opts.sealCount > allSections.length) {
-          die(`--seal-count ${opts.sealCount} exceeds CONVO.md section count (${allSections.length})`);
+          console.log(`nothing to archive — --seal-count ${opts.sealCount} exceeds CONVO.md section count (${allSections.length}).`);
+          break;
         }
         archivedSections = allSections.slice(0, opts.sealCount);
         body = archivedSections.join("\n\n");
       } else {
         split = splitForArchive(convo, opts.freshTail);
-        if (split.archivableSectionCount === 0) die("nothing to archive — fresh tail covers all sections.");
+        if (split.archivableSectionCount === 0) {
+          console.log("nothing to archive — fresh tail covers all sections.");
+          break;
+        }
         archivedSections = allSections.slice(0, split.archivableSectionCount);
         body = split.archivable;
       }
@@ -368,7 +387,7 @@ switch (op) {
         const existing = readIndex(edge.dir).find((e) => e.id === aid);
         if (existing) {
           console.error(`already sealed as ${aid}; no-op`);
-          process.exit(0);
+          break;
         }
       }
 
@@ -448,7 +467,8 @@ switch (op) {
         try { fs.rmSync(adir, { recursive: true, force: true }); } catch {}
         console.error(`auto-summary failed validation (synthesis bug):`);
         for (const issue of v.issues) console.error(`  - ${issue}`);
-        process.exit(3);
+        process.exitCode = 3;
+        break;
       }
       fs.writeFileSync(path.join(adir, "SUMMARY.md"), summary);
 

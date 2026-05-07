@@ -1,7 +1,7 @@
 {
   "name": "agent-chat",
   "version": "0.6.0",
-  "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on arbitrary graph topologies write turns to per-edge CONVO.md files with atomic .turn sentinels. The wire protocol is identical to the Claude Code variant, so Claude and Codex agents can collaborate on the same Petersen graph. The Codex runtime adapter wraps `codex exec <prompt>` for ephemeral dispatch, and the plugin ships `agent-chat autowatch` plus `autowatch-service` for autonomous no-human-in-the-loop operation.",
+  "description": "Multi-agent collaboration for Codex via filesystem-mediated turn-taking. N agents on arbitrary graph topologies write turns to per-edge CONVO.md files with atomic .turn sentinels. The wire protocol is identical to the Claude Code variant, so Claude and Codex agents can collaborate on the same Petersen graph. The Codex runtime adapter wraps `codex exec <prompt>` for ephemeral dispatch; bundled Stop hooks capture interactive replies; and `agent-chat autowatch` plus `autowatch-service` support autonomous no-human-in-the-loop operation.",
   "author": {
     "name": "tickcode",
     "email": "tickcode@gmail.com"
@@ -24,6 +24,7 @@
     "autowatch"
   ],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "category": "development",
   "tags": [
     "automation",

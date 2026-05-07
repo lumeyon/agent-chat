@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_CHAT_CONVERSATIONS_DIR=/data/lumeyon/agent-chat/conversations bun ./scripts/codex-stop-hook.ts",
+            "timeout": 180,
+            "statusMessage": "Recording agent-chat turn"
+          }
+        ]
+      }
+    ]
+  }
+}

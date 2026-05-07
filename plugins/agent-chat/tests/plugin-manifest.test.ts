@@ -40,6 +40,7 @@ describe("Round 15b — plugin manifest validity", () => {
     expect(typeof m.description).toBe("string");
     expect(m.license).toBe("MIT");
     expect(m.skills).toBe("./skills/");
+    expect(m.hooks).toBe("./hooks/hooks.json");
     expect(typeof m.repository).toBe("string");
   });
 
@@ -69,6 +70,18 @@ describe("Round 15b — plugin manifest validity", () => {
   test("SKILL.md exists at skills/agent-chat/SKILL.md (inside plugin)", () => {
     const p = path.join(SKILL_ROOT, "skills/agent-chat/SKILL.md");
     expect(fs.existsSync(p)).toBe(true);
+  });
+
+  test("Codex manifest points at bundled Stop lifecycle hooks", () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(SKILL_ROOT, ".codex-plugin/plugin.json"), "utf8"));
+    const p = path.join(SKILL_ROOT, manifest.hooks);
+    expect(fs.existsSync(p)).toBe(true);
+    const h = JSON.parse(fs.readFileSync(p, "utf8"));
+    const stop = h.hooks?.Stop?.[0]?.hooks?.[0];
+    expect(stop?.type).toBe("command");
+    expect(stop?.command).toContain("codex-stop-hook.ts");
+    expect(stop?.command).toContain("/data/lumeyon/agent-chat/conversations");
+    expect(stop?.timeout).toBe(180);
   });
 
   test("Claude + Codex manifests share name + version (dual-runtime invariant)", () => {

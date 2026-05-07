@@ -15,7 +15,7 @@
 > multi-axis grades (clarity, depth, reliability, speed) that aggregate
 > into believability-weighted composite scores surfaced in every cmdRun
 > prompt's full network roster + relay-path routing hints. Conversations
-> are stored user-globally at `~/.claude/data/agent-chat/conversations/`
+> are stored globally at `/data/lumeyon/agent-chat/conversations/`
 > (configurable via `~/.claude/data/agent-chat/config.json` for
 > cross-runtime sharing between Claude Code and Codex installs).
 
@@ -126,7 +126,7 @@ fold into the same lossless-claw archive layer as everything else, so
 | **Dalio-inspired Dot Collector with configurable axes** (Round 15h+k) | Multi-axis peer grading. Default 4 axes (**clarity / depth / reliability / speed**, each 1-10), but Round 15k makes this configurable via `config.json` `dot_axes` field — an org might use `[creativity, rigor, specificity, openness]` for R&D or `[correctness, completeness, speed]` for code review (1-8 axes, all agents read the same user-global config). Append-only ledger at `<conversations>/.dots/<peer>.jsonl`. Aggregation is **believability-weighted via fixed-point iteration** (Round 15k): each grader's contribution is weighed by their own composite score, recomputed iteratively until convergence — Dalio's actual recursive-trust model where high-believability voices count more, not the one-pass approximation Round 15h shipped. Agents grade via `<dot peer="X" .../>` directive or `agent-chat dot` CLI. Self-grading refused. `agent-chat dots [<peer>]` shows roster + per-axis weighted means + recent dots. |
 | **Full network roster + relay-path routing** (Round 15h) | cmdRun's prompt now lists **every** agent in the topology (not just direct neighbors) with role first-line + dot-collector composite + believability + routing hint. Direct neighbors get `<dispatch peer="X">`; non-neighbors get a "relay through Y" hint computed via `lib.relayPathTo` BFS. For petersen (diameter 2) every non-neighbor is reachable through exactly one intermediary. The mesh becomes self-aware. |
 | **Per-tick auto-archive** (Round 15h+i) | `cmdRun` invokes `autoArchiveSessionEdges` at the END of every tick (not just at exit), so ephemeral mode — where sessions never explicitly exit — actually trims long edges. Two thresholds: parked-AND-bloated past 200 lines, OR active-AND-very-bloated past 800 lines (Round-15i fix for boss-agent edges that flip back-and-forth and never park). Same `archive.ts auto` underlying path; keeps the last 4 sections verbatim. |
-| **Dual-runtime: Claude Code + Codex from one repo** (Round 15b/i) | `scripts/runtimes/{claude,codex}.ts` adapters share a symmetric `dispatch + scheduleWakeup` shape. Claude wraps `claude -p` via `runClaude`; Codex wraps `codex exec`. The wire protocol is identical across runtimes — agents in different runtimes can collaborate on the same petersen graph because every state is filesystem-mediated. CONVERSATIONS_DIR defaults to `~/.claude/data/agent-chat/conversations/` (user-global, version-stable across plugin-cache version dirs); `~/.claude/data/agent-chat/config.json` `conversations_dir` field lets both runtimes share state explicitly. |
+| **Dual-runtime: Claude Code + Codex from one repo** (Round 15b/i) | `scripts/runtimes/{claude,codex}.ts` adapters share a symmetric `dispatch + scheduleWakeup` shape. Claude wraps `claude -p` via `runClaude`; Codex wraps `codex exec`. The wire protocol is identical across runtimes — agents in different runtimes can collaborate on the same petersen graph because every state is filesystem-mediated. CONVERSATIONS_DIR defaults to `/data/lumeyon/agent-chat/conversations/` (global, version-stable across plugin-cache version dirs); `~/.claude/data/agent-chat/config.json` `conversations_dir` field can still override it explicitly. |
 | **Built-in test surfaces** (Rounds 15g – 15p) | `agent-chat self-test` (88 checks, hermetic, ~5s) — wire protocol + identity + edge canonicalization + full lock+append+flip+unlock round-trip + park semantics + role overrides + Dot Collector + relay paths + loop-driver clean exit + lessons CLI. `agent-chat network-test` (205 checks, ~3s) — full-mesh Dot Collector verification on petersen. `agent-chat llm-smoke` — real `claude -p` directive parsing smoke. `agent-chat integration-test` — real cmdRun + real LLM end-to-end. **`agent-chat run` cross-runtime test** — `cross-runtime-integration-test.ts` proves orion-via-Codex + lumeyon-via-Claude exchange turns on the same edge (16/16 PASS, Round-15p). `agent-chat doctor --paths` / `--runtimes` — show resolved CONVERSATIONS_DIR + per-agent runtime resolution. |
 | **Push notifications without polling** (Round 15l-D + 15n) | `notify.ts` watches `.turn` files via `fs.watch`, emits `peer-flipped-to-me` / `peer-parked` / `startup-pending` lines on stdout — designed to run inside Claude Code's `Monitor` tool (`agent-chat watch` is the wrapper). Self-flip suppression (Round-15n) distinguishes peer-driven flips from this-agent's-own atomic rewrites via per-edge lock-snapshot tracking with TTL — false-positive notifications cost API calls; eliminating them was load-bearing. |
 | **Cross-edge crystallized lessons** (Round 15o) | The closed-loop substitute for the ToK pattern that didn't close: agents emit `<lesson topic="kebab-slug">distilled wisdom</lesson>` directives in cmdRun output; lessons store at `<conv>/.lessons/<agent>/<topic>.md` (append-only, dated headers); first-line of each topic surfaces in every future cmdRun prompt (2 KB cap with overflow hint). Today's writes deterministically change tomorrow's reads — same closing pattern that already works for scratchpad / dots / roles / roster / archives. |
@@ -180,27 +180,51 @@ bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" self-test  # → 62/62 pass
 `$AGENT_CHAT_DIR` resolves automatically via the bootstrap preamble in
 the SKILL.md to `~/.claude/plugins/cache/agent-chat-marketplace/agent-chat/<version>/`.
 
-**For Codex** (Round-15i runtime adapter is now implemented — `codex exec`
-is the non-interactive entrypoint):
+**For Codex** (Round-15i runtime adapter is implemented — `codex exec`
+is the non-interactive entrypoint, and the plugin ships a bundled Stop
+hook for after-response capture):
 
 ```bash
 codex plugin marketplace add lumeyon/agent-chat
 ```
 
-The marketplace add succeeds (clones the repo to
-`~/.codex/.tmp/marketplaces/agent-chat-marketplace/`), but Codex's
-plugin install lifecycle differs from Claude Code's — full per-plugin
-enable currently requires a manual `~/.codex/config.toml` entry:
+Restart Codex after adding the marketplace and enable `agent-chat` from
+Codex's plugin directory if your build does not auto-enable newly added
+plugins. The Codex package follows the documented plugin layout:
 
-```toml
-[plugins."agent-chat@agent-chat-marketplace"]
-enabled = true
+```text
+plugins/agent-chat/
+  .codex-plugin/plugin.json   # manifest
+  skills/                     # bundled skills
+  hooks/hooks.json            # bundled lifecycle hooks
 ```
+
+For local development from this checkout, add the repo root as the
+marketplace:
+
+```bash
+codex plugin marketplace add /path/to/agent-chat
+```
+
+Compatibility fallback for Codex builds where bundled plugin hooks are
+not active yet:
+
+```bash
+AGENT_CHAT_DIR="$(
+  ls -d ~/.codex/plugins/cache/agent-chat-marketplace/agent-chat/*/ 2>/dev/null | tail -1
+)"
+[ -z "$AGENT_CHAT_DIR" ] && AGENT_CHAT_DIR="$(ls -d ~/.codex/.tmp/marketplaces/agent-chat-marketplace/plugins/agent-chat 2>/dev/null)"
+bun "$AGENT_CHAT_DIR/scripts/agent-chat.ts" install-codex-hooks
+```
+
+That fallback writes `~/.codex/config.toml` and `~/.codex/hooks.json`,
+preserving unrelated hooks while pointing agent-chat at
+`/data/lumeyon/agent-chat/conversations`. It should not be needed once
+your Codex build runs bundled plugin hooks directly.
 
 The runtime adapter itself (`codex exec` wrapping) works once the
 plugin is enabled. See [`docs/codex-install.md`](docs/codex-install.md)
-for the full empirical findings (schema diff, the workaround rationale,
-the smoke-test path).
+for the full install notes and compatibility path.
 
 **Option B — Direct symlink (legacy, pre-plugin path):**
 
