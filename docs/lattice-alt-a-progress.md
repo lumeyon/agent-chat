@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T19:00Z
+## Current state — 2026-05-07T19:45Z
 
-**Phase: ALT-A polish iteration — `lattice-stats` CLI for visibility + AGENT_CHAT_DEBUG_PROMPT switch for cmdRun introspection. Alt A architecture complete; iterating on observability.**
+**Phase: Self-improvement /loop iteration 1 — built `ephemeral-peer-review` CLI so orion can drive ephemeral peer agents (lumeyon/keystone/carina) to peer-review the substrate's own code. Boss has committed orion to managing all peers; this CLI is the wiring. Alt A architecture complete; the substrate now eats its own dog food.**
 
 ## Phase status
 
@@ -15,6 +15,55 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-07T19:45Z (Self-improvement /loop iteration 1: ephemeral-peer-review CLI)
+
+**Target category:** infrastructure prerequisite — peer-review pipeline must exist before any "category A" iteration can run.
+
+**Peer used:** lumeyon (real codex). Smoke test on `scripts/lattice/types.ts` succeeded at 19:46Z (~88s wall clock). Lumeyon returned 9 distinct findings — 3 graded REAL (queued for iter 2), 6 dismissed as design calls or refactor preferences per the QUALITY BAR rule:
+  - **REAL #1:** `QualityTier` doc comment "filter to ≥3 for high-stakes" is semantically backwards in numeric reading (≥3 selects tiers 3,4,5 = the worst three). Fix: clarify the comment. One-line doc fix.
+  - **REAL #2:** `Answer.explanation` is `string | null` despite recordAnswer requiring non-empty. Type-safety hole — anyone bypassing recordAnswer can write null. Fix: tighten to `string`, NOT NULL the schema, audit putAnswer call sites.
+  - **REAL #3:** `Question.status` and `best_answer_id` not jointly constrained — the type allows nonsensical states (answered with null best_answer; open with non-null). Fix: discriminated union or runtime validator.
+  - **DISMISSED #4-9:** depth-vs-DAG (design call: depth is denormalized fast-path), Question lacks tier/predictive_lift (design call: provenance is per-answer), Answer.cites missing (design call: future feature), first-class Explanation type (refactor preference), Question.embedding (design call: stored elsewhere), branded ID types (refactor preference).
+
+**Built:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` (~360 lines) + `agent-chat ephemeral-peer-review` CLI wrapper + 10 tests (3 pure-function, 7 subprocess-based integration).
+
+**Real bug caught via dog-food smoke:**
+  - Symptom: codex timeout at 120s left the lumeyon-orion edge stuck on "orion" instead of "parked".
+  - Root cause: error path called `turn.ts unlock` but not `turn.ts park`, so .turn was never reset.
+  - Fix: error path now calls `turn.ts park` (atomically resets turn AND removes lock), with unlock fallback if park itself fails.
+  - Regression test added; verified failing without the fix, passing with it.
+  - Also bumped dispatch timeout from 120s → 240s (codex on a 30KB module legitimately takes 60-180s).
+
+**Petersen routing constraint surfaced for boss sign-off:**
+  - The /loop prompt's routing table maps "performance audits → vanguard". But vanguard is NOT a direct neighbor of orion in petersen (orion's neighbors: lumeyon, keystone, carina only).
+  - Workaround: future performance reviews route to lumeyon (the designated systems analyst). Boss can change the routing table or authorize relay-through-keystone if vanguard is critical.
+  - This is the kind of design call I'm flagging rather than silently improvising.
+
+**Process bug caught (test design):** initial test file used in-process `runEphemeralPeerReview()` calls. CONVERSATIONS_DIR is frozen at module load, so the tests wrote to PRODUCTION lumeyon-orion / keystone-orion / carina-orion CONVO.md files instead of the tmpdir. Caught immediately by failing assertions; production state restored (3 files truncated to original line counts, carina-orion .turn reset to "parked"). Tests rewritten to use the subprocess pattern from cmd-run.test.ts with a new `AGENT_CHAT_MOCK_PEER_RESPONSE` env-var seam for hermetic happy-path coverage. **Lesson:** any future test that calls into in-process functions which touch CONVERSATIONS_DIR MUST use the subprocess pattern.
+
+**Dog-food check:**
+  - ✅ Built infrastructure that future iterations USE the substrate through.
+  - ✅ Smoke test exercised the real codex runtime end-to-end on the production petersen graph.
+  - ✅ Lattice grew (+1 Q, +1 A) — substrate metric MOVED.
+
+**Tests:** before 495 / after 502 plugin (+7); lattice unchanged at 96.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 391 → 392 (+1)
+  - Answers: 860 → 861 (+1)
+  - posed_by orion: 64 → 65
+  - by_agent lumeyon: 356 → 357
+  - Date range latest: extended to 2026-05-07T19:44:50Z
+  - Authored count: 0 → 0 (the import always tags new content as auto-imported; future iter B work will demonstrate authored-explanation flow)
+
+**Cosmetic bug caught + fixed:** import-stats regex in the CLI was looking for `questions_inserted=N` but the importer emits `questions: +N (already existed: M)`. Fixed in iteration 1 close-out commit. The actual import succeeded; only the CLI's reported count was wrong.
+
+**Commits:**
+  - `b08e63f` — feat(plugin): ephemeral-peer-review CLI (the iteration's coherent feature)
+  - close-out commit (this turn) — regex fix + tracker docs + this journal entry
+
+**WHAT'S NEXT (iteration 2):** Category I (NEW BUG SURFACE) — execute lumeyon's REAL #1 finding (one-line `types.ts` doc comment clarification). It's the smallest of the three real findings, fits cleanly in one commit, exercises the substrate (cite-back the lumeyon section in the commit message). Then iteration 3 picks REAL #2 (the explanation-not-null type tightening).
 
 ### 2026-05-07T19:00Z (Alt A polish iteration)
 

@@ -152,9 +152,11 @@ function importEdgeIntoLattice(edgeDir: string): { questions_inserted: number; a
     console.error(`[ephemeral-peer-review] lattice import failed (non-blocking): ${r.stderr}`);
     return null;
   }
-  // Parse the importer's stdout for counts. The importer emits a summary line.
-  const qm = r.stdout.match(/questions_inserted[=:]\s*(\d+)/);
-  const am = r.stdout.match(/answers_inserted[=:]\s*(\d+)/);
+  // Parse the importer's stdout. Format (from import-from-kg.ts:373-374):
+  //   questions: +<N> (already existed: <M>)
+  //   answers:   +<N> (already existed: <M>)
+  const qm = r.stdout.match(/questions:\s*\+(\d+)/);
+  const am = r.stdout.match(/answers:\s*\+(\d+)/);
   return {
     questions_inserted: qm ? parseInt(qm[1], 10) : 0,
     answers_inserted: am ? parseInt(am[1], 10) : 0,
