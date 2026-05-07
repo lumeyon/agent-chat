@@ -1,0 +1,445 @@
+{"id":"cor_v1_0001","q1":"What is the deadline?","q2":"what is the deadline?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0002","q1":"How do I run the tests?","q2":"How do I run the tests","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0003","q1":"Where is the config file?","q2":" Where is the config file? ","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0004","q1":"Can you explain this?","q2":"can you explain this?!","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0005","q1":"What does this method do?","q2":"WHAT DOES THIS METHOD DO?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0006","q1":"Where do I add the import?","q2":"Where  do  I  add  the  import?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0007","q1":"Is this thread-safe?","q2":"is this thread-safe?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0008","q1":"How do I authenticate?","q2":"How do I authenticate.","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0009","q1":"What's the API endpoint?","q2":"What's the API endpoint","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0010","q1":"Why is this slow?","q2":"Why is this slow?!?!","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0011","q1":"What causes the error?","q2":"What is causing the error?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0012","q1":"How do I run this?","q2":"How am I running this?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0013","q1":"Where does the file get saved?","q2":"Where is the file saved?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0014","q1":"What did the build produce?","q2":"What does the build produce?","label":"separate","category":"different_aspect","subcategory":"tense_carries_meaning","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0015","q1":"How do I install dependencies?","q2":"How do I install the dependency?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0016","q1":"What handles this case?","q2":"What is handling this case?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0017","q1":"How do tests pass here?","q2":"How does the test pass here?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0018","q1":"Where do logs go?","q2":"Where does the log go?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0019","q1":"What is failing?","q2":"What fails?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0020","q1":"Why are tests breaking?","q2":"Why is the test breaking?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0021","q1":"What's the issue?","q2":"What is the issue?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0022","q1":"How's the deploy going?","q2":"How is the deploy going?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0023","q1":"Where's the documentation?","q2":"Where is the documentation?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0024","q1":"What's it doing?","q2":"What is it doing?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0025","q1":"Don't we need auth here?","q2":"Do we not need auth here?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0026","q1":"Won't this break the API?","q2":"Will this not break the API?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0027","q1":"Can't we just retry?","q2":"Can we not just retry?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0028","q1":"How'd this happen?","q2":"How did this happen?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0029","q1":"What'll fail next?","q2":"What will fail next?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0030","q1":"What's that doing?","q2":"What is that doing?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0031","q1":"What is X?","q2":"Hey, what is X?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0032","q1":"How do I install this?","q2":"Please, how do I install this?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0033","q1":"Where's the config?","q2":"Where's the config, thanks?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0034","q1":"What does this do?","q2":"Sorry, what does this do?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0035","q1":"Can you help with X?","q2":"Hey, can you help with X please?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0036","q1":"What's the status?","q2":"Yo, what's the status?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0037","q1":"How do I fix this?","q2":"Quick question — how do I fix this?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0038","q1":"What's wrong here?","q2":"Just curious, what's wrong here?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0039","q1":"Where is that defined?","q2":"Where is that defined, anyway?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0040","q1":"Why does X fail?","q2":"Hi! Why does X fail?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0041","q1":"What does the parser do?","q2":"What is done by the parser?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0042","q1":"Where does the system store logs?","q2":"Where are logs stored by the system?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0043","q1":"How does the auth check tokens?","q2":"How are tokens checked by the auth?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0044","q1":"What did the migration add?","q2":"What was added by the migration?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0045","q1":"Who wrote this code?","q2":"By whom was this code written?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0046","q1":"How does X transform Y?","q2":"How is Y transformed by X?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0047","q1":"What does the worker process?","q2":"What is processed by the worker?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0048","q1":"What does the cache return?","q2":"What is returned by the cache?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0049","q1":"How does the lexer tokenize input?","q2":"How is input tokenized by the lexer?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0050","q1":"What did the test verify?","q2":"What was verified by the test?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0051","q1":"In Python, what is X?","q2":"What is X in Python?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0052","q1":"What is X, exactly?","q2":"Exactly what is X?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0053","q1":"How does X work, in detail?","q2":"In detail, how does X work?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0054","q1":"On Linux, where does this install?","q2":"Where does this install on Linux?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0055","q1":"For the v2 endpoint, what's the auth?","q2":"What's the auth for the v2 endpoint?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0056","q1":"When using async mode, what changes?","q2":"What changes when using async mode?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0057","q1":"After the refactor, where is X?","q2":"Where is X after the refactor?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0058","q1":"If I disable caching, what breaks?","q2":"What breaks if I disable caching?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0059","q1":"With logging on, what does it look like?","q2":"What does it look like with logging on?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0060","q1":"By default, what is the value?","q2":"What is the value by default?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0061","q1":"What is X?","q2":"WTF is X?","label":"merge","category":"register","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0062","q1":"How do I fix this?","q2":"How do I fix this damn thing?","label":"merge","category":"register","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0063","q1":"What's the issue?","q2":"Yo what's the issue?","label":"merge","category":"register","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0064","q1":"Why is this broken?","q2":"Why the hell is this broken?","label":"merge","category":"register","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0065","q1":"How do I set this up?","q2":"How do I, like, set this up?","label":"merge","category":"register","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0066","q1":"What causes this?","q2":"What prevents this?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0067","q1":"How do I enable X?","q2":"How do I disable X?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0068","q1":"Why does X work?","q2":"Why doesn't X work?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0069","q1":"What did the test pass?","q2":"What did the test fail?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0070","q1":"Where is X allowed?","q2":"Where is X forbidden?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0071","q1":"How do I include this?","q2":"How do I exclude this?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0072","q1":"When does this fire?","q2":"When does this not fire?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0073","q1":"Why is this safe?","q2":"Why is this unsafe?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0074","q1":"What can X do?","q2":"What can X not do?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0075","q1":"Should I use X?","q2":"Should I not use X?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0076","q1":"What is the input to the parser?","q2":"What is the output of the parser?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0077","q1":"Who wrote the test?","q2":"Who wrote the implementation?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0078","q1":"What did the request return?","q2":"What did the request send?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0079","q1":"Where does the user data go?","q2":"Where does the system data go?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0080","q1":"What was the error message?","q2":"What was the success message?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0081","q1":"What is the source of X?","q2":"What is the destination of X?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0082","q1":"How does the client handle this?","q2":"How does the server handle this?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0083","q1":"What did Alice change?","q2":"What did Bob change?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0084","q1":"What is the head pointer?","q2":"What is the tail pointer?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0085","q1":"Where is the read lock?","q2":"Where is the write lock?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0086","q1":"What is X?","q2":"Why is X?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0087","q1":"How does X work?","q2":"Why does X work?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0088","q1":"When does this fire?","q2":"Where does this fire?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0089","q1":"Who wrote this?","q2":"When was this written?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0090","q1":"What is the default?","q2":"Why is this the default?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0091","q1":"How do I configure X?","q2":"Where do I configure X?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0092","q1":"Who can access this?","q2":"How can someone access this?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0093","q1":"When did X break?","q2":"Why did X break?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0094","q1":"Where is the bug?","q2":"What is the bug?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0095","q1":"How did this happen?","q2":"Who made this happen?","label":"separate","category":"different_question_word","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0096","q1":"What is X?","q2":"What is X always?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0097","q1":"What does the function do?","q2":"What does every function do?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0098","q1":"Is X true?","q2":"Is X sometimes true?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0099","q1":"How do I run this?","q2":"How do I always run this?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0100","q1":"What can fail?","q2":"What must fail?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0101","q1":"Where is X stored?","q2":"Where is X uniquely stored?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0102","q1":"What works?","q2":"What works sometimes?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0103","q1":"Does X cause Y?","q2":"Does X always cause Y?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0104","q1":"What is needed?","q2":"What is exclusively needed?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0105","q1":"Who can edit?","q2":"Who can only edit?","label":"separate","category":"different_scope","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0106","q1":"What does X do?","q2":"What did X do?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0107","q1":"What is X doing?","q2":"What was X doing?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0108","q1":"How does this work?","q2":"How did this work?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0109","q1":"Why does this fail?","q2":"Why is this failing?","label":"merge","category":"inflection","subcategory":"present_simple_vs_continuous","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0110","q1":"What is X configured for?","q2":"What was X configured for?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0111","q1":"How do I set this up?","q2":"How was this set up?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0112","q1":"What runs on startup?","q2":"What ran on startup?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0113","q1":"Why does X behave this way?","q2":"Why was X behaving this way?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0114","q1":"Where does logging happen?","q2":"Where did logging happen?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0115","q1":"What handles errors now?","q2":"What handled errors before?","label":"separate","category":"different_aspect","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0116","q1":"What is X?","q2":"What is X in Python?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0117","q1":"How do I install this?","q2":"How do I install this on Ubuntu?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0118","q1":"What does the parser do?","q2":"What does the parser do for JSON input?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0119","q1":"Where is the error?","q2":"Where is the error in the auth code?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0120","q1":"What is the timeout?","q2":"What is the timeout in production?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0121","q1":"How do I fix Python errors?","q2":"How do I fix errors?","label":"separate","category":"granularity_broadening","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0122","q1":"What does the JSON parser do?","q2":"What does the parser do?","label":"separate","category":"granularity_broadening","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0123","q1":"How do I deploy to production?","q2":"How do I deploy?","label":"separate","category":"granularity_broadening","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0124","q1":"What enables this feature?","q2":"What disables this feature?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0125","q1":"How do I add this?","q2":"How do I remove this?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0126","q1":"Why does the test pass?","q2":"Why does the test fail?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0127","q1":"When does X start?","q2":"When does X stop?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0128","q1":"Where can I read this?","q2":"Where can I write this?","label":"separate","category":"different_referent","subcategory":"read_vs_write","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0129","q1":"How do I expose this?","q2":"How do I hide this?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0130","q1":"What grants access?","q2":"What revokes access?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0131","q1":"How do I commit this?","q2":"How do I rollback this?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0132","q1":"What enables logging?","q2":"What suppresses logging?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0133","q1":"How do I authenticate?","q2":"How do I deauthenticate?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0134","q1":"What does the producer emit?","q2":"What does the consumer receive?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0135","q1":"How does the encoder work?","q2":"How does the decoder work?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0136","q1":"Where is the request stored?","q2":"Where is the response stored?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0137","q1":"What did the worker process?","q2":"What did the dispatcher route?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0138","q1":"What is the input format?","q2":"What is the output format?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0139","q1":"Where does GET land?","q2":"Where does POST land?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0140","q1":"Who can read?","q2":"Who can write?","label":"separate","category":"different_referent","subcategory":"read_vs_write","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0141","q1":"What is the hot path?","q2":"What is the cold path?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0142","q1":"How does the leader decide?","q2":"How does the follower decide?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0143","q1":"What goes into the cache?","q2":"What comes out of the cache?","label":"separate","category":"different_referent","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0144","q1":"What is the API?","q2":"Where is the API?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0145","q1":"How does the system fail?","q2":"When does the system fail?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0146","q1":"Why was this added?","q2":"When was this added?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0147","q1":"How does X work?","q2":"Where does X work?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0148","q1":"What is the limit?","q2":"Why is there a limit?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0149","q1":"What is breaking?","q2":"Where is it breaking?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0150","q1":"Who is the owner?","q2":"What is the owner?","label":"separate","category":"different_question_word","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0151","q1":"What does this return?","q2":"What does this always return?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0152","q1":"Is this safe?","q2":"Is this universally safe?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0153","q1":"Can this run?","q2":"Can this only run?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0154","q1":"Where can this fire?","q2":"Where can this exclusively fire?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0155","q1":"What does X store?","q2":"What does X uniquely store?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0156","q1":"Is this allowed?","q2":"Is this only allowed?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0157","q1":"Does X trigger Y?","q2":"Does X always trigger Y?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0158","q1":"When can I retry?","q2":"When must I retry?","label":"separate","category":"different_scope","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0159","q1":"What does the build emit?","q2":"What did the build emit?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0160","q1":"How are tests passing?","q2":"How were tests passing?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0161","q1":"What runs?","q2":"What ran?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0162","q1":"Where is X served?","q2":"Where was X served?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0163","q1":"How is X stored?","q2":"How was X stored?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0164","q1":"What handles errors?","q2":"What handled errors?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0165","q1":"Why does it fail?","q2":"Why was it failing?","label":"merge","category":"inflection","subcategory":"present_simple_vs_continuous","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0166","q1":"What works?","q2":"What worked?","label":"separate","category":"different_aspect","provenance":"hard_negative","version":"v1"}
+{"id":"cor_v1_0167","q1":"How do I install a package?","q2":"How are packages installed?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0168","q1":"What does the linter check?","q2":"What is the linter checking?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0169","q1":"Where does the test write its output?","q2":"Where do tests write their output?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0170","q1":"What gets cached?","q2":"What is cached?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0171","q1":"How do builds fail?","q2":"How does the build fail?","label":"merge","category":"inflection","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0172","q1":"What does the compiler emit?","q2":"What is emitted by the compiler?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0173","q1":"How does the GC reclaim memory?","q2":"How is memory reclaimed by the GC?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0174","q1":"Where does the migration write?","q2":"Where is data written by the migration?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0175","q1":"What did the merge resolve?","q2":"What was resolved by the merge?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0176","q1":"How does the loader parse imports?","q2":"How are imports parsed by the loader?","label":"merge","category":"voice","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0177","q1":"When does the cron fire, exactly?","q2":"Exactly when does the cron fire?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0178","q1":"If errors happen, where do logs go?","q2":"Where do logs go if errors happen?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0179","q1":"On retry, what changes?","q2":"What changes on retry?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0180","q1":"After deploy, where is X?","q2":"Where is X after deploy?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0181","q1":"In production, what's the timeout?","q2":"What's the timeout in production?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0182","q1":"With caching enabled, how does this scale?","q2":"How does this scale with caching enabled?","label":"merge","category":"word_order","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0183","q1":"Where's the source?","q2":"Where is the source?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0184","q1":"Aren't these tests passing?","q2":"Are these tests not passing?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0185","q1":"It's working, isn't it?","q2":"It is working, is it not?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0186","q1":"They've fixed it","q2":"They have fixed it","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0187","q1":"What's the migration plan?","q2":"What is the migration plan?","label":"merge","category":"contractions","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0188","q1":"How do I configure auth?","q2":"how do i configure auth?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0189","q1":"Why does this leak memory?","q2":"why does this leak memory","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0190","q1":"What does the API return?","q2":"WHAT DOES THE API RETURN?","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0191","q1":"Where do retries happen?","q2":"Where do retries happen?!","label":"merge","category":"surface_form","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0192","q1":"Sorry, where is the docs?","q2":"Where is the docs?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0193","q1":"Hey team, what's the status?","q2":"What's the status?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0194","q1":"Quick q: how do I deploy?","q2":"How do I deploy?","label":"merge","category":"filler_politeness","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0195","q1":"What is X for newcomers?","q2":"What is X?","label":"separate","category":"granularity_narrowing","provenance":"hand_curated","version":"v1"}
+{"id":"cor_v1_0196","q1":"What is the deadline?","q2":"What is not the deadline?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0197","q1":"Where is the config file?","q2":"Where is not the config file?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0198","q1":"Why does this leak memory?","q2":"Why does not this leak memory?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0199","q1":"When does the cron fire?","q2":"When does not the cron fire?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0200","q1":"Where does the build write output?","q2":"Where does not the build write output?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0201","q1":"Why does this test fail intermittently?","q2":"Why does not this test fail intermittently?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0202","q1":"How does the auth flow work?","q2":"How does not the auth flow work?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0203","q1":"Why is this query slow?","q2":"Why is not this query slow?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0204","q1":"Where is the API rate limit set?","q2":"Where is not the API rate limit set?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0205","q1":"Why does X happen?","q2":"Why does not X happen?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0206","q1":"What does the linter check?","q2":"What does not the linter check?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0207","q1":"Where is the migration applied?","q2":"Where is not the migration applied?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0208","q1":"Why does the worker hang?","q2":"Why does not the worker hang?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0209","q1":"What is the retry policy?","q2":"What is not the retry policy?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0210","q1":"How does the scheduler decide?","q2":"How does not the scheduler decide?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0211","q1":"Where does state persist?","q2":"Where does not state persist?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0212","q1":"Why does the dashboard refresh?","q2":"Why does not the dashboard refresh?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0213","q1":"What can the parser handle?","q2":"What cannot the parser handle?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0214","q1":"Where can I read the spec?","q2":"Where cannot I read the spec?","label":"separate","category":"negation","subcategory":"polarity_inversion","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0215","q1":"How do I enable caching?","q2":"How do I disable caching?","label":"separate","category":"negation","subcategory":"antonym_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0216","q1":"Why does this test fail intermittently?","q2":"Why does this test pass intermittently?","label":"separate","category":"negation","subcategory":"antonym_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0217","q1":"How do builds pass on CI?","q2":"How do builds fail on CI?","label":"separate","category":"negation","subcategory":"antonym_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0218","q1":"What is the deadline?","q2":"What was the deadline?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0219","q1":"How do I install dependencies?","q2":"How did I install dependencies?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0220","q1":"Where is the config file?","q2":"Where was the config file?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0221","q1":"Why does this leak memory?","q2":"Why did this leak memory?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0222","q1":"How do I enable caching?","q2":"How did I enable caching?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0223","q1":"When does the cron fire?","q2":"When did the cron fire?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0224","q1":"Where does the build write output?","q2":"Where did the build write output?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0225","q1":"Why does this test fail intermittently?","q2":"Why did this test fail intermittently?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0226","q1":"How does the auth flow work?","q2":"How did the auth flow work?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0227","q1":"Where do logs go?","q2":"Where did logs go?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0228","q1":"Why is this query slow?","q2":"Why was this query slow?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0229","q1":"How do builds pass on CI?","q2":"How did builds pass on CI?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0230","q1":"Where is the API rate limit set?","q2":"Where was the API rate limit set?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0231","q1":"Why does X happen?","q2":"Why did X happen?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0232","q1":"What does the linter check?","q2":"What did the linter check?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0233","q1":"How do I run tests locally?","q2":"How did I run tests locally?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0234","q1":"Where is the migration applied?","q2":"Where was the migration applied?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0235","q1":"Why does the worker hang?","q2":"Why did the worker hang?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0236","q1":"What is the retry policy?","q2":"What was the retry policy?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0237","q1":"How does the scheduler decide?","q2":"How did the scheduler decide?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0238","q1":"Where does state persist?","q2":"Where did state persist?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0239","q1":"Why does the dashboard refresh?","q2":"Why did the dashboard refresh?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0240","q1":"How do I commit this?","q2":"How did I commit this?","label":"separate","category":"different_aspect","subcategory":"tense_flip","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0241","q1":"What is the deadline?","q2":"What is the deadline always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0242","q1":"How do I install dependencies?","q2":"How do I install dependencies always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0243","q1":"Where is the config file?","q2":"Where is the config file always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0244","q1":"Why does this leak memory?","q2":"Why does this leak memory always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0245","q1":"What's the deploy timeout?","q2":"What's the deploy timeout always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0246","q1":"How do I enable caching?","q2":"How do I enable caching always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0247","q1":"When does the cron fire?","q2":"When does the cron fire always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0248","q1":"Where does the build write output?","q2":"Where does the build write output always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0249","q1":"Why does this test fail intermittently?","q2":"Why does this test fail intermittently always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0250","q1":"What runs on startup?","q2":"What runs on startup always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0251","q1":"How does the auth flow work?","q2":"How does the auth flow work always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0252","q1":"Where do logs go?","q2":"Where do logs go always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0253","q1":"Why is this query slow?","q2":"Why is this query slow always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0254","q1":"What handles cache invalidation?","q2":"What handles cache invalidation always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0255","q1":"How do builds pass on CI?","q2":"How do builds pass on CI always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0256","q1":"Where is the API rate limit set?","q2":"Where is the API rate limit set always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0257","q1":"Why does X happen?","q2":"Why does X happen always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0258","q1":"What does the linter check?","q2":"What does the linter check always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0259","q1":"How do I run tests locally?","q2":"How do I run tests locally always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0260","q1":"Where is the migration applied?","q2":"Where is the migration applied always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0261","q1":"Why does the worker hang?","q2":"Why does the worker hang always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0262","q1":"What is the retry policy?","q2":"What is the retry policy always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0263","q1":"How does the scheduler decide?","q2":"How does the scheduler decide always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0264","q1":"Where does state persist?","q2":"Where does state persist always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0265","q1":"Why does the dashboard refresh?","q2":"Why does the dashboard refresh always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0266","q1":"What can the parser handle?","q2":"What can the parser handle always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0267","q1":"How do I commit this?","q2":"How do I commit this always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0268","q1":"Where can I read the spec?","q2":"Where can I read the spec always?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0269","q1":"What is the deadline?","q2":"What is the deadline only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0270","q1":"How do I install dependencies?","q2":"How do I install dependencies only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0271","q1":"Where is the config file?","q2":"Where is the config file only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0272","q1":"Why does this leak memory?","q2":"Why does this leak memory only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0273","q1":"What's the deploy timeout?","q2":"What's the deploy timeout only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0274","q1":"How do I enable caching?","q2":"How do I enable caching only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0275","q1":"When does the cron fire?","q2":"When does the cron fire only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0276","q1":"Where does the build write output?","q2":"Where does the build write output only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0277","q1":"Why does this test fail intermittently?","q2":"Why does this test fail intermittently only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0278","q1":"What runs on startup?","q2":"What runs on startup only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0279","q1":"How does the auth flow work?","q2":"How does the auth flow work only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0280","q1":"Where do logs go?","q2":"Where do logs go only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0281","q1":"Why is this query slow?","q2":"Why is this query slow only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0282","q1":"What handles cache invalidation?","q2":"What handles cache invalidation only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0283","q1":"How do builds pass on CI?","q2":"How do builds pass on CI only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0284","q1":"Where is the API rate limit set?","q2":"Where is the API rate limit set only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0285","q1":"Why does X happen?","q2":"Why does X happen only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0286","q1":"What does the linter check?","q2":"What does the linter check only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0287","q1":"How do I run tests locally?","q2":"How do I run tests locally only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0288","q1":"Where is the migration applied?","q2":"Where is the migration applied only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0289","q1":"Why does the worker hang?","q2":"Why does the worker hang only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0290","q1":"What is the retry policy?","q2":"What is the retry policy only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0291","q1":"How does the scheduler decide?","q2":"How does the scheduler decide only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0292","q1":"Where does state persist?","q2":"Where does state persist only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0293","q1":"Why does the dashboard refresh?","q2":"Why does the dashboard refresh only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0294","q1":"What can the parser handle?","q2":"What can the parser handle only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0295","q1":"How do I commit this?","q2":"How do I commit this only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0296","q1":"Where can I read the spec?","q2":"Where can I read the spec only?","label":"separate","category":"different_scope","subcategory":"added_quantifier","provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0297","q1":"What is the deadline?","q2":"WHAT IS THE DEADLINE?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0298","q1":"How do I install dependencies?","q2":"HOW DO I INSTALL DEPENDENCIES?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0299","q1":"Where is the config file?","q2":"WHERE IS THE CONFIG FILE?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0300","q1":"Why does this leak memory?","q2":"WHY DOES THIS LEAK MEMORY?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0301","q1":"What's the deploy timeout?","q2":"WHAT'S THE DEPLOY TIMEOUT?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0302","q1":"How do I enable caching?","q2":"HOW DO I ENABLE CACHING?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0303","q1":"When does the cron fire?","q2":"WHEN DOES THE CRON FIRE?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0304","q1":"Where does the build write output?","q2":"WHERE DOES THE BUILD WRITE OUTPUT?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0305","q1":"Why does this test fail intermittently?","q2":"WHY DOES THIS TEST FAIL INTERMITTENTLY?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0306","q1":"What runs on startup?","q2":"WHAT RUNS ON STARTUP?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0307","q1":"How does the auth flow work?","q2":"HOW DOES THE AUTH FLOW WORK?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0308","q1":"Where do logs go?","q2":"WHERE DO LOGS GO?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0309","q1":"Why is this query slow?","q2":"WHY IS THIS QUERY SLOW?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0310","q1":"What handles cache invalidation?","q2":"WHAT HANDLES CACHE INVALIDATION?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0311","q1":"How do builds pass on CI?","q2":"HOW DO BUILDS PASS ON CI?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0312","q1":"Where is the API rate limit set?","q2":"WHERE IS THE API RATE LIMIT SET?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0313","q1":"Why does X happen?","q2":"WHY DOES X HAPPEN?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0314","q1":"What does the linter check?","q2":"WHAT DOES THE LINTER CHECK?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0315","q1":"How do I run tests locally?","q2":"HOW DO I RUN TESTS LOCALLY?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0316","q1":"Where is the migration applied?","q2":"WHERE IS THE MIGRATION APPLIED?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0317","q1":"Why does the worker hang?","q2":"WHY DOES THE WORKER HANG?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0318","q1":"What is the retry policy?","q2":"WHAT IS THE RETRY POLICY?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0319","q1":"How does the scheduler decide?","q2":"HOW DOES THE SCHEDULER DECIDE?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0320","q1":"Where does state persist?","q2":"WHERE DOES STATE PERSIST?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0321","q1":"Why does the dashboard refresh?","q2":"WHY DOES THE DASHBOARD REFRESH?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0322","q1":"What can the parser handle?","q2":"WHAT CAN THE PARSER HANDLE?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0323","q1":"How do I commit this?","q2":"HOW DO I COMMIT THIS?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0324","q1":"Where can I read the spec?","q2":"WHERE CAN I READ THE SPEC?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0325","q1":"How do I install dependencies?","q2":"how do i install dependencies?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0326","q1":"Where is the config file?","q2":"where is the config file?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0327","q1":"Why does this leak memory?","q2":"why does this leak memory?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0328","q1":"What's the deploy timeout?","q2":"what's the deploy timeout?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0329","q1":"How do I enable caching?","q2":"how do i enable caching?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0330","q1":"When does the cron fire?","q2":"when does the cron fire?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0331","q1":"Where does the build write output?","q2":"where does the build write output?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0332","q1":"Why does this test fail intermittently?","q2":"why does this test fail intermittently?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0333","q1":"What runs on startup?","q2":"what runs on startup?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0334","q1":"How does the auth flow work?","q2":"how does the auth flow work?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0335","q1":"Where do logs go?","q2":"where do logs go?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0336","q1":"Why is this query slow?","q2":"why is this query slow?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0337","q1":"What handles cache invalidation?","q2":"what handles cache invalidation?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0338","q1":"How do builds pass on CI?","q2":"how do builds pass on ci?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0339","q1":"Where is the API rate limit set?","q2":"where is the api rate limit set?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0340","q1":"Why does X happen?","q2":"why does x happen?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0341","q1":"What does the linter check?","q2":"what does the linter check?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0342","q1":"How do I run tests locally?","q2":"how do i run tests locally?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0343","q1":"Where is the migration applied?","q2":"where is the migration applied?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0344","q1":"Why does the worker hang?","q2":"why does the worker hang?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0345","q1":"What is the retry policy?","q2":"what is the retry policy?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0346","q1":"How does the scheduler decide?","q2":"how does the scheduler decide?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0347","q1":"Where does state persist?","q2":"where does state persist?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0348","q1":"Why does the dashboard refresh?","q2":"why does the dashboard refresh?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0349","q1":"What can the parser handle?","q2":"what can the parser handle?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0350","q1":"How do I commit this?","q2":"how do i commit this?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0351","q1":"Where can I read the spec?","q2":"where can i read the spec?","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0352","q1":"What is the deadline?","q2":"What is the deadline?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0353","q1":"How do I install dependencies?","q2":"How do I install dependencies?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0354","q1":"Why does this leak memory?","q2":"Why does this leak memory?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0355","q1":"What's the deploy timeout?","q2":"What's the deploy timeout?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0356","q1":"How do I enable caching?","q2":"How do I enable caching?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0357","q1":"When does the cron fire?","q2":"When does the cron fire?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0358","q1":"Where does the build write output?","q2":"Where does the build write output?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0359","q1":"Why does this test fail intermittently?","q2":"Why does this test fail intermittently?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0360","q1":"What runs on startup?","q2":"What runs on startup?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0361","q1":"How does the auth flow work?","q2":"How does the auth flow work?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0362","q1":"Where do logs go?","q2":"Where do logs go?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0363","q1":"Why is this query slow?","q2":"Why is this query slow?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0364","q1":"What handles cache invalidation?","q2":"What handles cache invalidation?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0365","q1":"How do builds pass on CI?","q2":"How do builds pass on CI?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0366","q1":"Where is the API rate limit set?","q2":"Where is the API rate limit set?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0367","q1":"Why does X happen?","q2":"Why does X happen?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0368","q1":"What does the linter check?","q2":"What does the linter check?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0369","q1":"How do I run tests locally?","q2":"How do I run tests locally?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0370","q1":"Where is the migration applied?","q2":"Where is the migration applied?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0371","q1":"Why does the worker hang?","q2":"Why does the worker hang?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0372","q1":"What is the retry policy?","q2":"What is the retry policy?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0373","q1":"How does the scheduler decide?","q2":"How does the scheduler decide?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0374","q1":"Where does state persist?","q2":"Where does state persist?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0375","q1":"Why does the dashboard refresh?","q2":"Why does the dashboard refresh?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0376","q1":"What can the parser handle?","q2":"What can the parser handle?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0377","q1":"How do I commit this?","q2":"How do I commit this?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0378","q1":"Where can I read the spec?","q2":"Where can I read the spec?  ","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0379","q1":"What is the deadline?","q2":"What is the deadline?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0380","q1":"How do I install dependencies?","q2":"How do I install dependencies?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0381","q1":"Where is the config file?","q2":"Where is the config file?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0382","q1":"Why does this leak memory?","q2":"Why does this leak memory?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0383","q1":"What's the deploy timeout?","q2":"What's the deploy timeout?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0384","q1":"How do I enable caching?","q2":"How do I enable caching?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0385","q1":"When does the cron fire?","q2":"When does the cron fire?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0386","q1":"Where does the build write output?","q2":"Where does the build write output?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0387","q1":"Why does this test fail intermittently?","q2":"Why does this test fail intermittently?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0388","q1":"What runs on startup?","q2":"What runs on startup?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0389","q1":"How does the auth flow work?","q2":"How does the auth flow work?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0390","q1":"Where do logs go?","q2":"Where do logs go?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0391","q1":"Why is this query slow?","q2":"Why is this query slow?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0392","q1":"What handles cache invalidation?","q2":"What handles cache invalidation?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0393","q1":"How do builds pass on CI?","q2":"How do builds pass on CI?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0394","q1":"Where is the API rate limit set?","q2":"Where is the API rate limit set?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0395","q1":"Why does X happen?","q2":"Why does X happen?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0396","q1":"What does the linter check?","q2":"What does the linter check?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0397","q1":"How do I run tests locally?","q2":"How do I run tests locally?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0398","q1":"Where is the migration applied?","q2":"Where is the migration applied?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0399","q1":"Why does the worker hang?","q2":"Why does the worker hang?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0400","q1":"What is the retry policy?","q2":"What is the retry policy?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0401","q1":"How does the scheduler decide?","q2":"How does the scheduler decide?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0402","q1":"Where does state persist?","q2":"Where does state persist?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0403","q1":"Why does the dashboard refresh?","q2":"Why does the dashboard refresh?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0404","q1":"What can the parser handle?","q2":"What can the parser handle?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0405","q1":"How do I commit this?","q2":"How do I commit this?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0406","q1":"Where can I read the spec?","q2":"Where can I read the spec?!","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0407","q1":"What is the deadline?","q2":"What is the deadline","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0408","q1":"How do I install dependencies?","q2":"How do I install dependencies","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0409","q1":"Where is the config file?","q2":"Where is the config file","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0410","q1":"Why does this leak memory?","q2":"Why does this leak memory","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0411","q1":"What's the deploy timeout?","q2":"What's the deploy timeout","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0412","q1":"How do I enable caching?","q2":"How do I enable caching","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0413","q1":"When does the cron fire?","q2":"When does the cron fire","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0414","q1":"Where does the build write output?","q2":"Where does the build write output","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0415","q1":"Why does this test fail intermittently?","q2":"Why does this test fail intermittently","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0416","q1":"What runs on startup?","q2":"What runs on startup","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0417","q1":"How does the auth flow work?","q2":"How does the auth flow work","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0418","q1":"Where do logs go?","q2":"Where do logs go","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0419","q1":"Why is this query slow?","q2":"Why is this query slow","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0420","q1":"What handles cache invalidation?","q2":"What handles cache invalidation","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0421","q1":"How do builds pass on CI?","q2":"How do builds pass on CI","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0422","q1":"Where is the API rate limit set?","q2":"Where is the API rate limit set","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0423","q1":"Why does X happen?","q2":"Why does X happen","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0424","q1":"What does the linter check?","q2":"What does the linter check","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0425","q1":"How do I run tests locally?","q2":"How do I run tests locally","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0426","q1":"Where is the migration applied?","q2":"Where is the migration applied","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0427","q1":"Why does the worker hang?","q2":"Why does the worker hang","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0428","q1":"What is the retry policy?","q2":"What is the retry policy","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0429","q1":"How does the scheduler decide?","q2":"How does the scheduler decide","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0430","q1":"Where does state persist?","q2":"Where does state persist","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0431","q1":"Why does the dashboard refresh?","q2":"Why does the dashboard refresh","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0432","q1":"What can the parser handle?","q2":"What can the parser handle","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0433","q1":"How do I commit this?","q2":"How do I commit this","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0434","q1":"Where can I read the spec?","q2":"Where can I read the spec","label":"merge","category":"surface_form","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0435","q1":"What's the deploy timeout?","q2":"what is the deploy timeout?","label":"merge","category":"contractions","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0436","q1":"What is the deadline?","q2":"Hey, what is the deadline?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0437","q1":"How do I install dependencies?","q2":"Hey, how do I install dependencies?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0438","q1":"Where is the config file?","q2":"Hey, where is the config file?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0439","q1":"Why does this leak memory?","q2":"Hey, why does this leak memory?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0440","q1":"What's the deploy timeout?","q2":"Hey, what's the deploy timeout?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0441","q1":"How do I enable caching?","q2":"Hey, how do I enable caching?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0442","q1":"When does the cron fire?","q2":"Hey, when does the cron fire?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0443","q1":"Where does the build write output?","q2":"Hey, where does the build write output?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0444","q1":"Why does this test fail intermittently?","q2":"Hey, why does this test fail intermittently?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}
+{"id":"cor_v1_0445","q1":"What runs on startup?","q2":"Hey, what runs on startup?","label":"merge","category":"filler_politeness","subcategory":null,"provenance":"llm_synth","version":"v1"}

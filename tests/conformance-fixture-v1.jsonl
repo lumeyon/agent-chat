@@ -1,0 +1,46 @@
+{"input":"What is the deadline?","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"WHAT IS THE DEADLINE?","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"what is the deadline?","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"  What is the deadline?  ","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"What is the deadline?!?!","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"What is the deadline","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"What  is   the    deadline?","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"What's the issue?","normalized":"what is the bug","canonical_id":"v1:0ca083d943d59c0f"}
+{"input":"Don't we need auth?","normalized":"do not we need auth","canonical_id":"v1:37890beebb17b14b"}
+{"input":"I'm seeing an error","normalized":"i am see an error","canonical_id":"v1:629dc504a88e3aa9"}
+{"input":"It's working, isn't it?","normalized":"it is working, is not it","canonical_id":"v1:74dfbb44850ca5f5"}
+{"input":"Hey, what is X?","normalized":"what is x","canonical_id":"v1:a76d9ac6f7678d22"}
+{"input":"Please, what is X?","normalized":"what is x","canonical_id":"v1:a76d9ac6f7678d22"}
+{"input":"Just curious, what is X?","normalized":"what is x","canonical_id":"v1:a76d9ac6f7678d22"}
+{"input":"Sorry, what does this do?","normalized":"what doe thi do","canonical_id":"v1:1f5efd8f981cfca8"}
+{"input":"What's the status, thanks?","normalized":"what is the status,","canonical_id":"v1:eec7a8f3a6c9e599"}
+{"input":"WTF is X?","normalized":"what is x","canonical_id":"v1:a76d9ac6f7678d22"}
+{"input":"Why the hell is this broken?","normalized":"why is thi broken","canonical_id":"v1:320a512f80306886"}
+{"input":"How do I, like, set this up?","normalized":"how do i set thi up","canonical_id":"v1:fe2e1b09da0349cb"}
+{"input":"In production, what is the timeout?","normalized":"what is the timeout","canonical_id":"v1:1e27bdab9d63f9cd"}
+{"input":"What is the timeout in production?","normalized":"what is the timeout","canonical_id":"v1:1e27bdab9d63f9cd"}
+{"input":"On Linux, where is the config?","normalized":"where is the config","canonical_id":"v1:927f2c18e869274b"}
+{"input":"Where is the config on Linux?","normalized":"where is the config","canonical_id":"v1:927f2c18e869274b"}
+{"input":"By default, what is the value?","normalized":"what is the value","canonical_id":"v1:0a003f613d5af71f"}
+{"input":"What is the value by default?","normalized":"what is the value","canonical_id":"v1:0a003f613d5af71f"}
+{"input":"What does this method do?","normalized":"what doe thi func do","canonical_id":"v1:8cd9a93da4266436"}
+{"input":"What does this function do?","normalized":"what doe thi func do","canonical_id":"v1:8cd9a93da4266436"}
+{"input":"How do I fix this defect?","normalized":"how do i fix thi bug","canonical_id":"v1:805d213d39ee122e"}
+{"input":"How do I fix this bug?","normalized":"how do i fix thi bug","canonical_id":"v1:805d213d39ee122e"}
+{"input":"How do I resolve this issue?","normalized":"how do i fix thi bug","canonical_id":"v1:805d213d39ee122e"}
+{"input":"What causes errors?","normalized":"what cause error","canonical_id":"v1:df4c294349710a9a"}
+{"input":"What is causing the error?","normalized":"what is caus the error","canonical_id":"v1:4a9e5700b1302b02"}
+{"input":"How do tests pass?","normalized":"how do test pas","canonical_id":"v1:fae6421ecd32bc11"}
+{"input":"How does the test pass?","normalized":"how doe the test pas","canonical_id":"v1:8567ea4241ab3ba4"}
+{"input":"X?","normalized":"x","canonical_id":"v1:2d711642b726b044"}
+{"input":"?","normalized":"","canonical_id":"v1:e3b0c44298fc1c14"}
+{"input":"","normalized":"","canonical_id":"v1:e3b0c44298fc1c14"}
+{"input":"WHAT'S THE DEAL, ANYWAY???","normalized":"what is the deal,","canonical_id":"v1:76825b1642ac9069"}
+{"input":"  hey,  what's the deal??  ","normalized":"what is the deal","canonical_id":"v1:d471012bdd98dddb"}
+{"input":"What is the deadline?​","normalized":"what is the deadline?​","canonical_id":"v1:9ff7d226c4c7b6e1"}
+{"input":"What is the deadline?","normalized":"what is the deadline","canonical_id":"v1:09a68b7a78470b1b"}
+{"input":"In production, on Linux, what is the timeout?","normalized":"what is the timeout","canonical_id":"v1:1e27bdab9d63f9cd"}
+{"input":"How do I install dependencies?","normalized":"how do i install dependency","canonical_id":"v1:ece2467089222aab"}
+{"input":"Where is the config file?","normalized":"where is the config file","canonical_id":"v1:624caaf386dc6db6"}
+{"input":"Why does this leak memory?","normalized":"why doe thi leak memory","canonical_id":"v1:1ed7a86576fbf6be"}
+{"input":"What runs on startup?","normalized":"what run on startup","canonical_id":"v1:28d4ad6206417421"}

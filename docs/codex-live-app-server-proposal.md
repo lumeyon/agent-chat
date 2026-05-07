@@ -73,7 +73,7 @@ Cross-runtime integration test: `005c6a7` Phase A 16/16 PASS
 That is enough for autonomous batch service mode, but it is not equivalent
 to Claude Code's Monitor-style live session behavior. A service can create
 a fresh Codex invocation as `lumeyon`; it cannot inject work into the
-already-open Lumeyon Codex terminal session. That distinction is what caused
+already-open lumeyon Codex terminal session. That distinction is what caused
 the presence-conflict guard: two processes writing as the same graph identity
 produce a confusing audit trail.
 
@@ -106,7 +106,7 @@ for a live agent-chat runtime.
 | Option | Shape | Strength | Weakness |
 | --- | --- | --- | --- |
 | Continue `codex exec` | `autowatch` launches fresh non-interactive Codex turns | Already implemented; good for systemd and CI | Not a live session; no injection into the current terminal |
-| Run Lumeyon in `pi-agent` | Pi hosts a Codex model and uses Pi `steer()`/`followUp()` hooks | Clean live injection primitive today | Lumeyon becomes Pi-hosted, not native Codex CLI |
+| Run lumeyon in `pi-agent` | Pi hosts a Codex model and uses Pi `steer()`/`followUp()` hooks | Clean live injection primitive today | lumeyon becomes Pi-hosted, not native Codex CLI |
 | Use Codex app-server | Watch graph files and call `turn/start` / `turn/steer` / `thread/inject_items` | Native Codex live-thread control, compatible with TUI as a client | Requires a JSON-RPC client and lifecycle management |
 
 Recommendation: keep `codex exec` as the fallback runtime, and add Codex
@@ -119,7 +119,7 @@ the plugin architecture.
 
 ## Proposed Runtime Shape
 
-Run Lumeyon as an app-server-backed Codex thread, with a long-lived
+Run lumeyon as an app-server-backed Codex thread, with a long-lived
 agent-chat controller preserving the app-server connection:
 
 ```text
@@ -162,8 +162,8 @@ An optional terminal UI can attach to the same server:
 codex --remote ws://127.0.0.1:8765
 ```
 
-The watcher is no longer pretending to be a second Lumeyon. It is the
-controller for the Lumeyon Codex thread. `cmdRun` remains the only graph writer
+The watcher is no longer pretending to be a second lumeyon. It is the
+controller for the lumeyon Codex thread. `cmdRun` remains the only graph writer
 for normal runtime turns.
 
 This avoids the one-shot trap: if `codex-app.ts dispatch()` directly called
@@ -179,7 +179,7 @@ returns assistant output to `cmdRun`.
    - Remote/IDE mode can use `ws://`.
    - The controller publishes its local endpoint in presence metadata.
 
-2. Create or resume the Lumeyon thread.
+2. Create or resume the lumeyon thread.
    - Use `thread/start` for a new app-server-owned thread.
    - Persist `threadId` in controller state and agent-chat presence/session
      metadata.
@@ -214,7 +214,7 @@ returns assistant output to `cmdRun`.
      local endpoint from presence metadata.
 
 6. Deliver work to Codex.
-   - If the Lumeyon thread is idle, call `turn/start` with the same prompt
+   - If the lumeyon thread is idle, call `turn/start` with the same prompt
      body `cmdRun` currently sends to runtime adapters.
    - If a regular turn is active, call `turn/steer` with `expectedTurnId`.
    - If context should be visible to the model without triggering a new turn,
@@ -247,7 +247,7 @@ record:
 }
 ```
 
-In this mode, the app-server thread is the live Lumeyon session. The watcher
+In this mode, the app-server thread is the live lumeyon session. The watcher
 is a controller for that session, not a second writer. Existing autowatch
 presence-conflict rules should continue to reject a separate `codex exec`
 or Claude process claiming the same agent while this record is live.
@@ -317,8 +317,8 @@ app-server JSON-RPC path does.
 8. Add one manual smoke:
    - start `codex app-server --listen unix://...`,
    - start `agent-chat codex-app-watch lumeyon petersen --peer orion`,
-   - flip Orion -> Lumeyon,
-   - verify the Lumeyon app-server thread receives the work and writes back to
+   - flip Orion -> lumeyon,
+   - verify the lumeyon app-server thread receives the work and writes back to
      the same `CONVO.md` edge.
 
 ## Pressure-Test Decisions

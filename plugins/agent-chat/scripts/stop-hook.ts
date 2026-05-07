@@ -289,6 +289,40 @@ async function main(): Promise<void> {
     }
   }
 
+  // 4) Import this edge's CONVO.md + sealed archives into the global
+  //    Inquiry Lattice's Question/Answer store at <conv>/lattice.db.
+  //    Idempotent (canonical_id-keyed dedup), so re-runs are safe.
+  //    Detached so the import never blocks the response cycle.
+  //
+  //    The import-from-kg.ts script lives at REPO_ROOT/scripts/lattice/
+  //    (top-level, not plugin-internal — the lattice protocol is a public
+  //    cross-runtime concern). Resolve the path relative to SCRIPT_DIR.
+  if (edgeId && cwdState) {
+    try {
+      // <plugin>/scripts → ../../../scripts/lattice/import-from-kg.ts
+      const importBin = path.join(SCRIPT_DIR, "..", "..", "..", "scripts", "lattice", "import-from-kg.ts");
+      const edgeDirPath = path.join(CONV_DIR, cwdState.topology, edgeId);
+      const child = child_process.spawn(
+        "bun",
+        [importBin, edgeDirPath],
+        {
+          cwd: hookCwd,
+          env: {
+            ...process.env,
+            AGENT_CHAT_CONVERSATIONS_DIR: CONV_DIR,
+            AGENT_CHAT_LATTICE_DB: path.join(CONV_DIR, "lattice.db"),
+          },
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      child.unref();
+      log(`lattice import for ${edgeId} launched detached (pid=${child.pid})`);
+    } catch (e) {
+      log(`lattice import launch failed: ${e}`);
+    }
+  }
+
   // Hook always exits 0 — failures are logged, never block the response.
   process.exit(0);
 }

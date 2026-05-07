@@ -48,10 +48,19 @@ import { batchEuclideanToPoincare, hyperbolicDistance } from "./lib/hyperbolic.t
 import { PersistentEmbeddingCache } from "./lib/persistent-cache.ts";
 import { chunkText } from "./lib/chunking.ts";
 import { HNSWIndex } from "./lib/hnsw-index.ts";
+// Phase 5 — Candidate A is the v1 canonical_id producer for the
+// Inquiry Lattice. We import the synchronous normalizeString directly
+// rather than the async Normalizer wrapper because Candidate A does
+// no I/O and we don't want to thread async through the pending queue.
+// Cross-language conformance is enforced by tests/conformance-fixture-v1.jsonl
+// (and quantum-substrate's test_normalize.py).
+import { normalizeString } from "../../../scripts/normalize/candidate-a.ts";
 
 // ─── Schema ─────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 2;             // bumped: chunk-level nodes + HNSW
+const SCHEMA_VERSION = 3;             // bumped: canonical_id field per Phase 5
+const NORMALIZER_ID = "candidate-A";   // Phase 5 selection — see docs/lattice-phase-4-scoring.md
+const NORMALIZER_VERSION = "v1";       // baked into canonical_id format `v1:<hash>`
 const POINCARE_CURVATURE = 1.0;       // matches ruflo's default
 const SECTION_HEADER_RE = /^## /m;     // standard agent-chat section delimiter
 const TEXT_EXCERPT_LEN = 280;          // chars stored in node for grep/preview
@@ -79,6 +88,13 @@ export interface KGNode {
   chunk_idx?: number;         // present for chunked sections (multi-chunk sections only)
   chunk_total?: number;       // total chunks for this section
   sha256: string;
+  // canonical_id — Phase 5 — produced by Candidate A's normalize() pipeline.
+  // Format: `v1:<hash>` (16-char sha256 prefix of the normalized form).
+  // Two chunks with the same canonical_id are SAME-after-canonicalization
+  // (paraphrases, surface variants); they may have DIFFERENT sha256 (raw
+  // text differs). The Inquiry Lattice clusters on canonical_id; sha256
+  // remains for content-identity / dedup.
+  canonical_id: string;
   header: string;             // first line of the section (## boss — ...)
   text_excerpt: string;       // first ~280 chars of body
   eu_embedding: number[];     // 384-dim Euclidean (L2-normalized)
@@ -107,6 +123,11 @@ export interface KGManifest {
   hnsw_efConstruction: number;
   hnsw_efSearch: number;
   hnsw_indexed_vectors: number;
+  // Phase 5 — which canonical_id producer was used to populate KGNode.canonical_id.
+  // Drift across builds (e.g. v1 → v2 normalizer) is detectable by the manifest;
+  // a re-canonicalization pass can update older nodes when a new normalizer ships.
+  normalizer_id: string;
+  normalizer_version: string;
   built_at: string;
   node_count: number;
   edge_count: number;
@@ -116,6 +137,17 @@ export interface KGManifest {
 
 function sha256(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+// Phase 5: canonical_id producer. Synchronous wrapper around Candidate A's
+// pipeline. Format must stay compatible with the cross-language conformance
+// fixture (tests/conformance-fixture-v1.jsonl and quantum-substrate's
+// tests/test_normalize.py). Any change here that affects the output for
+// the fixture inputs is a v2 normalizer bump, NOT a silent change.
+function canonicalIdOf(text: string): string {
+  const normalized = normalizeString(text);
+  const hash = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+  return `${NORMALIZER_VERSION}:${hash}`;
 }
 
 function defaultConvDir(): string {
@@ -341,6 +373,7 @@ async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
     for (let ci = 0; ci < chunks.length; ci++) {
       const chunkText = chunks[ci];
       const sha = sha256(chunkText);
+      const canonicalId = canonicalIdOf(chunkText);
       const idx = sec.idx;
       pending.push({
         text: chunkText,
@@ -354,6 +387,7 @@ async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
           chunk_idx: ci,
           chunk_total: total,
           sha256: sha,
+          canonical_id: canonicalId,
           header: sec.header,
           // Excerpt comes from THIS chunk so multi-chunk sections show
           // the right slice when grepping/previewing nodes.
@@ -373,6 +407,7 @@ async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
     // Archive nodes are NOT chunked (they're already a summary).
     const archiveText = arc.tldr || arc.sections[0]?.body.slice(0, 500) || arc.id;
     const archiveSha = sha256(archiveText);
+    const archiveCanonical = canonicalIdOf(archiveText);
     pending.push({
       text: archiveText,
       sha: archiveSha,
@@ -382,6 +417,7 @@ async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
         source: "archive",
         archive_id: arc.id,
         sha256: archiveSha,
+        canonical_id: archiveCanonical,
         header: `# Archive ${arc.id}`,
         text_excerpt: archiveText.slice(0, TEXT_EXCERPT_LEN),
         eu_embedding: eu,
@@ -557,6 +593,8 @@ async function buildEdgeKGUnlocked(edge: EdgeDescriptor): Promise<KGManifest> {
     hnsw_efConstruction: HNSW_EF_CONSTRUCTION,
     hnsw_efSearch: HNSW_EF_SEARCH,
     hnsw_indexed_vectors: hnswStats.vectorCount,
+    normalizer_id: NORMALIZER_ID,
+    normalizer_version: NORMALIZER_VERSION,
     built_at: new Date().toISOString(),
     node_count: nodes.length,
     edge_count: edges.length,
