@@ -144,6 +144,76 @@ describe("pairSections — Q/A pairing", () => {
     ];
     expect(pairSections(sections)).toEqual([]);
   });
+
+  test("AI-to-AI: adjacent different-agent sections with arbitrary topics pair", () => {
+    const sections = [
+      { agent: "orion",   description: "kickoff: hardening audit",      utc: "t0", body: "Q from orion" },
+      { agent: "lumeyon", description: "lib.ts audit + relay status",   utc: "t1", body: "A from lumeyon" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(1);
+    expect(pairs[0].user.agent).toBe("orion");
+    expect(pairs[0].assistant.agent).toBe("lumeyon");
+    expect(pairs[0].kind).toBe("ai_to_ai");
+  });
+
+  test("AI-to-AI: 4-section back-and-forth produces 2 pairs (not 3)", () => {
+    // orion → lumeyon → orion → lumeyon should give (orion,lumeyon)
+    // and (orion,lumeyon), not (orion,lumeyon)+(lumeyon,orion)+(orion,lumeyon).
+    // Sections already consumed by the previous pair must be skipped.
+    const sections = [
+      { agent: "orion",   description: "topic A", utc: "t0", body: "1" },
+      { agent: "lumeyon", description: "topic B", utc: "t1", body: "2" },
+      { agent: "orion",   description: "topic C", utc: "t2", body: "3" },
+      { agent: "lumeyon", description: "topic D", utc: "t3", body: "4" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(2);
+    expect(pairs[0].user.body).toBe("1");
+    expect(pairs[0].assistant.body).toBe("2");
+    expect(pairs[1].user.body).toBe("3");
+    expect(pairs[1].assistant.body).toBe("4");
+  });
+
+  test("AI-to-AI: handoff sections do NOT pair", () => {
+    const sections = [
+      { agent: "orion",   description: "handoff to lumeyon",     utc: "t0", body: "..." },
+      { agent: "lumeyon", description: "lib.ts audit",           utc: "t1", body: "real content" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(0);
+  });
+
+  test("AI-to-AI: parking sections do NOT pair", () => {
+    const sections = [
+      { agent: "orion",   description: "parked: converged",       utc: "t0", body: "..." },
+      { agent: "lumeyon", description: "next slice analysis",     utc: "t1", body: "real content" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(0);
+  });
+
+  test("same-agent adjacent sections do NOT pair (no self-dialogue)", () => {
+    const sections = [
+      { agent: "orion", description: "topic A", utc: "t0", body: "1" },
+      { agent: "orion", description: "topic B", utc: "t1", body: "2" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(0);
+  });
+
+  test("mixed: human→AI then AI→AI in sequence both produce pairs", () => {
+    const sections = [
+      { agent: "boss",    description: "user turn",          utc: "t0", body: "Q from boss" },
+      { agent: "orion",   description: "assistant response", utc: "t0", body: "A from orion" },
+      { agent: "orion",   description: "follow-up to lumeyon", utc: "t1", body: "Q from orion" },
+      { agent: "lumeyon", description: "audit finding",      utc: "t2", body: "A from lumeyon" },
+    ];
+    const pairs = pairSections(sections);
+    expect(pairs.length).toBe(2);
+    expect(pairs[0].kind).toBe("human_to_ai");
+    expect(pairs[1].kind).toBe("ai_to_ai");
+  });
 });
 
 describe("importEdgeConvo — full import", () => {

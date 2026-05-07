@@ -78,22 +78,80 @@ export function parseSections(content: string): ParsedSection[] {
 // ─── Q/A pairing ──────────────────────────────────────────────────────────
 
 interface QAPair {
-  user: ParsedSection;     // the "user turn" section
-  assistant: ParsedSection; // the "assistant response" section
+  /** The "asking" section — user turn for human→AI, the prior agent's section for AI→AI. */
+  user: ParsedSection;
+  /** The "answering" section — assistant response for human→AI, the responding agent's section for AI→AI. */
+  assistant: ParsedSection;
+  /** Pair shape for downstream tagging. */
+  kind: "human_to_ai" | "ai_to_ai";
 }
 
-/** Find adjacent (user turn, assistant response) pairs in a section list.
- *  Discards handoffs, proposals, parks, and other non-Q/A patterns.
+/** Description prefixes that indicate a section is NOT a substantive
+ *  question or answer (handoffs, parks, proposals, etc.). These are
+ *  protocol-level moves rather than dialogue content. */
+const NON_QA_DESCRIPTION_PREFIXES: string[] = [
+  "handoff",         // "## orion — handoff to lumeyon"
+  "park",            // "## boss — parking"
+  "parked",
+  "parking",
+  "propose subgraph",
+  "subgraph spawn",
+];
+
+function isNonQaSection(s: ParsedSection): boolean {
+  const desc = s.description.toLowerCase();
+  return NON_QA_DESCRIPTION_PREFIXES.some((p) => desc.startsWith(p));
+}
+
+/** Find adjacent Q→A pairs in a section list.
+ *
+ *  Two patterns are recognized:
+ *    1. human → AI: section i has description "user turn" and section
+ *       i+1 has "assistant response". The historical pattern produced
+ *       by record-turn.
+ *    2. AI → AI: section i and section i+1 have DIFFERENT agents,
+ *       neither is a non-QA section (handoff/park/etc.), and both
+ *       have arbitrary topic descriptions. This captures inter-agent
+ *       dialogue (e.g., orion → lumeyon → orion exchanges).
+ *
+ *  Pairs the FIRST applicable pattern; sections already consumed by
+ *  the previous pair are skipped (so a 4-section AI-to-AI dialog
+ *  produces 2 pairs, not 3).
  */
 export function pairSections(sections: ParsedSection[]): QAPair[] {
   const pairs: QAPair[] = [];
-  for (let i = 0; i + 1 < sections.length; i++) {
+  let i = 0;
+  while (i + 1 < sections.length) {
     const a = sections[i];
     const b = sections[i + 1];
+    let matched = false;
+
+    // Pattern 1 — human → AI
     if (a.description.toLowerCase().startsWith("user turn")
         && b.description.toLowerCase().startsWith("assistant response")) {
-      pairs.push({ user: a, assistant: b });
+      pairs.push({ user: a, assistant: b, kind: "human_to_ai" });
+      i += 2;
+      matched = true;
     }
+
+    // Pattern 2 — AI → AI
+    if (!matched
+        && a.agent !== b.agent
+        && !isNonQaSection(a)
+        && !isNonQaSection(b)
+        // Reject if either looks like a human→AI half (e.g., a "user turn"
+        // section without a matching "assistant response" partner — those
+        // shouldn't pair with arbitrary next sections).
+        && !a.description.toLowerCase().startsWith("user turn")
+        && !b.description.toLowerCase().startsWith("user turn")
+        && !a.description.toLowerCase().startsWith("assistant response")
+        && !b.description.toLowerCase().startsWith("assistant response")) {
+      pairs.push({ user: a, assistant: b, kind: "ai_to_ai" });
+      i += 2;
+      matched = true;
+    }
+
+    if (!matched) i += 1;
   }
   return pairs;
 }
