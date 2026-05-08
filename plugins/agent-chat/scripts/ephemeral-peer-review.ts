@@ -204,18 +204,26 @@ export async function runEphemeralPeerReview(
   // ends back at parked in the same lock cycle. Log the action so it's
   // auditable.
   const curTurn = readTurn(edge.turn);
-  if (curTurn !== id.name) {
+  const didResume = curTurn !== id.name;
+  if (didResume) {
     console.error(`[ephemeral-peer-review] resuming ${edge.id} from "${curTurn ?? "uninitialized"}" → ${id.name} for ephemeral review`);
     writeTurnAtomic(edge.turn, id.name);
   }
 
-  // Lock as orion. Hold the lock through both section appends + park.
-  const lockR = turnCli(["lock", input.peer]);
-  if (lockR.status !== 0) {
-    throw new Error(`lock failed for ${edge.id}: ${lockR.stderr}`);
-  }
+  // E3 fix (NL14 / lumeyon NL4 finding): the lock attempt is now INSIDE
+  // the try block. Pre-fix the lock call was outside, so a lock-failure
+  // path skipped all cleanup and left .turn stuck on whatever the
+  // resume-write set it to (typically "orion"). Post-fix: lock failure
+  // is caught; if we resumed but couldn't lock, revert .turn to its
+  // pre-resume value so the edge isn't stranded.
   let response = "";
+  let lockedSuccessfully = false;
   try {
+    const lockR = turnCli(["lock", input.peer]);
+    if (lockR.status !== 0) {
+      throw new Error(`lock failed for ${edge.id}: ${lockR.stderr}`);
+    }
+    lockedSuccessfully = true;
     // Append orion's request section first.
     fs.appendFileSync(edge.convo, orionRequestSection({
       peer: input.peer,
@@ -246,20 +254,29 @@ export async function runEphemeralPeerReview(
       throw new Error(`park failed for ${edge.id}: ${parkR.stderr}`);
     }
   } catch (err) {
-    // Best-effort cleanup on failure: park the edge (which atomically
-    // resets turn to "parked" AND removes the lock — see scripts/turn.ts
-    // park op). Without this, a dispatch failure mid-review leaves the
-    // edge stuck on "orion" instead of returning to its starting state.
-    // turn.ts park requires the current turn to be id.name AND the lock
-    // (if any) to belong to id.name; both hold here since we resumed and
-    // locked earlier in this function.
-    const parkR = turnCli(["park", input.peer]);
-    if (parkR.status !== 0) {
-      // park failed for some reason; fall back to unlock so at least the
-      // lock file is gone. The .turn may still be "orion" — surface that
-      // in the error message so the operator can park manually.
-      turnCli(["unlock", input.peer]);
-      console.error(`[ephemeral-peer-review] park-on-failure failed for ${edge.id}: ${parkR.stderr.trim()}. Edge may still be on "${id.name}" — park manually.`);
+    // Cleanup on failure has two cases (NL14 E3 fix):
+    //   1. Lock was acquired before the failure (typical path):
+    //      park the edge (atomically resets turn to "parked" AND
+    //      removes the lock — see scripts/turn.ts park op).
+    //   2. Lock was NEVER acquired (E3 path):
+    //      we already resumed .turn from "parked"→"orion" before the
+    //      lock attempt. park.ts won't help — it requires us to OWN
+    //      the lock, which we don't. Revert the resume manually so
+    //      the edge isn't stranded on "orion".
+    if (lockedSuccessfully) {
+      const parkR = turnCli(["park", input.peer]);
+      if (parkR.status !== 0) {
+        // park failed for some reason; fall back to unlock so at least the
+        // lock file is gone. The .turn may still be "orion" — surface that
+        // in the error message so the operator can park manually.
+        turnCli(["unlock", input.peer]);
+        console.error(`[ephemeral-peer-review] park-on-failure failed for ${edge.id}: ${parkR.stderr.trim()}. Edge may still be on "${id.name}" — park manually.`);
+      }
+    } else if (didResume) {
+      // E3: we resumed .turn but couldn't lock. Revert .turn so the
+      // edge is restored to its pre-CLI-invocation state.
+      writeTurnAtomic(edge.turn, curTurn ?? "parked");
+      console.error(`[ephemeral-peer-review] lock failed for ${edge.id}; reverted .turn to "${curTurn ?? "parked"}" (foreign lock left in place — owned by another session).`);
     }
     throw err;
   }

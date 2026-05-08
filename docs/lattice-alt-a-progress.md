@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T08:25Z
+## Current state — 2026-05-08T08:55Z
 
-**Phase: NL13 — drained K-imp-5 (importPairs try/catch bug-masking). Added `isPrimaryKeyConflict` discriminator: only true UNIQUE constraint failures count as duplicates; everything else (FK violations, CHECK failures, dual-output enforcement throws, etc.) now propagates instead of being silently miscounted. Closes a real silent-failure pathway in the importer. Cumulative: 30 REAL findings, 11 code fixes, 3 schema migrations.**
+**Phase: NL14 — drained E3 (ephemeral-peer-review.ts lock-failure cleanup). Pre-fix: lock acquisition was OUTSIDE the try block, so on lock failure the cleanup catch never ran and .turn stayed stuck on "orion". Post-fix: lock attempt inside try; on failure with no lock acquired, revert .turn to its pre-resume value. Foreign-owned locks (other session's lock) left untouched. Cumulative: 30 REAL findings, 12 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,68 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T08:55Z (NL14: queue-drain E3 — ephemeral-peer-review.ts lock-failure cleanup)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains E3 — no fresh peer call. File-touch rule satisfied: NL13 touched import-from-kg.ts; ephemeral-peer-review.ts last touched NL4 (10 iters gap).
+
+**The bug:**
+  At ephemeral-peer-review.ts:213, the lock acquisition was OUTSIDE the try block:
+  ```
+  writeTurnAtomic(edge.turn, id.name);  // Resume parked → orion
+  const lockR = turnCli(["lock", input.peer]);
+  if (lockR.status !== 0) throw new Error(...);  // ← outside try
+  let response = "";
+  try { ... } catch (err) { /* park-on-failure */ }
+  ```
+  On lock failure (e.g., a stale lock from a crashed prior process or a foreign-owned lock from another session), the throw escaped before the catch handler ran. Edge state: .turn = "orion", no lock owned by us, never reset to "parked". Future invocations would see turn="orion" + no lock = stranded edge.
+
+**The fix:**
+  Move the lock call INSIDE the try block. Track `lockedSuccessfully` flag. The catch handler now branches:
+  - `lockedSuccessfully = true`: park normally (existing behavior).
+  - `lockedSuccessfully = false` AND `didResume = true`: revert `.turn` to its pre-resume value (the original `curTurn` — typically "parked"). Foreign-owned lock left untouched (we never owned it; not ours to release).
+
+**Test-first protocol:**
+  1 regression test at ephemeral-peer-review.test.ts:E3 lock-failure cleanup describe block:
+    - Pre-create a foreign-owned `.turn.lock` (different agent's session tag).
+    - Run the CLI with valid args.
+    - CLI's `turn.ts lock` refuses (lock belongs to another session).
+    - Pre-fix: .turn ends as "orion" (stuck).
+    - Post-fix: .turn ends as "parked" (reverted); foreign lock still present (untouched).
+  Verified FAILING pre-fix; PASSES post-fix.
+
+**Why this matters in practice:**
+  The CLI is the load-bearing infrastructure used by every iter for peer reviews. Pre-NL14, any genuine concurrent-lock scenario (orion in two sessions, stale lock from prior crash, etc.) would orphan the edge in "orion" state. Future peer reviews on that edge would refuse the resume (curTurn already orion, didResume=false, lock attempt would still fail) — silent reliability degradation.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — protocol invariant restored: edge state should reflect "current floor holder" accurately. Pre-fix the resume-then-fail path violated this (turn=orion + no lock = no floor holder, but turn says otherwise); post-fix the failure path restores the genuine "parked" state.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: plugin 510 → 511 (+1 E3)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/ephemeral-peer-review.ts (move lock into try; revert-on-no-lock-failure path)
+  - plugins/agent-chat/tests/ephemeral-peer-review.test.ts (1 E3 regression test)
+  - docs/ephemeral-peer-reviews.md (E3 row updated to FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL15 plan; cumulative ledger)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL15):** Per file-touch rule (NL14 touched ephemeral-peer-review.ts), eligible:
+- L3, L5 (apprenticeship.ts, last touched NL6)
+- C2, C4, C5 (study-turn.ts, last touched NL8)
+- LC1-LC4 (lattice-context.ts, last touched NL12 — eligible now since 2-iter gap)
+- K-imp-1, 3, 4, 6, 7, 9 (import-from-kg.ts, last touched NL13 — INELIGIBLE yet)
+
+**Recommend NL15 → DRAIN LC1** (lattice-context.ts no cosine floor — sparse-corpus pollution). Reasons:
+- Real correctness bug. Sparse-corpus retrieval (cosines 0.21-0.31 documented iter-4) currently pushes unrelated content into prompts — corrupts cmdRun's pushed context.
+- Modest fix: add `min_cosine` parameter to composePushedContextBlock; default e.g. 0.4 to match the iter-4 substrate-readiness threshold.
+- lattice-context.ts last touched NL12 (2 iters gap → eligible).
+
+After NL15, NL16+: drain another LC* (LC2 over-fetch, LC3 null-best_answer-filter, LC4 byte budget) or pivot to apprenticeship.ts (L3) / study-turn.ts (C2).
 
 ### 2026-05-08T08:25Z (NL13: queue-drain K-imp-5 — importPairs catch discriminates PK conflicts vs other errors)
 

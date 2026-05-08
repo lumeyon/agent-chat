@@ -315,6 +315,55 @@ describe("ephemeral-peer-review CLI — failure path parks the edge", () => {
   });
 });
 
+// Regression for lumeyon's NL4 E3 finding: lock acquisition was OUTSIDE
+// the try block, so a lock-failure path left .turn stuck on "orion"
+// (we'd resumed parked → orion before attempting the lock; failure
+// raised before any cleanup ran). NL14 fix: revert .turn to its
+// pre-resume state on lock failure.
+describe("ephemeral-peer-review CLI — E3 lock-failure cleanup", () => {
+  test("E3: foreign-owned stale lock causes lock failure; .turn reverts to parked", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const turnPath = path.join(CONVO_DIR, "petersen", "carina-orion", "CONVO.md.turn");
+    const lockPath = path.join(CONVO_DIR, "petersen", "carina-orion", "CONVO.md.turn.lock");
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
+
+    // Pre-create a stale lock owned by a different session/agent. The
+    // CLI's `turn.ts lock` should refuse — it requires turn=id.name AND
+    // either no lock or own-lock.
+    fs.writeFileSync(
+      lockPath,
+      `lumeyon@otherhost:99999 starttime:0 ${new Date().toISOString()}\n`,
+    );
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "carina", "--module", moduleFile, "--no-import"],
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        AGENT_CHAT_MOCK_PEER_RESPONSE: "ignored",
+      }),
+      { allowFail: true },
+    );
+
+    // CLI should fail because lock acquisition failed.
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/lock failed|locked/i);
+
+    // Pre-fix: .turn would be stuck at "orion" (we resumed but couldn't
+    // park-on-failure since the catch never ran).
+    // Post-fix: .turn must be back at "parked".
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
+
+    // The foreign-owned lock should still be there — we don't unlock
+    // someone else's lock.
+    expect(fs.existsSync(lockPath)).toBe(true);
+  });
+});
+
 describe("ephemeral-peer-review CLI — resumes parked edges", () => {
   test("parked edge → orion request → peer response → parked", () => {
     const sid = fakeSessionId("orion");
