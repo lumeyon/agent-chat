@@ -502,3 +502,150 @@ describe("record-turn — A1 auto-study-turn schedule hook", () => {
     expect(entries.map((e) => e.framing)).toEqual(["q1", "q2", "q3"]);
   });
 });
+
+// Phase A4 (NL36): record-turn's post-hook also FIRES the consumer
+// (auto-study-turn-consumer.ts) so the auto-loop runs end-to-end without
+// manual invocation.
+//
+// Production: spawn detached + unref → parent exits immediately, child
+// runs in background. AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1 (test-only seam)
+// flips to spawnSync so tests can deterministically observe the result
+// file immediately after record-turn returns.
+describe("record-turn — A4 consumer spawn from post-hook (NL36)", () => {
+  let tmp: string;
+  beforeEach(() => { tmp = mkTmpConversations(); });
+  afterEach(() => { rmTmp(tmp); });
+
+  function readResults(dir: string): any[] {
+    const f = path.join(dir, ".auto-study-turn-results.jsonl");
+    if (!fs.existsSync(f)) return [];
+    return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  }
+
+  test("A4: end-to-end — record-turn fires consumer, writes result via mock predictor", async () => {
+    // Seed the lattice with a matching Q/A so the consumer can find
+    // them when it processes the schedule entry. The post-hook computes
+    // canonical_id from framing and answer_id from (qid, body, agent),
+    // exactly the same way the consumer will look them up.
+    const { LatticeStore } = await import("../../../scripts/lattice/sqlite-store.ts");
+    const { recordAnswer } = await import("../../../scripts/lattice/apprenticeship.ts");
+    const { canonicalIdOf } = await import("../../../scripts/lattice/import-from-kg.ts");
+
+    const dbPath = path.join(tmp, "lattice.db");
+    const store = new LatticeStore(dbPath);
+    const framing = "what is the deadline?";
+    const answerBody = "Friday at 5pm.";
+    const qid = canonicalIdOf(framing);
+    store.putQuestion({
+      id: qid,
+      framing,
+      status: "open",
+      best_answer_id: null,
+      posed_at: 1000,
+      posed_by: "boss",
+      posed_in_context: "test",
+      depth: 0,
+    });
+    const a = recordAnswer(store, {
+      question_id: qid,
+      body: answerBody,
+      by_agent: "keystone",  // matches the test agent
+      explanation: "test",
+      predictive_lift: 0.5,
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(qid, "answered", a.id);
+    store.close();
+
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = {
+      ...sessionEnv(tmp, AGENT, TOPO, key),
+      AGENT_CHAT_AUTO_STUDY_TURN: "1",
+      AGENT_CHAT_AUTO_STUDY_TURN_SYNC: "1",  // test seam: spawn synchronously
+      AGENT_CHAT_LATTICE_DB: dbPath,
+      AGENT_CHAT_MOCK_PEER_RESPONSE: answerBody,  // matches → high cosine → positive lift bump
+    };
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", framing, "--assistant", answerBody,
+    ], env);
+    expect(r.exitCode).toBe(0);
+
+    // Schedule entry written (A1 behavior).
+    const journal = path.join(tmp, ".auto-study-turn.jsonl");
+    expect(fs.existsSync(journal)).toBe(true);
+
+    // Consumer fired and produced a result entry (A4 NEW behavior).
+    const results = readResults(tmp);
+    expect(results.length).toBe(1);
+    expect(results[0].status).toBe("predicted");
+    expect(results[0].peer).toMatch(/^(lumeyon|keystone|carina)$/);
+    expect(results[0].peer).not.toBe("keystone");  // heterogeneity: not the answer's author
+    expect(results[0].lift_update).toBeDefined();
+    expect(results[0].lift_update.delta).toBeGreaterThan(0);  // mock matches actual → positive lift
+
+    // Lattice's predictive_lift was actually written.
+    const store2 = new LatticeStore(dbPath);
+    try {
+      const updated = store2.getAnswer(a.id)!;
+      expect(updated.predictive_lift).toBeGreaterThan(0.5);
+    } finally {
+      store2.close();
+    }
+  });
+
+  test("A4: spawn failure does NOT block record-turn success", () => {
+    // If the consumer spawn fails for some reason (binary missing,
+    // permission error, etc.), record-turn must still succeed. This is
+    // best-effort plumbing.
+    //
+    // We simulate the failure by pointing AGENT_CHAT_LATTICE_DB at an
+    // unwritable path. The schedule write succeeds (uses
+    // CONVERSATIONS_DIR), but when the consumer fires synchronously it
+    // hits an error trying to open the lattice DB. The spawn return
+    // status will be non-zero. record-turn must still exit 0 because
+    // the auto-loop is opportunistic — we accept that the child failed
+    // and move on.
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = {
+      ...sessionEnv(tmp, AGENT, TOPO, key),
+      AGENT_CHAT_AUTO_STUDY_TURN: "1",
+      AGENT_CHAT_AUTO_STUDY_TURN_SYNC: "1",
+      AGENT_CHAT_LATTICE_DB: "/dev/null/no-such-dir/lattice.db",  // bad path
+    };
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "u", "--assistant", "a",
+    ], env);
+    // Record-turn itself must succeed even though the consumer fails.
+    expect(r.exitCode).toBe(0);
+    // Schedule entry was still written.
+    expect(fs.existsSync(path.join(tmp, ".auto-study-turn.jsonl"))).toBe(true);
+  });
+
+  test("A4: AGENT_CHAT_AUTO_STUDY_TURN unset — consumer is NOT spawned", () => {
+    // Default behavior: no auto-loop. Consumer should not fire even if
+    // AGENT_CHAT_AUTO_STUDY_TURN_SYNC is set (sync only matters when the
+    // outer flag is enabled).
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = {
+      ...sessionEnv(tmp, AGENT, TOPO, key),
+      AGENT_CHAT_AUTO_STUDY_TURN_SYNC: "1",
+      // AGENT_CHAT_AUTO_STUDY_TURN intentionally unset
+    };
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "u", "--assistant", "a",
+    ], env);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(tmp, ".auto-study-turn.jsonl"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, ".auto-study-turn-results.jsonl"))).toBe(false);
+  });
+});

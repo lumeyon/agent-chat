@@ -2,11 +2,11 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T19:25Z
+## Current state — 2026-05-08T19:55Z
 
-**Phase: NL35 — Phase A2 SHIPPED. New file `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`: reads `.auto-study-turn.jsonl`, picks the oldest unprocessed entry (cross-references `.auto-study-turn-results.jsonl`), looks up Q/A in the lattice via `canonicalIdOf` + `makeAnswerId`, picks a codex peer (hash-deterministic rotation, skips the answer's own author per heterogeneity rule), dispatches via the codex runtime adapter (mockable via `AGENT_CHAT_MOCK_PEER_RESPONSE`), grades via `gradePrediction` cosineSimilarity, applies via `applyGradeToLift`, appends a result line. ONE entry per invocation — caller decides cadence. Plus `canonicalIdOf` exported from import-from-kg.ts. 6 regression tests covering happy path, heterogeneity guard, dispatch failure, empty journal, idempotent re-run, missing-answer diagnostic. NL34 (A1) wired the trigger; NL35 (A2) wired the consumer. NL36 will wire the consumer to FIRE FROM the record-turn post-hook (currently the consumer must be invoked manually). Cumulative since new mission: 2 wiring steps (A1 + A2); + 31 prior fixes + 3 schema migrations from the substrate-hardening phase.**
+**Phase: NL36 — Phase A4 SHIPPED. record-turn's post-hook now ALSO spawns the consumer (auto-study-turn-consumer.ts) after the journal-write. Default async (detached child + unref, parent exits immediately). Test seam: AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1 flips to spawnSync for deterministic test observation. Phase A's auto-trigger loop is now end-to-end: record-turn → schedule entry → consumer spawn → predictor dispatch (codex peer) → grade → applyGradeToLift → result entry. 3 regression tests (end-to-end with mock peer; spawn failure non-blocking; default-off). The cross-model evidence loop runs WITHOUT manual invocation when the env flag is set. Cumulative since new mission: 3 wiring steps (A1 + A2 + A4); + 31 prior fixes + 3 schema migrations.**
 
-**MISSION:** wire up autonomous heterogeneous-judge selection pressure. Phase A trigger plumbing started at NL34. Phases A→B→C→D→E will land the auto-loop end-to-end with measurement.
+**MISSION:** wire up autonomous heterogeneous-judge selection pressure. Phase A trigger plumbing started at NL34. Phases A→B→C→D→E will land the auto-loop end-to-end with measurement. **Phase A is now end-to-end except for A3 (rerank after lift update); shipping A3 next at NL37.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -19,6 +19,64 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T19:55Z (NL36: ship A4 — wire consumer spawn into record-turn's post-hook)
+
+**Loop:** Phase A wiring — closing the auto-trigger loop. NL34 wired the trigger (schedule write); NL35 wired the consumer; NL36 wires the consumer-firing into record-turn so the auto-loop runs without manual invocation. File-touch: re-touches agent-chat.ts (last touched NL34, 2-iter gap satisfied).
+
+**What landed:**
+  Extended cmdRecordTurn's existing AGENT_CHAT_AUTO_STUDY_TURN=1 block. After the schedule entry's journal-write succeeds, the hook now also spawns the consumer:
+
+  - **Production (default):** `child_process.spawn(execPath, [consumerPath], { detached: true, stdio: "ignore" })` followed by `child.unref()`. Parent exits immediately; child runs in background and writes its result entry asynchronously.
+  - **Test seam:** when `AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1` is set, use `child_process.spawnSync` instead. Tests can deterministically observe the consumer's result file immediately after `record-turn` returns.
+  - **Best-effort:** spawn errors logged to stderr but don't propagate. record-turn's correctness is load-bearing for the per-turn flow; the auto-loop is opportunistic plumbing.
+
+**Tests (3 in append-turn.test.ts new "A4 consumer spawn from post-hook" describe block):**
+  - **A4-a (end-to-end):** seed lattice with matching Q/A; set AGENT_CHAT_AUTO_STUDY_TURN=1 + AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1 + AGENT_CHAT_MOCK_PEER_RESPONSE matching the actual answer. Run record-turn. Assert: (1) record-turn returns 0; (2) schedule entry written (A1 behavior); (3) consumer fired and wrote a result entry with status=predicted; (4) result.peer is a codex peer that's NOT the answer's own author (heterogeneity); (5) lift_update.delta > 0 (mock matches → high cosine → positive bump); (6) lattice's predictive_lift was actually written. **Verified FAILING pre-fix** (results.length was 0).
+  - **A4-b (spawn failure non-blocking):** point AGENT_CHAT_LATTICE_DB at an unwritable path. Consumer fires synchronously and exits non-zero. record-turn must still exit 0; schedule entry was still written.
+  - **A4-c (default off):** AGENT_CHAT_AUTO_STUDY_TURN unset → no journal file, no result file (consumer not spawned).
+
+**Tests: plugin 554 → 557 (+3 A4); lattice 174 / 0 unchanged.**
+
+**Why this matters:** Phase A's three wiring steps are now end-to-end:
+
+  - A1 (NL34): record-turn's success path writes a `scheduled` entry to the journal.
+  - A2 (NL35): consumer reads pending entries, dispatches a codex peer as predictor, grades, applies lift.
+  - A4 (NL36): record-turn's post-hook fires the consumer automatically.
+
+  When `AGENT_CHAT_AUTO_STUDY_TURN=1` is set, every turn the agent records triggers a codex peer to predict the answer, grade it against the actual, and adjust `predictive_lift` accordingly. The cross-model evidence loop runs WITHOUT manual invocation. **A3 (rerank after lift updates) is the only remaining piece in Phase A.**
+
+**Heterogeneity rule (INVIOLABLE rule 5) holds:** the consumer's `pickPredictorPeer` already enforces that the picked peer is a codex agent ≠ the answer's author (NL35 work). NL36 just wires the trigger; the heterogeneity property is unchanged.
+
+**Substrate primitives unchanged.** A4 is integration; reuses A1's journal write, A2's consumer, and Node's child_process API. No new lattice primitives, no schema changes.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no production peer call yet — auto-loop is wired but not fired against production)
+  - Answers: 961 → 961
+  - Tests: lattice 174 / 0 unchanged; plugin 554 → 557 (+3 A4)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/agent-chat.ts (extended post-hook with detached + sync-test-seam spawn)
+  - plugins/agent-chat/tests/append-turn.test.ts (3 A4 regression tests)
+  - prompt.md (NL37 plan; A4 marked DONE; A3 sequenced as next)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL37):** Ship A3 — auto-fire reRankAnswers in the consumer after applyGradeToLift. Closes the lift-to-rank feedback path. File-touch: auto-study-turn-consumer.ts (last touched NL35, 1-iter gap satisfied at NL37).
+
+  Approach:
+  - In auto-study-turn-consumer.ts, after `applyGradeToLift(store, answer.id, grade, lr)` returns, call `reRankAnswers(store, question.id, { single_answer_promotes: false, margin: 0.05 })`.
+  - If the reRank result has a non-null promoted_to_accepted OR a non-empty demoted_to_superseded, include `rerank_result` in the journal result entry.
+  - Tests:
+    - A3-a: 2 accepted answers, lift bump pushes the studied one past the rival → rerank promotes; result entry has rerank_result.
+    - A3-b: 2 accepted answers, lift bump doesn't cross margin → rerank no-op; result entry has no rerank_result (or empty one).
+    - A3-c: single-answer sanity — reRank doesn't promote.
+
+**Sequenced after NL37 (Phase A complete):**
+- NL38 → Phase B (study-turn CLI defaults to a codex peer; refuse claude-self-predict at the public API).
+- NL39 → Phase C (LLM-as-judge as alternative grader; layered on cosine).
+- NL40+ → Phase D (adversarial challenger), Phase E (measurement: lift_history table + lift-report CLI).
 
 ### 2026-05-08T19:25Z (NL35: ship A2 — auto-study-turn consumer dispatching codex peer as predictor)
 

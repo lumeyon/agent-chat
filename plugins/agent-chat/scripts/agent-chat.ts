@@ -1410,17 +1410,19 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
 
   console.log(`record-turn: appended user+assistant pair on edge ${edge.id}; flipped to ${speaker}`);
 
-  // Phase A1 (NL34): auto-study-turn schedule hook.
+  // Phase A1 (NL34) + A4 (NL36): auto-study-turn schedule + spawn.
   //
-  // When AGENT_CHAT_AUTO_STUDY_TURN=1, append a "scheduled" entry to
-  // <conversationsDir>/.auto-study-turn.jsonl. This is the trigger that
-  // future iters (A2 = codex predictor dispatch; A3 = auto-reRank) will
-  // consume. For A1 we only ship the journal write — the actual study-
-  // turn execution is deferred so per-turn cost stays zero by default.
+  // When AGENT_CHAT_AUTO_STUDY_TURN=1:
+  //  (1) Append a "scheduled" entry to <conversationsDir>/.auto-study-turn.jsonl.
+  //  (2) Spawn the consumer (auto-study-turn-consumer.ts) to process
+  //      one pending entry. Default: detached + unref, parent doesn't
+  //      block. With AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1 (test seam),
+  //      use spawnSync so tests can deterministically observe the
+  //      consumer's result file immediately.
   //
-  // Best-effort: a journal-write failure must NOT propagate. The auto-
-  // trigger is opportunistic plumbing; record-turn's correctness is
-  // load-bearing for the per-turn flow. Catch and swallow.
+  // Best-effort: failures in either step are logged to stderr but
+  // MUST NOT propagate. The auto-trigger is opportunistic plumbing;
+  // record-turn's correctness is load-bearing for the per-turn flow.
   if (process.env.AGENT_CHAT_AUTO_STUDY_TURN === "1") {
     try {
       const journalPath = path.join(CONVERSATIONS_DIR, ".auto-study-turn.jsonl");
@@ -1436,6 +1438,42 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
       fs.appendFileSync(journalPath, JSON.stringify(entry) + "\n");
     } catch (err) {
       console.error(`[agent-chat] auto-study-turn schedule failed (non-blocking): ${(err as Error)?.message ?? err}`);
+    }
+
+    // Spawn the consumer (A4). Even if the schedule-write above failed,
+    // we still attempt to spawn — the consumer may pick up entries from
+    // prior runs.
+    try {
+      const consumerPath = path.join(SKILL_ROOT, "scripts/auto-study-turn-consumer.ts");
+      const sync = process.env.AGENT_CHAT_AUTO_STUDY_TURN_SYNC === "1";
+      if (sync) {
+        // Test mode: synchronous spawn so tests can observe results
+        // immediately. Inherits stderr so test failures surface in
+        // runScript's captured output.
+        const r = child_process.spawnSync(
+          process.execPath,
+          [consumerPath],
+          { encoding: "utf8" },
+        );
+        if (r.status !== 0) {
+          console.error(`[agent-chat] auto-study-turn consumer (sync) exited ${r.status}: ${(r.stderr ?? "").slice(0, 200)}`);
+        }
+      } else {
+        // Production mode: detached child runs in background; parent
+        // exits immediately. unref() releases the parent's hold on
+        // the child's event loop reference.
+        const child = child_process.spawn(
+          process.execPath,
+          [consumerPath],
+          {
+            detached: true,
+            stdio: "ignore",
+          },
+        );
+        child.unref();
+      }
+    } catch (err) {
+      console.error(`[agent-chat] auto-study-turn consumer spawn failed (non-blocking): ${(err as Error)?.message ?? err}`);
     }
   }
 }

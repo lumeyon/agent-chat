@@ -79,6 +79,7 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 - **A1** [DONE iter NL34]: Added record-turn post-hook that, on AGENT_CHAT_AUTO_STUDY_TURN=1, appends a `scheduled` entry to `<conversationsDir>/.auto-study-turn.jsonl` with edge_id, agent, speaker, framing, answer_body, ts, status. Idempotent skip (sha-deduped re-record) does NOT fire the hook. Best-effort: journal-write failure is logged to stderr but doesn't block record-turn success. 5 regression tests at append-turn.test.ts.
 - **A2** [DONE iter NL35]: Added `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`. Reads `.auto-study-turn.jsonl`, picks the oldest unprocessed entry (cross-references `.auto-study-turn-results.jsonl` for already-processed sha), looks up Q/A in the lattice via `canonicalIdOf` + `makeAnswerId`, picks a codex peer (hash-based rotation; skips the answer's own author per heterogeneity rule), dispatches via the codex runtime adapter (mockable via `AGENT_CHAT_MOCK_PEER_RESPONSE`), grades via `gradePrediction`, applies via `applyGradeToLift`, appends a result line. ONE entry per invocation — caller decides cadence. 6 regression tests (happy path, heterogeneity guard, dispatch failure, empty journal, idempotent re-run, missing-answer diagnostic). Plus `canonicalIdOf` exported from import-from-kg.ts.
 - **A3** [TODO]: After applyGradeToLift writes new lift values, auto-fire reRankAnswers for the affected question. If reRank changes accepted/superseded, append the promotion details to the result entry (or write a sibling reRank-result line). Closes the auto-loop.
+- **A4** [DONE iter NL36]: record-turn's post-hook now ALSO spawns the consumer after the journal-write. Default async (detached child, parent exits immediately). Test seam: `AGENT_CHAT_AUTO_STUDY_TURN_SYNC=1` flips to spawnSync for deterministic test observation. Best-effort: spawn failures logged to stderr but don't propagate. Phase A's auto-trigger loop is now end-to-end: record-turn → schedule entry → consumer spawn → predictor dispatch → grade → applyGradeToLift → result entry. 3 regression tests (end-to-end with mock peer, spawn failure non-blocking, default-off).
 - **A4** [DONE in A1]: Feature flag `AGENT_CHAT_AUTO_STUDY_TURN=1` opt-in (default off) — landed alongside A1 to keep per-turn LLM cost zero by default.
 
 ### Phase B — Default study-turn predictor to a codex peer
@@ -107,29 +108,26 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 
 ## NEXT ITER TARGET HINT
 
-**NL36 → SHIP A3 (auto-fire reRankAnswers after lift updates).**
+**NL37 → SHIP A3 (auto-fire reRankAnswers after lift updates).**
 
 **Why A3 next:**
 - A2 lands lift updates per study-turn. If a previously-superseded answer's lift now exceeds the accepted answer's lift by more than `margin`, reRankAnswers should promote it. Without A3, lift drifts but ranks don't change — selection pressure is incomplete.
-- File-touch rule: NL35 touched plugins/agent-chat/scripts/auto-study-turn-consumer.ts; NL36 must touch a different primary file. Options:
-  - Modify auto-study-turn-consumer.ts to call reRankAnswers post-grade. (SAME FILE — blocked by rule.)
-  - Add a separate `auto-rerank-tick.ts` consumer that watches for lift changes and triggers reRankAnswers. (Different file. Works but more plumbing.)
-  - Modify the consumer's INVOCATION (record-turn post-hook) to fire BOTH the consumer AND a rerank tick. (Touches agent-chat.ts again — would re-touch the NL34 file; OK because NL35 didn't touch agent-chat.ts.)
-- Recommend: extend `auto-study-turn-consumer.ts` to call reRankAnswers immediately after applyGradeToLift, in the same try block. The result entry's `lift_update` becomes part of a richer object that also includes `rerank_result`. **Note: this DOES re-touch consumer.ts.** Alternative: defer A3 by one iter — ship something else NL36 (e.g., A4/wire-up that fires the consumer from record-turn, in agent-chat.ts), then come back to A3 at NL37.
+- File-touch rule: NL36 touched agent-chat.ts; A3 will touch auto-study-turn-consumer.ts (last touched NL35; eligible after a 1-iter gap, satisfied at NL37).
 
-**Recommended: pivot NL36 → wire the consumer to fire from record-turn's post-hook (different from A1's journal-write).** Currently the consumer must be invoked manually. The natural place to fire it is right after the journal-write in cmdRecordTurn — spawn a detached child process running the consumer. This closes Phase A's "auto-trigger" loop. File-touch: agent-chat.ts again (last touched at NL34, 2 iters ago — eligible).
+**Fix approach:**
+- After `applyGradeToLift(store, answer.id, grade, lr)` writes the new lift, immediately call `reRankAnswers(store, question.id, { single_answer_promotes: false, margin: 0.05 })`.
+- If reRank promoted/demoted anything, include `rerank_result: { promoted_to_accepted, demoted_to_superseded }` in the journal result entry. Default field absent (or empty) when reRank was a no-op.
+- The single_answer_promotes flag stays false — single-answer questions don't need adversarial promotion (there's no rival to compare against). Multi-answer questions where lifts crossed the margin trigger the actual reranking.
 
-Then NL37 → A3 (reRank inside consumer).
+**Test approach (2-3 regression tests):**
+- A3-a (rank flip): seed Q with 2 accepted answers (A_old lift=0.5, A_new lift=0.4) where A_old is currently best_answer. Add a schedule entry that targets A_new with a high-cosine prediction (mock matches actual). After consumer runs, assert: (1) A_new's lift bumps above A_old's (e.g., 0.5); (2) reRank fires; (3) A_new is now accepted, A_old superseded; (4) result entry has rerank_result.
+- A3-b (no flip): seed Q with 2 accepted answers where the lift bump doesn't push the studied answer past the rival. After consumer runs, assert reRank either didn't fire OR fired with no promotion (rerank_result absent or empty).
+- A3-c (sanity): single-answer case — reRank doesn't promote (single_answer_promotes=false); result entry has no rerank_result.
 
-**A3 fix approach (when we get there):**
-- After `applyGradeToLift(store, answer.id, grade, lr)` writes the new lift, call `reRankAnswers(store, question.id, { single_answer_promotes: false, margin: 0.05 })`.
-- If the reRank promoted/demoted anything, include `rerank_result: { promoted_to_accepted, demoted_to_superseded }` in the journal result entry.
-- Test: seed two answers for the same question with different lifts; after a study-turn that boosts the lower-lift one above the upper, assert the rerank promoted the previously-lower answer.
-
-**Sequenced after NL36:**
-- NL37 → A3 (rerank inside consumer).
-- NL38 → Phase B (default study-turn predictor to a codex peer; refuse claude-self-predict).
-- NL39+ → Phase C (LLM-as-judge), Phase D (challenger), Phase E (measurement).
+**Sequenced after NL37:**
+- NL38 → Phase B (default study-turn predictor to a codex peer; refuse claude-self-predict at the public API).
+- NL39 → Phase C (LLM-as-judge as alternative grader).
+- NL40+ → Phase D (challenger), Phase E (measurement: lift_history table + lift-report CLI).
 
 ## BOSS-PRE-APPROVAL QUEUE (orion may execute without re-asking)
 
