@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T00:25Z
+## Current state — 2026-05-08T00:55Z
 
-**Phase: Self-improvement /loop iteration 11 — importer detects ephemeral peer review responses. Authored count 5 → 7 (lumeyon iter-1 + keystone iter-6 retroactively upgraded). FIRST stratified quality_tier histogram in lattice history: tier 2=5, tier 3=2, tier 5=880 (was: all tier 5).**
+**Phase: Self-improvement /loop iteration 12 — third study-turn run, this time across 7 authored answers including the 2 peer-review responses. predictive_lift max 0.123 → 0.156 (3rd-pass selection pressure). 0/7 passed at strict 0.85; the detail-rich-content hypothesis is PARTIALLY confirmed (lumeyon's 9-bullet review hit 0.819, highest of all 7) but variance across LLM runs dominates the signal at this scale.**
 
 ## Phase status
 
@@ -15,6 +15,67 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T00:55Z (Self-improvement /loop iteration 12: third study-turn run with full 7-answer authored corpus; variance characterization)
+
+**Target category:** E (STUDY-TURN AGAINST AUTHORED). Third pass; first time the 2 peer-review answers (lumeyon iter-1 types.ts review, keystone iter-6 sqlite-store.ts review) were eligible (iter-11 upgraded them to tier 3 / authored).
+
+**Peer used:** none. Study-turn uses claude predictor.
+
+**What ran:** `agent-chat study-turn --n 7 --runtime claude --threshold 0.85` against the lattice. 7 authored candidates selected.
+
+**Results — n=7, threshold=0.85:**
+
+| # | cosine | passed | lift Δ | by | origin |
+|---|--------|--------|--------|----|----|
+| 1 | 0.733 | ✗ | +0.047 | orion | iter-8 K3 (atomic DAG cycles) |
+| 2 | 0.729 | ✗ | +0.046 | orion | iter-7 K1 (best_answer_id FK guard) |
+| 3 | 0.650 | ✗ | +0.030 | keystone | iter-6 sqlite-store.ts review (3 bullets) |
+| 4 | 0.616 | ✗ | +0.023 | orion | iter-5 (joint status/best_answer_id) |
+| 5 | 0.607 | ✗ | +0.021 | orion | iter-3 (explanation invariant) |
+| 6 | 0.628 | ✗ | +0.026 | orion | iter-2 (quality_tier_min) |
+| 7 | 0.819 | ✗ | +0.064 | lumeyon | iter-1 types.ts review (9 bullets) |
+
+**avg cosine 0.683, 0/7 passed at 0.85.**
+
+**Hypothesis status (re: detail-rich peer-review answers passing 0.85):**
+  - **PARTIALLY CONFIRMED:** lumeyon's 9-bullet review hit 0.819 (highest of all 7 candidates this run, edges out the next-best at 0.733). Detail-rich + lexically-specific + bullet-structured content does score higher.
+  - **DISCONFIRMED for keystone's review:** cosine 0.650 despite same "review with line numbers" structure. Why? Keystone's 3 findings reference very specific code internals (line numbers like `sqlite-store.ts:44`, schema constraints, transaction primitives) that claude's predictor — without access to the actual file — can only describe abstractly. Lumeyon's broader 9-bullet structure happened to map closer to claude's general technical reasoning.
+  - **VARIANCE dominates at this sample size:** the iter-2 quality_tier_min answer scored 0.820 in iter-10 and 0.628 in iter-12. Same exact answer, different prediction run. Claude predictor is non-deterministic at default temperature; cosines vary ±0.10 across runs.
+
+**Cross-iteration comparison (iter-2 quality_tier_min answer over time):**
+  - iter-9 (n=5, claude): cosine 0.793
+  - iter-10 (n=5, claude, threshold 0.70): cosine 0.820
+  - iter-12 (n=7, claude, threshold 0.85): cosine 0.628
+  - SAME answer, three runs, range 0.628-0.820. Variance ±0.19. Larger than the iter-9-vs-iter-15j signal (+0.19 on aggregate). The single-trial study-turn approach has too much noise for confident pass/fail decisions on borderline content.
+
+**Implication for design:** A future iteration should pin the predictor's temperature to 0 (or use an averaging approach: 3 runs per candidate, take median) for stable signal. Both are configuration changes — temperature=0 is simpler. Adding to the queue.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 2 (STUDY TURN) — third pass, first across the full 7-answer corpus
+  - ✅ Function 3 (SELECTION PRESSURE) — applyGradeToLift bumped lift on all 7 candidates; cumulative pressure visible in histogram
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 401 → 401
+  - Answers: 887 → 887 (no background activity this iter — quiet)
+  - **predictive_lift max: 0.123 → 0.156** (+0.033 from this iter; 3rd cumulative pass on highest-scoring candidates)
+  - predictive_lift mean: 0.001 → 0.002 (still tiny; 880 zero-tail dominates)
+  - 7 / 7 candidates exercised — selection picked up the iter-11 upgrades correctly
+
+**Tests:** plugin 502/0/3, lattice 117/0 (no change — code unmodified this iter).
+
+**Files touched (1):**
+  - docs/lattice-alt-a-progress.md (this iteration log)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 13):** Boss-approval queue is getting long (4 schema migrations + 1 routing-table). Iter 13 should NOT keep running smoke tests against the same 7 candidates (anti-churn — same study-turn pattern 3 iterations in a row would tip the rule). Two natural alternatives:
+
+  **Option A — Add temperature pinning to the runtime adapter** (`temperature: 0` for study-turn predictions, default temperature for cmdRun). Solves the variance issue documented above. Small code change in runtimes/claude.ts (and codex.ts symmetrically). Test: same answer should produce identical cosine across multiple runs at temperature=0.
+
+  **Option B — Pivot to category D** (SPAWN DEPTH>0 QUESTIONS). The lattice has 1 depth=1 question. Add 2-3 more, building the question hierarchy depth_distribution[2]++. Each one is a recordQuestion + addQuestionParent edge.
+
+  **Recommendation: A.** Variance is the real bottleneck for empirical threshold calibration. Once stabilized, iter 14+ can revisit threshold experiments with confidence. B is a graph-structure win but doesn't solve the substrate's actual signal problem.
 
 ### 2026-05-08T00:25Z (Self-improvement /loop iteration 11: importer recognizes ephemeral peer reviews → first stratified quality_tier histogram)
 
