@@ -62,12 +62,17 @@ export function parseSections(content: string): ParsedSection[] {
     let body = newlineIdx < 0 ? "" : part.slice(newlineIdx + 1);
     // Strip trailing `→ <next>` arrow protocol markers and `---` separators
     // in any order. Repeat until stable so chained markers all strip.
+    // K-imp-2 fix (NL5 keystone): the prior /m flag made `$` match
+    // end-of-LINE, which stripped INTERNAL "→ name" / "---" lines from
+    // body content (data corruption). Without /m, `$` only matches
+    // end-of-string, so only the TRAILING markers strip — which is the
+    // intent.
     let prev: string;
     do {
       prev = body;
       body = body.trimEnd();
-      body = body.replace(/[\n\s]*---\s*$/m, "");
-      body = body.replace(/[\n\s]*→\s*\S+\s*$/m, "");
+      body = body.replace(/[\n\s]*---\s*$/, "");
+      body = body.replace(/[\n\s]*→\s*\S+\s*$/, "");
     } while (body !== prev);
     body = body.trim();
     out.push({ agent, description, utc, body });

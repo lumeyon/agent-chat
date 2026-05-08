@@ -108,6 +108,74 @@ describe("parseSections — header pattern", () => {
     const sections = parseSections(text);
     expect(sections[0].body).toBe("What is X?");
   });
+
+  // Regression for keystone's NL5 K-imp-2 finding: the trailing-marker
+  // stripper used `/m` flag, which makes `$` match end-of-LINE, not
+  // end-of-string. Internal `---` lines or `→ name` arrows in body
+  // text were stripped along with the legitimate trailing markers.
+  test("K-imp-2: internal --- in body is preserved (only TRAILING separator stripped)", () => {
+    const text = [
+      "## boss — user turn (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "Section A",
+      "---",
+      "Section B (after a horizontal rule)",
+      "",
+      "→ orion",
+      "",
+      "---",
+    ].join("\n");
+    const sections = parseSections(text);
+    expect(sections.length).toBe(1);
+    // Pre-fix: body would be "Section A" (everything after the first
+    // internal `---` is stripped because `/m` matches per-line).
+    // Post-fix: body must contain BOTH "Section A" and "Section B".
+    expect(sections[0].body).toContain("Section A");
+    expect(sections[0].body).toContain("Section B");
+  });
+
+  test("K-imp-2: internal '→ name' arrow in body is preserved (only TRAILING arrow stripped)", () => {
+    // The /m flag bug triggers when an internal line ENDS with "→ word".
+    // Pre-fix the do-while loop strips it because $ matches end-of-line.
+    const text = [
+      "## boss — user turn (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "First line of body content.",
+      "We previously routed it → orion",   // ENDS with `→ orion` — matches /m regex
+      "And the response landed.",
+      "",
+      "→ orion",
+    ].join("\n");
+    const sections = parseSections(text);
+    expect(sections.length).toBe(1);
+    // Pre-fix: line 2 was "We previously routed it → orion" and got
+    // stripped to "We previously routed it" by /[\n\s]*→\s*\S+\s*$/m.
+    // Post-fix: only the TRAILING "→ orion" arrow strips; the internal
+    // arrow on line 2 stays.
+    expect(sections[0].body).toContain("We previously routed it → orion");
+    expect(sections[0].body).toContain("And the response landed");
+  });
+
+  test("K-imp-2: internal --- separator in body is preserved (only TRAILING --- stripped)", () => {
+    // Same bug, separator variant. Pre-fix the regex strips internal `---`.
+    const text = [
+      "## boss — user turn (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "Section A first.",
+      "---",
+      "Section B after the rule.",
+      "",
+      "→ orion",
+      "",
+      "---",
+    ].join("\n");
+    const sections = parseSections(text);
+    expect(sections.length).toBe(1);
+    // Post-fix: the internal `---` line should remain in the body.
+    // (Pre-fix the do-while loop strips ALL --- lines, internal and
+    // trailing alike.)
+    expect(sections[0].body).toContain("---");
+  });
 });
 
 describe("pairSections — Q/A pairing", () => {

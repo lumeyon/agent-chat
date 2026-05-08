@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T03:30Z
+## Current state — 2026-05-08T03:55Z
 
-**Phase: NL4 — boss switched to stateful loop pattern (read prompt.md → execute → update prompt.md). Lumeyon reviewed ephemeral-peer-review.ts (the load-bearing CLI itself), returned 7 REAL findings — strongest peer yield yet. E6 (--review-cap-bytes accepts NaN/negative) FIXED this iter. E1-E5 + E7 queued. The peer-review-finds-real-bugs pattern is reproducible: every of NL1, NL3, NL4 has produced 5-7 REAL findings on the first peer call.**
+**Phase: NL5 — keystone retry on import-from-kg.ts SUCCEEDED (NL2 had timed out; the retry rule worked as designed). 8 REAL findings — new high-water mark. K-imp-2 (regex /m flag corrupting body content with internal `---` or `→ name` lines) FIXED this iter; K-imp-1, 3-8 queued. Total cumulative findings: 25 REAL across 5 peer-reviewed modules.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,64 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T03:55Z (NL5: keystone retry on import-from-kg.ts succeeded → 8 REAL findings; K-imp-2 fixed)
+
+**Target:** `scripts/lattice/import-from-kg.ts` — retry of NL2 (which timed out at 240s). Per prompt.md's new resilience rule, single peer flakes are noise; codex has worked NL3 + NL4 since the NL2 flake, so retry was warranted.
+
+**Peer used:** keystone (codex) — same peer that timed out NL2. Codex worked first try this time (~3min wall clock; well under 240s budget).
+
+**Findings (8 REAL, 0 nitpicks — new high-water mark):**
+
+  - **K-imp-1** (parseSections:54): splits text on every line-start `## ` BEFORE validating against header pattern. `## ` inside a fenced code block becomes a "section" — false-positive structural parse. (queued — moderate, niche)
+  - **K-imp-2** (parseSections:69): trailing-marker stripper used `/m` flag, making `$` match end-of-LINE instead of end-of-string. Internal `---` rules and `→ name` arrows in body text were stripped by the do-while loop. **FIXED** this iter — removed `/m`, added 2 regression tests verifying internal markers preserve.
+  - **K-imp-3** (importEdgeConvo:231): live CONVO.md and each archive BODY.md are paired independently. If archiving splits between question and answer, that cross-boundary pair is lost. (queued — niche but real)
+  - **K-imp-4** (importPairs:283): question idempotency uses `getQuestion → if not exists, putQuestion` (read-then-insert race). Concurrent importers can both miss getQuestion, then one crashes on PK insert. (queued — same shape as iter-8 K3 race; fix with `INSERT OR IGNORE` or BEGIN IMMEDIATE)
+  - **K-imp-5** (importPairs:322): `recordAnswer` try/catch swallows ALL errors as "already imported" → aDup++. Non-PK failures (e.g., dual-output enforcement, FK gap) are silently miscounted as duplicates. **Bug-masking.** (queued)
+  - **K-imp-6** (importPairs:338): `best_answer_id` chosen via `queryAnswers(... limit: 1)` instead of `recordAnswer`'s return value. With multiple accepted zero-lift answers (rare but possible), the pointer is arbitrary/stale. (queued)
+  - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only the first 5 accepted answers; an existing matching duplicate outside that window never gets tier/explanation upgraded. Iter-11's retro-upgrade path is incomplete. (queued)
+  - **K-imp-8** (importPairs:274): `Date.parse` accepts non-UTC strings despite the `UTC ...Z` protocol. Malformed-but-parseable headers can silently shift `posed_at`/`created_at`. (queued — minor data drift)
+
+**K-imp-2 fix:**
+  - The regex `/[\n\s]*---\s*$/m` (and the arrow variant) used `/m` flag. With `/m`, `$` matches end-of-LINE, so internal lines ending in `---` or `→ name` matched. The do-while loop continued until stable, stripping ALL such lines.
+  - Demonstrated by inspection: input body containing `"We previously routed it → orion"` as an internal line was stripped to `"We previously routed it"` — visible content loss.
+  - Fix: drop the `/m` flag from both regexes. `$` then only matches end-of-string, so only the TRAILING markers strip — which was the intent.
+
+**Test-first protocol:**
+  1. Wrote 2 regression tests at import-from-kg.test.ts:111-178 (internal `→ name` arrow preserved; internal `---` rule preserved). First attempt at the tests was too lenient (`toContain` matched even after corruption); refined to assert the EXACT internal substring survives.
+  2. Verified both FAIL pre-fix.
+  3. Applied fix (drop `/m` flag from both regexes).
+  4. Verified both PASS post-fix.
+  5. Existing "strips trailing arrow + separator" test still passes — fix is non-regressive.
+
+**Cumulative cross-iter pattern (now 5 peer reviews, 25 REAL findings):**
+  - NL1 lumeyon → 5 REAL on apprenticeship.ts
+  - NL2 keystone → TIMEOUT
+  - NL3 carina → 5 REAL on study-turn.ts
+  - NL4 lumeyon → 7 REAL on ephemeral-peer-review.ts
+  - NL5 keystone → 8 REAL on import-from-kg.ts ← new high
+  - **Total: 25 REAL findings, 5 fixed (L1, L2, C1, E6, K-imp-2), 20 queued**
+
+**Resilience rule worked as designed:** the new prompt.md rule (1 retry on transient flake) was what enabled NL5's success. The strict halt-on-fail loop would have stayed halted; the resilient loop tried again and succeeded.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 408 → 409 (+1: orion's review request to keystone)
+  - Answers: 894 → 895 (+1: keystone's review response, auto-tagged tier-3 authored)
+  - **authored: 10 → 11** (keystone NL5 review)
+  - quality_tier histogram: tier 2=5, tier 3=6, tier 5=884
+
+**Tests:** plugin 508/0/3 (no change). Lattice 121 → 124 (+3 — the 2 K-imp-2 regression tests + 1 from NL4's E6 commit that I miscounted).
+
+**Files touched (5):**
+  - scripts/lattice/import-from-kg.ts (K-imp-2 fix)
+  - scripts/lattice/import-from-kg.test.ts (2 regression tests)
+  - docs/ephemeral-peer-reviews.md (import-from-kg.ts row updated to "reviewed")
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL6 plan; queued findings updated; lessons learned extended)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL6):** Per prompt.md's queue-precedence rule (rule 2), NL6 should DRAIN a queued finding instead of spawning a fresh peer call (LLM cost conservation; 20 queued findings already identified). Per file-touch rule (relaxed: previous 1 iter), can NOT touch import-from-kg.ts (just touched). Recommend **L4 (apprenticeship.ts:227 float margin)** — smallest queued fix, 1-line change with epsilon, mature regression test pattern. Apprenticeship.ts last touched NL1, plenty of gap.
 
 ### 2026-05-08T03:30Z (NL4: lumeyon peer-review of ephemeral-peer-review.ts → 7 REAL findings; E6 fixed; loop pattern shifted to stateful prompt.md)
 
