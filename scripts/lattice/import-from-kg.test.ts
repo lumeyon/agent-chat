@@ -784,3 +784,114 @@ describe("importEdgeConvo — K-imp-4 question idempotency race", () => {
     b.close();
   });
 });
+
+// Regression for keystone's NL5 K-imp-7 finding: the peer-review
+// retroactive-upgrade path in importPairs's catch block uses queryAnswers
+// with limit:5 and then `find()` to locate the existing answer matching
+// (by_agent, body). When the question has 6+ accepted answers AND the
+// target answer is at rank 6+ by predictive_lift, the SQL limit truncates
+// the target out of the candidate set; find() returns undefined; the
+// retro-upgrade silently no-ops; the answer stays at the auto-imported
+// placeholder explanation + tier-5 even though the importer just saw a
+// peer-review section that should have triggered the upgrade.
+//
+// Same SHAPE as K-imp-6 (NL22): SQL limit BEFORE selection logic →
+// silent wrong-row pick. Fix template (NL25): use the data we already
+// have. The answer's id is deterministic from (question_id, body,
+// by_agent) via `makeAnswerId`; we just PK-conflicted on it, so it
+// definitely exists. Skip the queryAnswers + find() and call
+// `getAnswer(makeAnswerId(...))` directly.
+describe("importEdgeConvo — K-imp-7 peer-review retro-upgrade limit:5 truncation", () => {
+  test("K-imp-7: peer-review retro-upgrade fires for target at rank 6+ by predictive_lift", () => {
+    // Phase 1: import a peer-review pair to create the question + the
+    // target answer. The importer detects "ephemeral peer review response"
+    // in the description and stores the answer with authored explanation
+    // + tier 3 from the start.
+    writeConvo(
+      section("orion",   "ephemeral peer review request: x.ts",  "2026-05-08T10:00:00Z", "Review x.ts for issues."),
+      section("lumeyon", "ephemeral peer review response: x.ts", "2026-05-08T10:00:00Z", "Real peer review content with bullet findings."),
+    );
+    const r1 = importEdgeConvo(store, edgeDir);
+    expect(r1.questions_inserted).toBe(1);
+    expect(r1.answers_inserted).toBe(1);
+
+    const q = store.queryQuestions({ limit: 10 })[0];
+    expect(q).toBeDefined();
+    const lumeyonAns = store.queryAnswers({ question_id: q.id, by_agent: "lumeyon", limit: 1 })[0];
+    expect(lumeyonAns).toBeDefined();
+
+    // Phase 2: corrupt lumeyon's answer state to mimic "pre-detection
+    // auto-imported" — exactly the production state K-imp-7 was designed
+    // to retroactively repair (an answer imported BEFORE the
+    // isPeerReviewResponse branch existed). Push its predictive_lift
+    // to 0 so it ranks lowest.
+    store.setAnswerExplanation(
+      lumeyonAns.id,
+      "(auto-imported from CONVO.md; no original explanation captured at write time. " +
+      "Subsequent answers in the lattice will require explanations per Apprenticeship Substrate forcing function 1.)",
+    );
+    store.setAnswerQualityTier(lumeyonAns.id, 5);
+
+    // Phase 3: pad the question with 5 OTHER accepted answers, all with
+    // higher predictive_lift than lumeyon's (which is 0 from import).
+    // This pushes lumeyon's answer to rank 6 by predictive_lift_desc.
+    const { recordAnswer } = require("./apprenticeship.ts");
+    for (let i = 0; i < 5; i++) {
+      recordAnswer(store, {
+        question_id: q.id,
+        body: `padder body ${i}`,
+        by_agent: `padder_${i}`,
+        explanation: `Padded explanation ${i}`,
+        predictive_lift: 0.9 - i * 0.05,  // 0.90, 0.85, 0.80, 0.75, 0.70 — all > lumeyon's 0
+        status: "accepted",
+        quality_tier: 2,
+      });
+    }
+    expect(store.queryAnswers({ question_id: q.id, status: "accepted", limit: 100 }).length).toBe(6);
+
+    // Phase 4: re-import the same CONVO. PK conflict on lumeyon's
+    // answer triggers the retro-upgrade path. Pre-fix queryAnswers
+    // limit:5 returns the 5 padder answers (all higher predictive_lift)
+    // and DROPS lumeyon's answer at rank 6; find() returns undefined;
+    // upgrade no-ops; answer stays auto-imported / tier-5. Post-fix:
+    // makeAnswerId-based getAnswer() finds lumeyon's answer directly →
+    // upgrade fires.
+    const r2 = importEdgeConvo(store, edgeDir);
+    expect(r2.answers_already_existed).toBeGreaterThanOrEqual(1);
+
+    // Verify the retro-upgrade fired post-fix:
+    const lumeyonAfter = store.getAnswer(lumeyonAns.id);
+    expect(lumeyonAfter).not.toBeNull();
+    expect(lumeyonAfter!.explanation ?? "").not.toContain("auto-imported");
+    expect(lumeyonAfter!.quality_tier).toBe(3);
+  });
+
+  test("K-imp-7: simple-case retro-upgrade still works (sanity / backwards compat)", () => {
+    // Single-answer case: only 1 accepted answer for the question. The
+    // pre-fix limit:5 was always sufficient here; this sanity test
+    // ensures the new code path doesn't regress the simple case.
+    writeConvo(
+      section("orion",   "ephemeral peer review request: x.ts",  "2026-05-08T10:00:00Z", "Review x.ts for issues."),
+      section("lumeyon", "ephemeral peer review response: x.ts", "2026-05-08T10:00:00Z", "Real peer review content."),
+    );
+    importEdgeConvo(store, edgeDir);
+
+    const q = store.queryQuestions({ limit: 10 })[0];
+    const lumeyonAns = store.queryAnswers({ question_id: q.id, by_agent: "lumeyon", limit: 1 })[0];
+
+    // Corrupt to auto-imported state (mimicking pre-detection import).
+    store.setAnswerExplanation(
+      lumeyonAns.id,
+      "(auto-imported from CONVO.md; no original explanation captured at write time. " +
+      "Subsequent answers in the lattice will require explanations per Apprenticeship Substrate forcing function 1.)",
+    );
+    store.setAnswerQualityTier(lumeyonAns.id, 5);
+
+    // Re-import → retro-upgrade fires.
+    importEdgeConvo(store, edgeDir);
+
+    const lumeyonAfter = store.getAnswer(lumeyonAns.id);
+    expect(lumeyonAfter!.explanation ?? "").not.toContain("auto-imported");
+    expect(lumeyonAfter!.quality_tier).toBe(3);
+  });
+});

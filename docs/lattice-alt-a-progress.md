@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T13:55Z
+## Current state — 2026-05-08T14:25Z
 
-**Phase: NL24 — drained E7 (ephemeral-peer-review composeReviewPrompt module-source truncation by JS .length / .slice instead of UTF-8 bytes — same shape as just-fixed LC4). Extracted shared `plugins/agent-chat/scripts/utf8.ts` with `truncateToUtf8Bytes` + `utf8ByteLength` and refactored BOTH LC4's `truncateForBudget` and E7's `composeReviewPrompt` to use it. The elided-byte count in the truncation marker is now correctly reported in BYTES instead of UTF-16 code units. Cumulative: 30 REAL findings, 23 code fixes, 3 schema migrations.**
+**Phase: NL25 — drained K-imp-7 (importPairs peer-review retro-upgrade scans only first 5 — same template as K-imp-6, fourth confirmation of the LC2/C5/K-imp-6/K-imp-7 systemic pattern). Pre-fix: catch path used `queryAnswers(limit:5)` + `find()` to locate the existing answer matching (by_agent, body); when the question had 6+ accepted answers and the target was at rank 6+ by predictive_lift, the SQL limit truncated it out and the retro-upgrade silently no-op'd. Post-fix: skipped the queryAnswers+find dance entirely; `getAnswer(makeAnswerId(question_id, body, by_agent))` finds the answer directly using its deterministic id (we just PK-conflicted on it, so it definitely exists). Cumulative: 30 REAL findings, 24 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,139 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T14:25Z (NL25: queue-drain K-imp-7 — peer-review retro-upgrade limit:5 truncation; FOURTH confirmation of LC2/C5/K-imp-6 systemic pattern)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-7 — no fresh peer call. File-touch rule: NL24 touched ephemeral-peer-review.ts and lattice-context.ts; this iter touches import-from-kg.ts (different file → eligible).
+
+**The bug (keystone NL5 K-imp-7):**
+  importPairs's catch block (PK-conflict path) handles the retroactive
+  upgrade of pre-detection peer-review answers (auto-imported tier-5
+  placeholder explanation → authored tier-3 explanation). The lookup:
+  ```typescript
+  const existingAns = (() => {
+    const all = store.queryAnswers({ question_id: questionId, status: "accepted", limit: 5 });
+    return all.find((a) => a.by_agent === assistant.agent && a.body === assistant.body) ?? null;
+  })();
+  ```
+
+  When the question has 6+ accepted answers AND the target peer-review
+  answer is at rank 6+ by predictive_lift_desc (the default ordering),
+  the SQL `limit: 5` truncates the candidate set; `find()` returns
+  undefined; the retro-upgrade silently no-ops. The pre-detection
+  imported answer remains stuck at tier-5 with the "auto-imported"
+  placeholder explanation, even though the importer just saw a
+  peer-review section that should have triggered the upgrade.
+
+  This is the FOURTH confirmation of the LC2 = C5 = K-imp-6 = K-imp-7
+  systemic pattern: SQL limit BEFORE selection logic → silent
+  wrong-row pick.
+
+**The fix (compute the id, don't re-query — same as K-imp-6):**
+  ```typescript
+  const existingId = makeAnswerId(questionId, assistant.body, assistant.agent);
+  const existingAns = store.getAnswer(existingId);
+  if (existingAns && (existingAns.explanation ?? "").includes("auto-imported")) {
+    store.setAnswerExplanation(existingAns.id, explanation);
+    store.setAnswerQualityTier(existingAns.id, qualityTier);
+  }
+  ```
+
+  The answer's id is deterministic from `(question_id, body, by_agent)`
+  via `makeAnswerId` (sqlite-store.ts). We just PK-conflicted on this
+  exact id (the catch block above confirmed it exists), so a direct
+  `getAnswer(makeAnswerId(...))` is guaranteed to return the row, AND
+  it's cheaper than the queryAnswers + find dance.
+
+  This is exactly the K-imp-6 fix template applied to a sibling code
+  path: USE THE DATA YOU ALREADY HAVE — don't re-query for what's
+  derivable from inputs.
+
+**Test-first protocol:**
+  2 regression tests at import-from-kg.test.ts:
+    - **K-imp-7-a (failure case):** import a peer-review pair to seed
+      the question + target answer; corrupt the answer's state to
+      mimic a pre-detection auto-imported placeholder (explanation +
+      tier 5 + predictive_lift 0); pad the question with 5 OTHER
+      accepted answers at higher predictive_lift (0.90 .. 0.70) so
+      the target ends up at rank 6 in the predictive_lift_desc order;
+      re-import the same pair (PK conflict triggers the retro-upgrade
+      path). Assert: the target answer's explanation no longer
+      contains "auto-imported" and its quality_tier is 3.
+      **Verified FAILING pre-fix** — explanation stayed at the
+      auto-imported placeholder because limit:5 returned only the 5
+      padder answers and dropped lumeyon's at rank 6.
+    - **K-imp-7-b (sanity / backwards compat):** single-answer case
+      where the target IS in the limit:5 candidate set — retro-upgrade
+      still fires correctly. Confirms no regression on the simple path.
+
+**Why this matters:** the retro-upgrade handles the migration of
+pre-detection imports — production lattices imported BEFORE the
+isPeerReviewResponse branch existed contain peer-review answers stuck
+at tier-5 with placeholder explanations. K-imp-7's bug meant those
+pre-detection answers stayed broken even when a re-import passed
+through the upgrade path, IF the question had grown to 6+ accepted
+answers. As the substrate accumulates more lattice content over time,
+this bug bites more often (more questions cross the 5-answer threshold).
+Fixing it now ensures all pre-detection answers eventually heal on
+their next re-import.
+
+**FOURTH confirmation of the LC2/C5/K-imp-6/K-imp-7 systemic pattern.**
+The pattern: SQL `limit: N` followed by in-memory `.find()` /
+`.filter()` for selection. Fix template options proven across the four
+instances:
+- **LC2/C5:** push the missing filter axis into queryAnswers (added
+  `by_agent_not` axis).
+- **K-imp-6:** capture the function's already-existing return value.
+- **K-imp-7:** compute the identifier directly via a deterministic
+  helper (`makeAnswerId`).
+
+All four boil down to one root principle: **don't re-query for what
+you can derive or already have.** The systemic pattern is now closed
+on the queryAnswers side; future audits should look at queryQuestions
++ in-memory filter sites for the same shape.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL OUTPUT) — peer-review answers from pre-detection
+    imports now correctly heal to the authored-explanation state on
+    re-import, restoring the substrate's "every answer has a meaningful
+    WHY" guarantee for that subset.
+  - ✅ Function 5 (training-data-shaped artifacts) — the `quality_tier`
+    invariant (peer-reviewed = tier 3) is now correctly applied even
+    when the question has many accepted answers.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 156 → 158 (+2 K-imp-7); plugin 538 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (imported makeAnswerId; replaced queryAnswers+find with getAnswer(makeAnswerId(...)))
+  - scripts/lattice/import-from-kg.test.ts (2 K-imp-7 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-7 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL26 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL26):** File-touch rule blocks import-from-kg.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — eligible at NL24 onward; eligible)
+- LC3 (lattice-context.ts last touched NL24 — INELIGIBLE)
+- E4, E5 (ephemeral-peer-review.ts last touched NL24 — INELIGIBLE)
+- K-imp-1, 3, 9 (import-from-kg.ts last touched NL25 — INELIGIBLE)
+
+**Recommend NL26 → DRAIN L5** (apprenticeship.ts:152 pushContext k unvalidated; negative k returns truncated results).
+
+Reasons:
+- Real correctness bug. `pushContext` accepts `k` from the caller without validation. A negative k passed via `Array.slice(0, -k)` semantics in the topK slice would either return everything-except-k items (slice with negative end) OR break on the iterate-walk path I introduced at NL19 (loop condition `out.length >= k` with negative k → infinite addition until candidates exhausted).
+- apprenticeship.ts last touched NL19 (6 iters gap → eligible).
+- Self-contained fix: validate k at the top of pushContext; clamp to a sensible minimum (e.g. 0) or throw on invalid input.
+
+**Sequenced after NL26:**
+- NL27 → LC3 (header-only block when exclude_agent unset) — lattice-context.ts last touched NL24, eligible at NL27.
+- NL28 → E4 or E5 (ephemeral-peer-review.ts last touched NL24, eligible at NL28).
+- NL29+ → K-imp-1, K-imp-3, K-imp-9, C4 (design call).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ### 2026-05-08T13:55Z (NL24: queue-drain E7 — composeReviewPrompt UTF-16 length vs UTF-8 bytes mismatch; shared utf8.ts utility extracted)
 

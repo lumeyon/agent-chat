@@ -26,7 +26,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { LatticeStore } from "./sqlite-store.ts";
+import { LatticeStore, makeAnswerId } from "./sqlite-store.ts";
 import { recordAnswer } from "./apprenticeship.ts";
 import { normalizeString } from "../normalize/candidate-a.ts";
 import type { Question, QualityTier } from "./types.ts";
@@ -417,10 +417,19 @@ function importPairs(
       // tier already match.
       aDup++;
       if (isPeerReviewResponse) {
-        const existingAns = (() => {
-          const all = store.queryAnswers({ question_id: questionId, status: "accepted", limit: 5 });
-          return all.find((a) => a.by_agent === assistant.agent && a.body === assistant.body) ?? null;
-        })();
+        // K-imp-7 fix (NL25 / keystone NL5 finding): compute the answer
+        // id directly via makeAnswerId. Pre-fix the code did
+        // queryAnswers(limit:5) + find() to locate the answer matching
+        // (by_agent, body) — same SHAPE as K-imp-6. When the question
+        // had 6+ accepted answers and the target was at rank 6+ by
+        // predictive_lift_desc, the SQL limit truncated it out and the
+        // retro-upgrade silently no-op'd. Post-fix: the answer's id is
+        // deterministic from (question_id, body, by_agent) and we just
+        // PK-conflicted on it (the catch block ABOVE confirmed it
+        // exists), so getAnswer(makeAnswerId(...)) is correct AND
+        // cheaper than the queryAnswers+find dance.
+        const existingId = makeAnswerId(questionId, assistant.body, assistant.agent);
+        const existingAns = store.getAnswer(existingId);
         if (existingAns && (existingAns.explanation ?? "").includes("auto-imported")) {
           store.setAnswerExplanation(existingAns.id, explanation);
           store.setAnswerQualityTier(existingAns.id, qualityTier);
