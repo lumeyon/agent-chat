@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T15:25Z
+## Current state — 2026-05-08T15:55Z
 
-**Phase: NL27 — drained LC3 (lattice-context.ts:71 null best_answer survives exclude_agent filter — header-vs-body count mismatch when exclude_agent is unset). Pre-fix: pushContext's default branch can return hits with `best_answer: null` when caller filters (e.g., `quality_tier_min: 1`) reject all accepted answers; the for-loop's `if (!h.best_answer) continue;` skips them in OUTPUT, but the header line `top-${kept.length}` and the `${i + 1}` numbering both incorporate them — header lies, numbering has gaps. Post-fix: filter null-best_answer hits BEFORE computing kept.length so header and body counts always align. Cumulative: 30 REAL findings, 26 code fixes, 3 schema migrations.**
+**Phase: NL28 — drained E4 (ephemeral-peer-review.ts dispatch failure leaves CONVO tail's arrow at "→ peer" while .turn=parked — protocol invariant gap). Pre-fix: orion's request section was appended (CONVO tail "→ <peer>") BEFORE dispatch; if dispatch failed, the catch block parked the edge but left the CONVO tail unchanged — a Monitor reading CONVO would see "the floor was just handed to <peer>" while the wire-state file said parked. Post-fix: added `abortSection` helper + tracked `orionRequestAppended`/`peerResponseAppended` flags; in the catch path when locked AND orion-request-was-appended-but-no-peer-response-yet, append an "ephemeral peer review aborted" section ending with `→ parked` BEFORE the park call. CONVO tail now agrees with `.turn=parked`. Cumulative: 30 REAL findings, 27 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,123 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T15:55Z (NL28: queue-drain E4 — dispatch failure leaves CONVO arrow vs .turn protocol invariant violation)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains E4 — no fresh peer call. File-touch rule: NL27 touched lattice-context.ts; this iter touches ephemeral-peer-review.ts (different file → eligible).
+
+**The bug (lumeyon NL4 E4):**
+  composeReviewPrompt's flow inside the locked critical section:
+  ```typescript
+  fs.appendFileSync(edge.convo, orionRequestSection({...}));  // tail: "→ <peer>"
+  const dispatchResult = await dispatcher({...});             // ← can fail here
+  if (dispatchResult.reason !== "ok" || !dispatchResult.stdout) {
+    throw new Error(`dispatch failed: ...`);                  // ← jumps to catch
+  }
+  // ... append peer's response (tail becomes "→ parked") ...
+  // ... park ...
+  ```
+
+  When dispatch fails (no LLM available, network error, runtime returned
+  garbage), the catch block parks the edge — so `.turn=parked` becomes
+  the post-failure end state. But the CONVO.md tail still says
+  `→ <peer>` because that arrow was the trailing line of orion's request
+  section, written BEFORE dispatch fired. The wire-state file (parked)
+  and the CONVO tail's arrow (peer) disagree.
+
+  Why this matters: a Monitor reading CONVO.md (without checking the
+  .turn sentinel file in the same atomic instant) sees "→ <peer>" and
+  concludes "<peer> was just given the floor". A peer agent reading the
+  edge to determine if there's pending work for them would mis-conclude.
+  The protocol contract per the edge's wire-state docs: CONVO tail's
+  arrow and `.turn` always agree.
+
+**The fix (append abort section before parking):**
+
+  Added a new section helper `abortSection({modulePath, reason})` and
+  tracked two new boolean flags: `orionRequestAppended` (set true after
+  the request section is written) and `peerResponseAppended` (set true
+  after the peer's response section is written).
+
+  In the catch block, when:
+  - `lockedSuccessfully` is true (we own the lock, so park() is the right cleanup), AND
+  - `orionRequestAppended` is true (CONVO tail currently says "→ <peer>"), AND
+  - `peerResponseAppended` is false (no peer response was written),
+
+  append the abort section ending with `→ parked` BEFORE calling park.
+  The abort section's body cites the failure reason (truncated to keep
+  the section tight; the full error is in stderr).
+
+  This narrowly targets the bug: when dispatch fails, write the
+  protocol bookkeeping. The other failure cases — lock failed (E3
+  path; no orion request was ever written), or park failed after peer
+  response (CONVO tail already says "→ parked" from peerResponseSection)
+  — don't need the abort section.
+
+**Test-first protocol:**
+  1 regression test in ephemeral-peer-review.test.ts:
+    - **E4 (failure case):** run ephemeral-peer-review against keystone
+      with no LLM available (`AGENT_CHAT_NO_LLM=1` from freshEnv forces
+      dispatcher to return reason=not-found → CLI throws "dispatch
+      failed" inside the locked critical section AFTER orion's request
+      was appended). Read CONVO.md and find the trailing protocol arrow
+      (last `^→ <name>$` line). Assert: post-fix the last arrow is
+      `→ parked`, matching `.turn=parked`. **Verified FAILING pre-fix**
+      (Expected: "→ parked", Received: "→ keystone").
+
+  Existing 19 ephemeral-peer-review tests still pass (the existing
+  failure-path test only checked `.turn=parked` and lock release — it
+  didn't catch the CONVO arrow mismatch).
+
+**Why this matters at the substrate level:** The CONVO tail's arrow is
+the human-readable expression of the protocol state. Tools that grep
+CONVO.md, agents that read peer's last move, monitor logs that print
+the trail — all rely on the arrow telling the truth. Pre-fix, dispatch
+failures introduced a class of CONVO sections whose arrow LIED about
+where the floor went. Now the substrate's protocol bookkeeping is
+correct under failure too.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Self-improvement infrastructure correctness — orion's main
+    self-improvement vehicle (ephemeral peer reviews) now produces
+    consistent protocol state under all failure modes the code paths
+    handle. The CONVO archive is a faithful audit log even when LLMs
+    fail.
+  - ✅ Function 5 (training-data-shaped artifacts) — CONVO.md sections
+    are downstream training-data; their structural fields (the trailing
+    arrow especially) must accurately reflect the wire-state.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 162 / 0 unchanged; plugin 540 → 541 (+1 E4)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/ephemeral-peer-review.ts (added abortSection helper; tracked appended-flags; conditionally append abort section in catch path)
+  - plugins/agent-chat/tests/ephemeral-peer-review.test.ts (1 E4 regression test)
+  - docs/ephemeral-peer-reviews.md (E4 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL29 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL29):** File-touch rule blocks ephemeral-peer-review.ts immediately again. Eligible:
+- E5 (ephemeral-peer-review.ts last touched NL28 — INELIGIBLE)
+- K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts last touched NL25 — eligible after 4-iter gap)
+
+**Recommend NL29 → DRAIN K-imp-1** (parseSections:54 false sections from `## ` inside fenced transcripts).
+
+Reasons:
+- Real correctness bug. `parseSections` splits CONVO.md content on lines starting with `## `, which can match `## `-prefixed headings INSIDE fenced code blocks (e.g., a peer's review reply that includes a quoted transcript with its own `## agent — desc` style). False sections would then become spurious "questions" in the lattice, polluting the corpus.
+- import-from-kg.ts last touched NL25 (4 iters gap → eligible).
+- Self-contained fix: parseSections should respect fenced code blocks (skip `## ` lines inside ``` fences).
+
+**Sequenced after NL29:**
+- NL30 → K-imp-3 (cross-archive Q→A pair lost when archiving splits) OR K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
+- NL31 → E5 (eligible after NL28 + 3 = NL31).
+- NL32+ → C4 (design call — orion authorized via boss-pre-approval queue).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
+- **Modules fully cleared:** apprenticeship.ts (5/5), lattice-context.ts (5/5).
 
 ### 2026-05-08T15:25Z (NL27: queue-drain LC3 — header-vs-body count mismatch when exclude_agent unset and best_answer is null)
 

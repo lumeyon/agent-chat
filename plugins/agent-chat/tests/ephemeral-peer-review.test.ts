@@ -398,6 +398,61 @@ describe("ephemeral-peer-review CLI — failure path parks the edge", () => {
     const lockPath = path.join(CONVO_DIR, "petersen", "keystone-orion", "CONVO.md.turn.lock");
     expect(fs.existsSync(lockPath)).toBe(false);
   });
+
+  // Regression for lumeyon's NL4 E4 finding: when dispatch fails AFTER
+  // orion's request section was appended (CONVO tail ends with "→ <peer>")
+  // but BEFORE the peer's response section was written, the catch block
+  // parks the edge (.turn=parked) but leaves the CONVO tail's arrow
+  // pointing at the peer. Result: a Monitor or peer reading CONVO.md
+  // sees "the floor was just handed to <peer>" while the actual .turn
+  // says parked — protocol invariant violated.
+  //
+  // NL28 fix: on dispatch failure (or any post-orion-request, pre-peer-
+  // response failure inside the locked critical section), append an
+  // "ephemeral peer review aborted" section with `→ parked` arrow
+  // BEFORE the catch's park call. CONVO tail's arrow then matches
+  // the .turn=parked end state.
+  test("E4: CONVO tail arrow says 'parked' after dispatch failure (matches .turn state)", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const turnPath = path.join(CONVO_DIR, "petersen", "keystone-orion", "CONVO.md.turn");
+    const convoPath = path.join(CONVO_DIR, "petersen", "keystone-orion", "CONVO.md");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "keystone", "--module", moduleFile, "--no-import"],
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        // No mock response → freshEnv's AGENT_CHAT_NO_LLM=1 forces
+        // dispatch reason=not-found → CLI throws inside the locked
+        // critical section AFTER orion's request was appended.
+      }),
+      { allowFail: true },
+    );
+
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toContain("dispatch failed");
+
+    // Sanity: .turn matches what the CONVO tail's arrow should say.
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
+
+    // Read CONVO and find the trailing protocol arrow. The arrow line
+    // pattern is `^→ <name>$` on its own line.
+    const convo = fs.readFileSync(convoPath, "utf8");
+    const arrowMatches = convo.match(/^→\s+(\S+)\s*$/gm);
+    expect(arrowMatches).not.toBeNull();
+    const lastArrow = arrowMatches![arrowMatches!.length - 1];
+
+    // Pre-fix: lastArrow is "→ keystone" (orion's request section's
+    // trailing arrow remained because dispatch failed before peer's
+    // response section was written). Post-fix: an abort section is
+    // appended ending with "→ parked" — the CONVO tail then agrees
+    // with .turn=parked.
+    expect(lastArrow.trim()).toBe("→ parked");
+  });
 });
 
 // Regression for lumeyon's NL4 E3 finding: lock acquisition was OUTSIDE

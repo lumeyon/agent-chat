@@ -40,14 +40,14 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL27 commit)
+## CURRENT STATE (as of NL28 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **all 5 fixed: L1+L2+L3+L4+L5**)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **4 fixed: C1, C2, C3, C5**; C4 queued — design call)
-- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **5 fixed: E6, E3, E1, E2, E7**; E4, E5 queued)
+- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **6 fixed: E6, E3, E1, E2, E7, E4**; E5 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **6 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7**; K-imp-1, 3 queued; K-imp-9 added NL12 observation)
 
 ### Uncovered modules (priority for fresh peer reviews):
@@ -58,15 +58,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **all 5 fixed: LC1, LC2, LC3, LC4, LC5**) — module fully cleared
 
-### Queued findings (drainable WITHOUT fresh peer call — 5 total):
+### Queued findings (drainable WITHOUT fresh peer call — 4 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
 #### study-turn.ts (carina NL3) — 1 queued (C2 drained NL16, C5 drained NL20)
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
 
-#### ephemeral-peer-review.ts (lumeyon NL4) — 2 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24)
-- **E4** (line 220, 256): dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked`.
+#### ephemeral-peer-review.ts (lumeyon NL4) — 1 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24, E4 drained NL28)
 - **E5** (line 143): importer path repo-layout-dependent.
 
 #### import-from-kg.ts (keystone NL5) — 3 queued (K-imp-5 drained NL13, K-imp-4 drained NL18, K-imp-6 drained NL22, K-imp-7 drained NL25)
@@ -88,29 +87,32 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL28 → DRAIN E4** (ephemeral-peer-review.ts:220, 256 dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked` — protocol invariant gap).
+**NL29 → DRAIN K-imp-1** (parseSections:54 false sections from `## ` inside fenced transcripts).
 
-**Why E4:**
-- Real protocol-correctness bug. The orion-request section (line 228) is appended to CONVO.md ending with `→ <peer>` BEFORE dispatch fires. If dispatch fails (line 237-240), the catch block parks the edge (`.turn=parked`, lock removed). But the request section's trailing `→ peer` arrow remains in CONVO.md — a Monitor or peer reading CONVO sees "the floor was just handed to peer" while `.turn` says parked. Protocol invariant violated.
-- ephemeral-peer-review.ts last touched NL24 (4 iters gap → eligible).
+**Why K-imp-1:**
+- Real correctness bug: `parseSections` in import-from-kg.ts splits on `(?=^## )` regex — any line starting with `## ` looks like a section header. CONVO.md content can include FENCED code blocks (```...```) whose interior may contain `## agent — desc` style text (e.g., a peer's review quoting another transcript, or a code example showing protocol formatting). Pre-fix these are mis-parsed as new sections, polluting the lattice with spurious questions/answers.
+- import-from-kg.ts last touched NL25 (4 iters gap → eligible).
 
-**Read first:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` lines 220-260 (the try block + dispatch + catch). Confirm the exact failure mode.
+**Read first:** `scripts/lattice/import-from-kg.ts` `parseSections` function (line ~46). Confirm the regex pattern and the way headers get matched.
 
-**Fix approach options:**
-- **Option A (most consistent):** on dispatch failure inside the try block, append a peer-NOT-responded section ending with `→ parked` to CONVO.md BEFORE the catch's park call. The CONVO tail's arrow then matches `.turn=parked`.
-- **Option B:** rewrite the orion-request section's trailing arrow from `→ peer` to `→ parked`. Mutates an already-written section — violates the append-only protocol invariant. Reject.
+**Fix approach:**
+- Track fenced-code state while scanning. When inside ``` ... ``` (or ```typescript / ```python / etc.), `## ` lines are NOT section headers.
+- Two implementation options:
+  - **Option A (line-by-line scan):** rewrite parseSections to walk lines, toggle a `inFence` boolean on lines starting with ```, and only treat `## ` as a section header when `inFence === false`.
+  - **Option B (regex with negative lookbehind for fence state):** complex, brittle. Reject.
 - Recommend A.
 
-**Test approach (2 regression tests):**
-- Test 1 (failure case): mock dispatcher returning reason!=ok (or use AGENT_CHAT_MOCK_PEER_RESPONSE empty + seed a failure). Run ephemeral-peer-review. Assert post-fix: CONVO.md tail's arrow says `parked` (matches `.turn=parked`).
-- Test 2 (happy path sanity): existing happy-path test still passes; CONVO.md tail's arrow says `parked` after successful peer response (this case was already correct pre-fix).
+**Test approach (3 regression tests):**
+- Test 1 (failure case): a CONVO.md section whose body contains a fenced code block with `## ` lines inside (e.g., a peer quoting a sample protocol section). Pre-fix: parseSections returns N+1 sections (the fenced `## ` mis-parsed). Post-fix: returns N sections.
+- Test 2 (sanity): plain ASCII CONVO without fences works as before.
+- Test 3 (edge): a `## ` line that's NOT inside a fence still parses as a section header.
 
-**Sequenced after NL28:**
-- NL29 → K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts last touched NL25, eligible at NL29).
-- NL30 → E5 (ephemeral-peer-review.ts last touched NL28 → eligible at NL30 if E5 untouched in NL29).
-- NL31+ → C4 (design call — orion authorized via boss-pre-approval queue).
+**Sequenced after NL29:**
+- NL30 → K-imp-3 (cross-archive Q→A pair lost when archiving splits) OR K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
+- NL31 → E5 (ephemeral-peer-review.ts last touched NL28 → eligible at NL31).
+- NL32+ → C4 (design call — orion authorized via boss-pre-approval queue).
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
-- **Modules fully cleared:** apprenticeship.ts (5/5 at NL17+NL26), lattice-context.ts (5/5 at NL12+NL15+NL19+NL23+NL27).
+- **Modules fully cleared:** apprenticeship.ts (5/5), lattice-context.ts (5/5). After NL29-31, ephemeral-peer-review.ts will be 7/7 if E5 ships at NL31.
 
 ## STOPPING CONDITIONS
 
@@ -139,15 +141,16 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL27):**
+- **Cumulative ledger (post-NL28):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 26 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
+  - 27 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E4, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
   - 3 schema migrations shipped
-  - 5 queued findings remain (K-imp-1, K-imp-3, K-imp-9, E4, E5; plus C4 as design-call)
-  - Fix-rate: 87% (26/30 code) + all 3 schema migrations
+  - 4 queued findings remain (K-imp-1, K-imp-3, K-imp-9, E5; plus C4 as design-call)
+  - Fix-rate: 90% (27/30 code) + all 3 schema migrations
   - **MODULES CLEARED (2):** apprenticeship.ts (5/5 lumeyon NL1 findings fixed at NL17+NL26), lattice-context.ts (5/5 carina NL12 findings fixed at NL12+NL15+NL19+NL23+NL27).
   - **Input-validation pattern (E6 = LC4 = L5):** substrate APIs that take user/agent-supplied numbers should validate at the API boundary rather than trust slice/encode/comparison to fail gracefully. Three instances of this pattern have now been hardened (capBytes, body_budget_bytes, k). Audit other numeric API parameters for the same pattern.
   - **Counting consistency (LC2 = LC3):** when filters drop hits, the counts (header lengths, top-K claims) and emission (loop body) must agree. LC2 (NL19) handled the exclude_agent-set branch in pushContext; LC3 (NL27) handled the exclude_agent-unset branch in lattice-context.ts. Together they close the count-vs-emission consistency story for cross-domain push.
+  - **Protocol-state-vs-CONVO-tail consistency (E4):** the wire-state (.turn) and CONVO.md tail's arrow must agree. Pre-fix, dispatch failures introduced a CONVO section class whose trailing arrow lied about where the floor went. Now bookkept under failure with the abortSection helper. Audit other places where state-mutating CLIs append to CONVO.md without matching arrow-vs-state symmetry.
   - **SYSTEMIC pattern (LC2 = C5 = K-imp-6 = K-imp-7) confirmed FOURTH time:** SQL limit BEFORE selection logic → silent wrong-row pick. Fix templates: (a) push the missing axis into queryAnswers (LC2, C5); (b) capture the function's already-existing return value (K-imp-6); (c) compute the identifier directly via a deterministic helper (K-imp-7 with `makeAnswerId`). All boil down to: **don't re-query for what you can derive or already have.** The pattern is now closed on the queryAnswers side; future audits should look at queryQuestions + in-memory filter sites (importAllEdges? statsTotals?) for the same shape.
   - **SYSTEMIC pattern (LC4 = E7) closed via shared helper extraction:** rather than copy-pasting the TextEncoder fix into a second file, NL24 extracted `plugins/agent-chat/scripts/utf8.ts` with `truncateToUtf8Bytes` + `utf8ByteLength` and refactored both LC4's truncateForBudget and E7's composeReviewPrompt to consume it. This is the COUNTER-PATTERN to LC5 = K-imp-2 (where the trailing-marker /m regex was copy-pasted across files): when the same bug shape shows up in a second file, EXTRACT the helper rather than re-applying the fix in two places.
   - **K-imp-6 lesson: when a function returns the data you need, USE the return value — don't re-query.** Pre-fix the importer dropped `recordAnswer`'s return and then re-queried for "which answer did I just insert?", introducing a tie-break dependency on SQLite's implementation-defined ordering. Post-fix uses the returned Answer directly. Audit other call sites that drop function returns and then re-query.

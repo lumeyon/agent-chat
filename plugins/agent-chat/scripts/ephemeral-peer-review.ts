@@ -140,6 +140,27 @@ function peerResponseSection(args: {
   return `\n---\n\n## ${args.peer} — ${desc} (UTC ${ts})\n\n${trimmed}\n\n→ parked\n`;
 }
 
+/** E4 fix (NL28 / lumeyon NL4 finding): when dispatch fails AFTER orion's
+ *  request section was appended but BEFORE the peer's response section,
+ *  append this abort section so the CONVO.md tail's arrow matches the
+ *  catch block's `.turn=parked` end state. Pre-fix the CONVO tail said
+ *  `→ <peer>` (from orion's request) while `.turn=parked` — a Monitor
+ *  reading CONVO would see "the floor was just handed to <peer>" but
+ *  the wire-state file disagreed. */
+function abortSection(args: {
+  modulePath: string;
+  reason: string;
+}): string {
+  const ts = utcStamp();
+  const desc = `ephemeral peer review aborted: ${path.basename(args.modulePath)}`;
+  // Truncate the reason to keep the section tight. The full error is
+  // already in the CLI's stderr; this is just the audit-trail breadcrumb.
+  const truncatedReason = args.reason.length > 240
+    ? args.reason.slice(0, 237) + "..."
+    : args.reason;
+  return `\n---\n\n## orion — ${desc} (UTC ${ts})\n\nDispatch failed: ${truncatedReason}\n\n→ parked\n`;
+}
+
 // ─── Lock cycle ────────────────────────────────────────────────────────────
 
 function turnCli(args: string[]): { status: number; stderr: string; stdout: string } {
@@ -249,6 +270,8 @@ export async function runEphemeralPeerReview(
   // pre-resume value so the edge isn't stranded.
   let response = "";
   let lockedSuccessfully = false;
+  let orionRequestAppended = false;
+  let peerResponseAppended = false;
   try {
     const lockR = turnCli(["lock", input.peer]);
     if (lockR.status !== 0) {
@@ -261,6 +284,7 @@ export async function runEphemeralPeerReview(
       modulePath: input.modulePath,
       task,
     }));
+    orionRequestAppended = true;
 
     // Dispatch to the peer's runtime. 240s budget — codex on a 30KB-class
     // module with a non-trivial review task routinely takes 60-180s; the
@@ -277,6 +301,7 @@ export async function runEphemeralPeerReview(
       modulePath: input.modulePath,
       responseBody: response,
     }));
+    peerResponseAppended = true;
 
     // Park the edge. turn.ts park atomically writes "parked" AND unlinks
     // the lock (Round-13 protocol fix at scripts/turn.ts:73-93).
@@ -295,6 +320,25 @@ export async function runEphemeralPeerReview(
     //      the lock, which we don't. Revert the resume manually so
     //      the edge isn't stranded on "orion".
     if (lockedSuccessfully) {
+      // E4 fix (NL28): if orion's request was already appended but the
+      // peer's response was NOT (typical case: dispatch failed mid-flight),
+      // append an abort section so CONVO.md's tail arrow says "→ parked"
+      // — matching the .turn=parked end state the park() call below will
+      // write. Without this, CONVO tail says "→ <peer>" (from orion's
+      // request) while .turn=parked, violating the protocol invariant
+      // that the wire-state file and CONVO tail's arrow agree.
+      if (orionRequestAppended && !peerResponseAppended) {
+        try {
+          fs.appendFileSync(edge.convo, abortSection({
+            modulePath: input.modulePath,
+            reason: (err as Error)?.message ?? String(err),
+          }));
+        } catch (writeErr) {
+          // Best-effort; if we can't append the abort marker, surface it
+          // but still proceed to park so .turn doesn't get stuck.
+          console.error(`[ephemeral-peer-review] failed to append abort section for ${edge.id}: ${(writeErr as Error)?.message ?? writeErr}`);
+        }
+      }
       const parkR = turnCli(["park", input.peer]);
       if (parkR.status !== 0) {
         // park failed for some reason; fall back to unlock so at least the
