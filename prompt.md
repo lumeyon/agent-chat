@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL32 commit)
+## CURRENT STATE (as of NL33 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -48,7 +48,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **all 5 fixed: L1+L2+L3+L4+L5**)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **all 5 fixed: C1, C2, C3, C4, C5**) — module fully cleared
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **all 7 fixed: E6, E3, E1, E2, E7, E4, E5**) — module fully cleared
-- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **all 8 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7, K-imp-1, K-imp-3**) — module fully cleared from original peer findings; K-imp-9 (NL12 observation) still queued
+- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **all 8 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7, K-imp-1, K-imp-3**) — module fully cleared. K-imp-9 (NL12 post-review observation) RESOLVED-NOT-A-BUG at NL33 (metric misinterpretation, not a code bug; 2 lock-in regression tests added).
 
 ### Uncovered modules (priority for fresh peer reviews):
 1. `scripts/lattice/stats.ts` — lumeyon or keystone fit
@@ -58,7 +58,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **all 5 fixed: LC1, LC2, LC3, LC4, LC5**) — module fully cleared
 
-### Queued findings (drainable WITHOUT fresh peer call — 1 total):
+### Queued findings (drainable WITHOUT fresh peer call — 0 total — QUEUE FULLY DRAINED at NL33):
 
 #### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
@@ -67,8 +67,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 #### ephemeral-peer-review.ts (lumeyon NL4) — 0 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24, E4 drained NL28, E5 drained NL30 — module fully cleared)
 
-#### import-from-kg.ts (keystone NL5) — 1 queued (K-imp-5 drained NL13, K-imp-4 drained NL18, K-imp-6 drained NL22, K-imp-7 drained NL25, K-imp-1 drained NL29, K-imp-3 drained NL31)
-- **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
+#### import-from-kg.ts (keystone NL5) — 0 queued (all 8 fixed; K-imp-9 RESOLVED-NOT-A-BUG at NL33)
 
 #### study-turn.ts — 0 queued (C4 drained NL32 as orion-authorized design call — module fully cleared)
 
@@ -86,33 +85,44 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL33 → DRAIN K-imp-9** (post-review observation: pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs).
+**NL34 → FRESH PEER REVIEW on `scripts/lattice/stats.ts` (carina, embeddings/cosine specialty fits but the module is more SQL-shaped — could equally route to keystone).**
 
-**Why K-imp-9:**
-- Real correctness bug surfaced by carina's NL12 dog-food: a single peer-review response with bulleted findings yielded 6Q/9A vs typical 1Q/1A. The pairSections logic doesn't recognize that a peer-review-response section is conceptually ONE answer with multi-bullet content; instead, the bullets get treated as separate sections somehow OR the peer's quoted prior sections create artificial pairs.
-- import-from-kg.ts last touched NL31 (2 iters gap → eligible at NL33).
-- File-touch rule: NL32 touched study-turn.ts; import-from-kg.ts is a different file.
+**Substrate state:** queue is FULLY DRAINED at NL33. All 30 original peer findings fixed. K-imp-9 (NL12 post-review observation) resolved-not-a-bug. C4 design-call drained at NL32. 3 schema migrations shipped. The original review surface is exhausted.
 
-**Read first:** `scripts/lattice/import-from-kg.ts` `pairSections` function (around line 110). Examine the AI→AI pattern (Pattern 2) and how it handles consecutive non-handoff sections — this is likely where the over-eager splitting happens.
+**Why fresh peer review on stats.ts:**
+- 6 peer-reviewed modules covered so far: apprenticeship.ts, sqlite-store.ts, study-turn.ts, ephemeral-peer-review.ts, import-from-kg.ts, lattice-context.ts. All cleared.
+- Uncovered modules per the original plan: stats.ts, synthesize-corpus.ts, validate-corpus.ts.
+- stats.ts is the natural next pick — it's a substrate-level lattice analytics module that hasn't been peer-reviewed.
+- Last fresh peer call was NL5 keystone. By rotation, carina is next. carina's specialty (embeddings/cosine math, grading thresholds) fits stats.ts only loosely. keystone (SQL/locking/protocol) might fit better.
 
-Then: spot-check a CONVO archive in production (`/data/lumeyon/agent-chat/conversations/petersen/<edge>/archives/leaf/...`) to see what the "many Q/A" import case actually looks like. Use a small reproducer if needed.
+**Fresh peer call protocol (per prompt.md PEER ROTATION):**
+- Cycle: lumeyon (general correctness) → keystone (SQL) → carina (embeddings) → cycle.
+- Last fresh call: NL5 keystone. Next would normally be carina.
+- For stats.ts (SQL-heavy), keystone is the better fit. Justify the rotation deviation in the journal.
 
-**Hypothesis:** the AI→AI pairing pattern matches `(agent_A, agent_B)` ANY time the agents differ AND neither is a handoff/park. With a peer-review response containing bulleted findings, internal `## ...` style fragments may be parsed as separate sections (post-NL29 K-imp-1 fix should have addressed fenced cases, but un-fenced bullet structure may still split). Investigate.
+**Fix approach:**
+1. Read `scripts/lattice/stats.ts` first to understand its surface area.
+2. Spawn ephemeral peer review:
+   ```bash
+   bun plugins/agent-chat/scripts/ephemeral-peer-review.ts \
+     --peer keystone \
+     --module /data/eyon/git/agent-chat/scripts/lattice/stats.ts
+   ```
+3. Apply per-iter peer-call resilience: 240s budget, retry once at 360s on transient flake.
+4. Classify findings (REAL bug → queue; REFACTOR → dismiss in journal; DESIGN → spawn depth>0 question OR drain via boss-pre-approval).
 
-**Fix approach options:**
-- **Option A (description-prefix-aware pairing):** pairSections recognizes "ephemeral peer review request" / "ephemeral peer review response" descriptions and pairs them as ONE Q/A regardless of any embedded structure.
-- **Option B (skip nested ## headings INSIDE sections):** if K-imp-1's fenced-code fix was incomplete, the remaining nested-section issue is a parseSections bug, not a pairSections bug.
-- Pick during investigation.
+**Sequenced after NL34:**
+- NL35-N: drain peer findings from stats.ts.
+- After stats.ts cleared: peer review on synthesize-corpus.ts or validate-corpus.ts.
+- After all uncovered modules reviewed: stopping condition #5 hit ("Queued findings + pre-approval queue empty AND all uncovered modules covered → review pass complete summary commit and STOP").
 
-**Test approach (2-3 regression tests):**
-- Test 1 (reproducer): construct a CONVO with a single ephemeral-peer-review-response section whose body has bulleted findings (no fenced code). Pre-fix: parseSections + pairSections returns multiple sections / pairs. Post-fix: returns 1 section + 1 pair.
-- Test 2 (sanity): existing single-pair imports unchanged.
-
-**Sequenced after NL33:**
-- NL34 → fresh peer review on stats.ts (carina by rotation, first fresh peer call since NL5 keystone). After K-imp-9 drains, the original-peer-finding queue is fully empty AND the post-review observation queue is empty. Time to surface NEW findings from a previously-uncovered module.
-- NL35+ → drain whatever fresh-peer findings emerge.
-- Eventually: full review-pass complete summary commit if all queued + freshly-discovered findings drained AND no new peer-review surface remains.
-- **Modules fully cleared (4 of 6 + sqlite-store iter-6 K1/K2/K3):** apprenticeship.ts (5/5), study-turn.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7), import-from-kg.ts (8/8 once K-imp-9 closes at NL33). sqlite-store.ts (3/3 K1+K2+K3) shipped during the early iters.
+**MODULES FULLY CLEARED (6 of 6 reviewed so far + 1 design-call drained):**
+- apprenticeship.ts: 5/5 lumeyon NL1
+- sqlite-store.ts: 3/3 keystone iter-6 + 3 schema migrations from boss-pre-approval queue
+- study-turn.ts: 5/5 carina NL3 + C4 design-call NL32
+- ephemeral-peer-review.ts: 7/7 lumeyon NL4
+- import-from-kg.ts: 8/8 keystone NL5 + K-imp-9 NL12 observation (resolved-not-a-bug)
+- lattice-context.ts: 5/5 carina NL12
 
 ## STOPPING CONDITIONS
 
@@ -141,12 +151,14 @@ Then: spot-check a CONVO archive in production (`/data/lumeyon/agent-chat/conver
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL32):**
-  - 30 ORIGINAL REAL peer-review findings discovered across 6 peer reviews — **all 30 fixed at NL32**.
-  - 31 total fixes including the C4 design-call drained from boss-pre-approval queue at NL32: L1, L2, L3, L4, L5, C1, C2, C3, C4, C5, E1, E2, E3, E4, E5, E6, E7, K-imp-1, K-imp-2, K-imp-3, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5.
+- **Cumulative ledger (post-NL33):**
+  - 30 ORIGINAL REAL peer-review findings discovered across 6 peer reviews — **all 30 fixed**.
+  - 31 total fixes including C4 design-call (drained at NL32 from boss-pre-approval queue): L1, L2, L3, L4, L5, C1, C2, C3, C4, C5, E1, E2, E3, E4, E5, E6, E7, K-imp-1, K-imp-2, K-imp-3, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5.
+  - K-imp-9 NL12 post-review observation: investigated NL33 → RESOLVED-NOT-A-BUG (metric misinterpretation, not code; 2 lock-in tests added).
   - 3 schema migrations shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK).
-  - 1 queued finding remains (K-imp-9 NL12 post-review observation).
-  - Fix-rate on original peer findings: **100% (30/30)**. C4 was queued as design-call but drained at NL32 as orion-authorized via boss-pre-approval queue.
+  - 0 queued findings remain. **Queue fully drained at NL33.**
+  - Fix-rate: **100% (30/30 original peer findings)**.
+  - **NL33 lesson: investigate before fixing.** A queued "real bug" can turn out to be a metric misinterpretation. Before writing code, reproduce the failure mode. K-imp-9 looked like a parser bug; investigation showed it was correct behavior on a misread metric. Lock in the correct behavior with regression tests so future code changes don't introduce the predicted-but-not-actual bug.
   - **MODULES CLEARED (3 of 6):** apprenticeship.ts (5/5 NL17+NL26), lattice-context.ts (5/5 NL12+NL15+NL19+NL23+NL27), ephemeral-peer-review.ts (7/7 NL4+NL14+NL21+NL24+NL28+NL30). import-from-kg.ts ALSO cleared from original peer findings (8/8 keystone NL5) at NL31 — only the post-review NL12 K-imp-9 observation remains.
   - **Markdown-fragility pattern (LC5 = K-imp-2 = K-imp-1):** all three are bugs in CONVO parsing where single-line regex meets multi-line content. LC5 + K-imp-2 (NL5, NL12) were trailing-marker /m strip bugs; K-imp-1 (NL29) was the section-split-not-respecting-fences bug. Future iter: extract a proper line-walking parser as the canonical CONVO reader (the way utf8.ts extracted byte-truncation as a shared primitive at NL24).
   - **K-imp-3 lesson: aggregate-then-process > per-source-loop when sources can interact.** Pre-fix per-source pairing dropped cross-archive pairs silently. The fix wasn't to make pairSections smarter — it was to give pairSections the COMPLETE input (concatenated sections from all sources) instead of artificially fragmenting it. When a function operates on sequences, fragmenting the input across processing loops can hide cross-fragment relationships.

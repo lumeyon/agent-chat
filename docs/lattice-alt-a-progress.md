@@ -2,11 +2,11 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T17:55Z
+## Current state — 2026-05-08T18:25Z
 
-**Phase: NL32 — drained C4 (study-turn applyGradeToLift negative-cosine asymmetric lift penalty exceeds named learningRate). Pre-fix: `(cosine - 0.5) * 2` mapped cosine [0, 1] symmetrically around 0.5 → signal [-1, +1], but cosine similarity is in [-1, +1], so for negative cosines the signal went BELOW -1 (cosine=-1 → signal=-3, delta=-3*learningRate). Asymmetric: positive side capped at +learningRate, negative side could swing 3x. Post-fix: clamp signal to [-1, +1] before applying learningRate; |delta| ≤ learningRate regardless of cosine sign. Drained from the boss-pre-approval queue (orion-authorized design call). Cumulative: 31 REAL fixes (30 original + 1 bonus = K-imp-9 still queued); 3 schema migrations.**
+**Phase: NL33 — investigated K-imp-9 (NL12 post-review observation: pairSections over-eagerly splits bulleted peer-review responses → 6Q/9A vs typical 1Q/1A). Outcome: RESOLVED-NOT-A-BUG. parseSections + pairSections produce EXACTLY 1 pair from the actual NL12 carina-on-lattice-context response — the 6Q/9A delta was the edge-wide import scanning the WHOLE carina-orion CONVO+archives, not the peer-review pair alone. The "typical 1Q/1A" mental model was wrong: ephemeral-peer-review's lattice import rescans the entire edge so delta includes any prior unimported AI→AI dialogue. Locked in correct behavior with 2 regression tests; queue is now EMPTY of original peer findings AND post-review observations. Cumulative: 31 code-level fixes + 3 schema migrations.**
 
-**MILESTONE — original peer findings 100% drained:** The 6 peer-review modules (apprenticeship, sqlite-store, study-turn, ephemeral-peer-review, import-from-kg, lattice-context) generated 30 original REAL findings. All 30 are now FIXED. Plus 3 schema migrations from the boss-pre-approval queue. The K-imp-9 NL12 observation (post-review item) and any future fresh-peer-review findings are the only remaining substrate-level work.
+**MILESTONE — substrate finding queue fully drained at NL33:** the 6 peer-review modules generated 30 original REAL findings + 1 post-review observation (K-imp-9). All 30 findings FIXED + K-imp-9 INVESTIGATED-AND-RESOLVED-AS-NOT-A-BUG. Plus 3 schema migrations from the boss-pre-approval queue. Plus 1 design-call drained (C4 at NL32). The substrate is at a natural pause point — the original peer-review surface has been exhausted. Next step: fresh peer review on a previously-uncovered module (stats.ts) to surface NEW findings.
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -19,6 +19,125 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T18:25Z (NL33: investigate K-imp-9 — RESOLVED-NOT-A-BUG; metric misinterpretation, not a code bug)
+
+**Loop:** stateful peer-driven via prompt.md. K-imp-9 was the last queued post-review observation. File-touch rule: NL32 touched study-turn.ts; this iter touches import-from-kg.ts (different file → eligible).
+
+**The observation (carina dog-food at NL12):**
+  At NL12, when carina did the first ephemeral peer review against
+  lattice-context.ts, the importEdgeIntoLattice step reported `lattice:
+  questions_inserted=6 answers_inserted=9` in the CLI stdout. The
+  expected mental model was "1 peer-review request + 1 peer-review
+  response = 1Q/1A". 6Q/9A was 6x bigger than expected → suspected
+  pairSections was over-eagerly splitting the bulleted response into
+  many sections.
+
+**Investigation method:**
+  1. Located the actual NL12 peer review pair in
+     `/data/lumeyon/agent-chat/conversations/petersen/carina-orion/CONVO.md`
+     at lines 4086-4106. Confirmed: orion-request + carina-response
+     with 5 bulleted findings. ONE protocol section per agent header.
+  2. Fed that literal slice through `parseSections` + `pairSections`
+     directly via a probe script. Result: 2 sections, 1 pair (orion →
+     carina, ai_to_ai). Bullets stayed in body content.
+  3. Re-ran the importer against the carina-orion edge end-to-end:
+     archives_walked=1, sections_parsed=120, pairs_found=50,
+     questions_inserted=26, answers_inserted=26 (all valid AI→AI
+     dialogue across the edge's full history). NO over-splitting.
+
+**Outcome — RESOLVED-NOT-A-BUG:**
+  The 6Q/9A reported at NL12 was the edge-wide DELTA on a re-import,
+  not the peer-review pair alone. ephemeral-peer-review's
+  importEdgeIntoLattice rescans the ENTIRE edge (live CONVO + all
+  archives) and reports cumulative new inserts since the last import.
+  At NL12 the edge had pre-existing unimported AI→AI dialogue between
+  orion and carina; that dialogue paired correctly during the import
+  and contributed to the delta.
+
+  The "1Q/1A typical" mental model was wrong. K-imp-9 was a misreading
+  of the metric, not a bug in pairSections.
+
+**Lock-in (2 regression tests):**
+  Even though there's no code fix, the investigation shipped 2 tests
+  to lock in the correct behavior so a future regression in
+  parseSections or pairSections doesn't reintroduce the over-split:
+
+    - **K-imp-9-a (5-bullet peer-review response → 1 pair):** uses the
+      exact structure of carina's NL12 response (orion-request +
+      carina-response with 5 bulleted findings). Asserts
+      parseSections returns 2 sections; pairSections returns 1
+      ai_to_ai pair; bullet content preserved verbatim in body.
+    - **K-imp-9-b (indented `## ` lines stay in body):** defensive case
+      ensuring `## ` lines with leading whitespace (Markdown semantics:
+      not headings) are not mis-parsed as section starts.
+
+  Both tests PASS on current code. They lock in the correct behavior
+  going forward.
+
+**Why this matters:** the K-imp-9 entry has been on the queue since
+NL12. Investigating it forces a precise understanding of what the
+lattice import actually measures. The metric is "edge-wide unimported
+content delta", not "this peer review's contribution alone". Future
+documentation of `ephemeral-peer-review --import` should clarify this.
+
+**Substrate state:** queue fully drained.
+  - 30/30 original peer findings fixed.
+  - 1/1 post-review observations resolved.
+  - 1/1 design-calls drained (C4 at NL32).
+  - 3 schema migrations shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK).
+
+  Per the prompt.md state machine, this is a "natural pause" — the
+  substrate has fully drained the queue surfaced by the initial 6
+  peer-review pass. Continuation requires either (a) fresh peer reviews
+  against previously-uncovered modules (e.g., stats.ts) to surface NEW
+  findings, or (b) substrate-level work outside the peer-review loop
+  (e.g., new functionality, new architecture, etc.).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (training-data-shaped artifacts) — locked in
+    correctness of parseSections + pairSections via tests so that
+    these load-bearing primitives don't regress on bulleted content.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 172 → 174 (+2 K-imp-9); plugin 543 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.test.ts (2 K-imp-9 lock-in regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-9 entry added under "Post-review observations (resolved)")
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL34 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL34):** Substrate queue is now FULLY DRAINED. Per the prompt.md stopping conditions, continuation paths are:
+
+  1. **Fresh peer review on a previously-uncovered module.** The 6
+     reviewed modules + sqlite-store leaves: `scripts/lattice/stats.ts`
+     (uncovered, lumeyon or keystone fit) and a few others
+     (`synthesize-corpus.ts`, `validate-corpus.ts`). Per the rotation
+     table, the next fresh-peer would be carina (last fresh peer call
+     was NL5 keystone). carina's specialty is embeddings/cosine, which
+     fits study-turn or stats.ts.
+
+  2. **Pause the loop and ask the boss for direction.** The original
+     mission of the autonomous loop ("find and fix real bugs in the
+     substrate via ephemeral peer reviews") has reached natural
+     completion for the originally-reviewed modules.
+
+  Recommend NL34 → fresh peer review on stats.ts (carina). This
+  surfaces NEW findings from a previously-uncovered module. If carina
+  returns 5-8 REAL findings (typical), the queue gets re-populated and
+  the loop continues for ~5-8 more iters draining them.
+
+**Sequenced after NL34:**
+- NL35-N: drain whatever fresh-peer-findings emerge from stats.ts.
+- After stats.ts cleared: peer review on synthesize-corpus.ts or
+  validate-corpus.ts (last 2 uncovered modules).
+- After all uncovered modules reviewed: full review-pass complete
+  summary commit + STOP per stopping condition #5.
 
 ### 2026-05-08T17:55Z (NL32: queue-drain C4 — symmetric signal clamp for applyGradeToLift)
 

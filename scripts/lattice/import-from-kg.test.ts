@@ -652,6 +652,106 @@ describe("importEdgeConvo — sealed archive walking", () => {
   });
 });
 
+// K-imp-9 (NL12 post-review observation): "carina's NL12 review yielded
+// 6Q/9A vs typical 1Q/1A — bulleted findings inside the response body
+// got mis-pair-split."
+//
+// NL33 investigation outcome: NOT A CODE BUG. parseSections produces
+// exactly 1 section per `## ` agent header (with body content
+// untouched), and pairSections produces exactly 1 Q/A pair from a
+// (orion-request, carina-response) adjacency — bullets in the body
+// don't influence either step. The 6Q/9A NL12 metric was the edge-wide
+// delta on a re-import that scanned the WHOLE carina-orion CONVO +
+// archives, not the peer-review pair alone. The "typical 1Q/1A"
+// expectation was wrong: ephemeral-peer-review's lattice import
+// rescans the entire edge so any prior unimported AI→AI dialogue also
+// shows up in the delta.
+//
+// Resolution: lock in the correct behavior with this regression test.
+// A peer-review response with N bulleted findings still produces
+// exactly ONE pair (not N+1, not N pairs). Audit that downstream
+// behavior remains stable across future parser refactors.
+describe("parseSections + pairSections — K-imp-9 peer-review response NOT over-split by bullets", () => {
+  test("K-imp-9: a peer-review response with 5 bulleted findings yields 1 section + 1 pair (not 6+)", () => {
+    // Use the exact structure of carina's NL12 review on lattice-context.ts:
+    // an orion request + a carina response with 5 bulleted findings in
+    // the body. The bullets reference internal `:line:` anchors and use
+    // backticks but are NOT themselves `##` headers (Markdown distinguishes
+    // bullets from headings).
+    const text = [
+      "## orion — ephemeral peer review request: lattice-context.ts (UTC 2026-05-08T07:49:03Z)",
+      "",
+      "Review the file for issues.",
+      "",
+      "→ carina",
+      "",
+      "---",
+      "",
+      "## carina — ephemeral peer review response: lattice-context.ts (UTC 2026-05-08T07:51:46Z)",
+      "",
+      "- `/path/file.ts:64`: finding 1 with `code` reference.",
+      "",
+      "- `/path/file.ts:65`: finding 2 with `code` reference.",
+      "",
+      "- `/path/file.ts:71`: finding 3 with `code` reference.",
+      "",
+      "- `/path/file.ts:109`: finding 4 with `code` reference.",
+      "",
+      "- `/path/file.ts:134`: finding 5 with `code` reference.",
+      "",
+      "→ parked",
+      "",
+    ].join("\n");
+
+    const sections = parseSections(text);
+    // 1 orion request + 1 carina response = 2 sections. NO bullets are
+    // mis-parsed as section headers.
+    expect(sections.length).toBe(2);
+    expect(sections[0].agent).toBe("orion");
+    expect(sections[1].agent).toBe("carina");
+    // Body MUST contain all 5 bullets verbatim — bullets are body content,
+    // not section headers.
+    expect(sections[1].body).toContain("finding 1");
+    expect(sections[1].body).toContain("finding 5");
+
+    const pairs = pairSections(sections);
+    // Exactly 1 pair: orion → carina (AI→AI). Not 6 pairs from over-split.
+    expect(pairs.length).toBe(1);
+    expect(pairs[0].kind).toBe("ai_to_ai");
+    expect(pairs[0].user.agent).toBe("orion");
+    expect(pairs[0].assistant.agent).toBe("carina");
+  });
+
+  test("K-imp-9: bullets that look like nested `## headings` (with leading whitespace) are NOT treated as section starts", () => {
+    // Defensive case: what if a peer-review response embeds a literal
+    // `## ` line that's INDENTED (not at column 0)? Markdown semantics:
+    // an indented `## ` is NOT a heading. parseSections (post-NL29)
+    // requires `## ` at column 0, so indented matches are body content.
+    const text = [
+      "## orion — peer review request (UTC 2026-05-08T10:00:00Z)",
+      "",
+      "Review the file.",
+      "",
+      "→ carina",
+      "",
+      "---",
+      "",
+      "## carina — peer review response (UTC 2026-05-08T10:01:00Z)",
+      "",
+      "Findings:",
+      "  ## indented heading (NOT a section)",
+      "    ## even more indented",
+      "",
+      "→ parked",
+      "",
+    ].join("\n");
+    const sections = parseSections(text);
+    // 2 real sections; the indented `## ` lines stay in body content.
+    expect(sections.length).toBe(2);
+    expect(sections[1].body).toContain("indented heading");
+  });
+});
+
 // Regression for keystone's NL5 K-imp-8 finding: Date.parse accepts
 // non-strict UTC formats (offsets, missing Z, space separator, etc.)
 // despite the protocol specifying `UTC YYYY-MM-DDTHH:MM:SSZ`.
