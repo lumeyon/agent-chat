@@ -225,6 +225,57 @@ describe("ephemeral-peer-review CLI — validation", () => {
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toContain("required");
   });
+
+  // Regression for lumeyon's NL4 E6 finding: --review-cap-bytes accepted
+  // NaN (no truncation, advertised cap silently ignored) and negative
+  // values (misleading "bytes elided" count). Validation added.
+  test("E6: rejects non-numeric --review-cap-bytes", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "lumeyon", "--module", moduleFile, "--no-import", "--review-cap-bytes", "abc"],
+      orionEnv({ CLAUDE_SESSION_ID: sid, AGENT_CHAT_MOCK_PEER_RESPONSE: "ignored" }),
+      { allowFail: true },
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/review-cap-bytes/i);
+  });
+
+  test("E6: rejects negative --review-cap-bytes", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "lumeyon", "--module", moduleFile, "--no-import", "--review-cap-bytes", "-100"],
+      orionEnv({ CLAUDE_SESSION_ID: sid, AGENT_CHAT_MOCK_PEER_RESPONSE: "ignored" }),
+      { allowFail: true },
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/review-cap-bytes/i);
+  });
+
+  test("E6: rejects zero --review-cap-bytes", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "lumeyon", "--module", moduleFile, "--no-import", "--review-cap-bytes", "0"],
+      orionEnv({ CLAUDE_SESSION_ID: sid, AGENT_CHAT_MOCK_PEER_RESPONSE: "ignored" }),
+      { allowFail: true },
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/review-cap-bytes/i);
+  });
 });
 
 describe("ephemeral-peer-review CLI — failure path parks the edge", () => {

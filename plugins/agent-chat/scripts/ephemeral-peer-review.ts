@@ -311,7 +311,18 @@ if (import.meta.main) {
       runtime = r;
     }
     else if (a === "--no-import") skipImport = true;
-    else if (a === "--review-cap-bytes") reviewCapBytes = parseInt(args[++i] ?? "0", 10);
+    else if (a === "--review-cap-bytes") {
+      // Lumeyon NL4 E6 fix: previously parseInt accepted NaN (silently
+      // disabled truncation) and negative values (misleading "bytes
+      // elided" count). Reject explicitly.
+      const raw = args[++i] ?? "";
+      const parsed = parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        console.error(`error: --review-cap-bytes must be a positive integer (got "${raw}")`);
+        process.exit(2);
+      }
+      reviewCapBytes = parsed;
+    }
     else if (a === "-h" || a === "--help") {
       console.log(`usage: ephemeral-peer-review --peer <name> --module <path> [--task <text>] [--runtime claude|codex] [--no-import] [--review-cap-bytes <N>]`);
       process.exit(0);
