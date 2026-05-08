@@ -191,6 +191,89 @@ describe("pushContext — cross-domain push retrieval (forcing function 4)", () 
       empty.close();
     }
   });
+
+  // Regression for lumeyon's iter-1 (new-loop) L1+L2 findings:
+  // pushContext was bypassing quality_tier_min/predictive_lift_min on
+  // the best_answer_id path — filters were only applied in the fallback
+  // path. High-stakes callers passing `quality_tier_min: 1` could still
+  // receive tier-5 answers via the best_answer_id pointer.
+  // Also: best_answer_id was treated as authoritative even if its
+  // pointed-to answer was no longer accepted (e.g., status superseded).
+  test("L1: pushContext respects quality_tier_min on the best_answer_id path", async () => {
+    // Seed a question whose best_answer_id points at a tier-5 (raw)
+    // accepted answer. With quality_tier_min: 1, the caller should NOT
+    // receive that tier-5 answer back via best_answer.
+    const tinyStore = new LatticeStore(":memory:");
+    try {
+      const q = makeQuestion({ id: "v1:q-tier-test", framing: "Important deadline?" });
+      tinyStore.putQuestion(q);
+      const lowQualA = recordAnswer(tinyStore, {
+        question_id: q.id,
+        body: "raw low-quality answer",
+        by_agent: "orion",
+        explanation: "low quality",
+        predictive_lift: 0.0,
+        status: "accepted",
+        quality_tier: 5,  // raw
+      });
+      tinyStore.setQuestionStatus(q.id, "answered", lowQualA.id);
+      // Filter for tier-1-or-better (high-stakes). best_answer should
+      // NOT be the tier-5 raw answer — it should fall back to find a
+      // higher-tier accepted answer (none exists, so null).
+      const hits = await pushContext(tinyStore, "Important deadline?", {
+        k: 1,
+        quality_tier_min: 1,
+      });
+      expect(hits.length).toBe(1);
+      expect(hits[0].best_answer).toBeNull();  // tier-5 filtered out, no higher-tier alt
+    } finally {
+      tinyStore.close();
+    }
+  }, 30_000);
+
+  test("L2: pushContext rejects best_answer_id pointing at non-accepted answer", async () => {
+    // Set up a question where best_answer_id points at an answer whose
+    // status is NOT "accepted" (e.g., superseded). pushContext should
+    // recognize the stale pointer and fall back to searching for a
+    // currently-accepted alternative.
+    const tinyStore = new LatticeStore(":memory:");
+    try {
+      const q = makeQuestion({ id: "v1:q-stale-ptr", framing: "Stale pointer test?" });
+      tinyStore.putQuestion(q);
+      // Create an accepted answer FIRST (so we can set status=answered
+      // with valid FK, then later supersede it).
+      const a1 = recordAnswer(tinyStore, {
+        question_id: q.id,
+        body: "first answer",
+        by_agent: "orion",
+        explanation: "x",
+        predictive_lift: 0.5,
+        status: "accepted",
+        quality_tier: 2,
+      });
+      tinyStore.setQuestionStatus(q.id, "answered", a1.id);
+      // Now supersede the answer (e.g., a better one was found).
+      tinyStore.setAnswerStatus(a1.id, "superseded");
+      // Add a fresh accepted answer for fallback.
+      const a2 = recordAnswer(tinyStore, {
+        question_id: q.id,
+        body: "fresh accepted answer",
+        by_agent: "lumeyon",
+        explanation: "y",
+        predictive_lift: 0.7,
+        status: "accepted",
+        quality_tier: 2,
+      });
+      // best_answer_id still points at a1 (now superseded).
+      const hits = await pushContext(tinyStore, "Stale pointer test?", { k: 1 });
+      expect(hits.length).toBe(1);
+      // The post-fix behavior: pushContext should detect the stale pointer
+      // and fall back to a2 (the currently-accepted answer).
+      expect(hits[0].best_answer?.id).toBe(a2.id);
+    } finally {
+      tinyStore.close();
+    }
+  }, 30_000);
 });
 
 describe("reRankAnswers — selection pressure (forcing function 3)", () => {

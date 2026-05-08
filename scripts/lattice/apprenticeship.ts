@@ -151,22 +151,42 @@ export async function pushContext(
   ranked.sort((a, b) => b.cosine - a.cosine);
   const topK = ranked.slice(0, k);
 
-  // Attach the best answer for each.
+  // Attach the best answer for each. Iter-14 (lumeyon L1+L2 fix): the
+  // best_answer_id pointer is treated as a hint, not an oracle. When
+  // present, it must (a) resolve to an existing answer, (b) be currently
+  // accepted (status="accepted"), and (c) pass the caller's
+  // quality_tier_min / predictive_lift_min filters. If any check fails
+  // we fall back to queryAnswers to find a currently-eligible alternative.
+  // Pre-fix: high-stakes callers passing quality_tier_min:1 could still
+  // receive tier-5 raw answers via best_answer_id, and stale pointers
+  // (e.g. status="superseded") were returned silently.
+  const tierMin = options.quality_tier_min;
+  const liftMin = options.predictive_lift_min;
+  const queryFallback = (qid: string): Answer | null => {
+    const accepted = store.queryAnswers({
+      question_id: qid,
+      status: "accepted",
+      quality_tier_min: tierMin,
+      predictive_lift_min: liftMin,
+      order_by: "predictive_lift_desc",
+      limit: 1,
+    });
+    return accepted[0] ?? null;
+  };
   return topK.map((hit) => {
     let best_answer: Answer | null = null;
     if (hit.question.best_answer_id) {
-      best_answer = store.getAnswer(hit.question.best_answer_id);
+      const candidate = store.getAnswer(hit.question.best_answer_id);
+      const passesTier = tierMin === undefined || (candidate !== null && candidate.quality_tier <= tierMin);
+      const passesLift = liftMin === undefined || (candidate !== null && candidate.predictive_lift >= liftMin);
+      if (candidate !== null && candidate.status === "accepted" && passesTier && passesLift) {
+        best_answer = candidate;
+      } else {
+        // Pointer is stale, missing, or fails the filter — fall back.
+        best_answer = queryFallback(hit.question.id);
+      }
     } else {
-      // Fall back to the highest-predictive-lift accepted answer for this question.
-      const accepted = store.queryAnswers({
-        question_id: hit.question.id,
-        status: "accepted",
-        quality_tier_min: options.quality_tier_min,
-        predictive_lift_min: options.predictive_lift_min,
-        order_by: "predictive_lift_desc",
-        limit: 1,
-      });
-      best_answer = accepted[0] ?? null;
+      best_answer = queryFallback(hit.question.id);
     }
     return { question: hit.question, best_answer, cosine: hit.cosine };
   });

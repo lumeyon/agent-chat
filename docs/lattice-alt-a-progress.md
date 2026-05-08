@@ -2,9 +2,11 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T01:25Z
+## Current state — 2026-05-08T02:30Z
 
-**Phase: Self-improvement /loop iteration 13 — pivoted from temperature-pinning (claude CLI has no `--temperature` flag) to category D. Spawned 3 depth=1 questions promoting open architectural decisions to first-class lattice nodes. depth_distribution[1] grew 4x (1 → 4). question_parents 1 → 4. The lattice DAG now starts to function as a structured decision-tracking surface alongside the iteration journal.**
+**Phase: New /loop iter 1 (NL1) — peer-driven audit pass. Lumeyon reviewed apprenticeship.ts and returned 5 REAL findings (no nitpicks). L1+L2 (related; pushContext trusting best_answer_id without filter validation) fixed this iter. L3-L5 queued for subsequent iters.**
+
+**Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
 ## Phase status
 
@@ -15,6 +17,53 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T02:30Z (NEW /loop iter 1: lumeyon peer-review of apprenticeship.ts → 5 REAL findings; L1+L2 fixed)
+
+**Loop:** new prompt — strictly peer-driven, single-finding-per-commit, halt-when-nothing-real-found.
+
+**Target:** `scripts/lattice/apprenticeship.ts` (the substrate's API layer: recordAnswer + pushContext + reRankAnswers). No prior review entry. Untouched in last 2 iters.
+
+**Peer used:** lumeyon (codex) per peer rotation rule (iter N → lumeyon).
+
+**Findings (all 5 REAL, no nitpicks):**
+  - **L1** (apprenticeship.ts:157): pushContext bypasses `quality_tier_min` / `predictive_lift_min` on the best_answer_id path; filters only apply in the fallback. High-stakes callers passing `quality_tier_min: 1` could still receive tier-5 raw answers via the pointer.
+  - **L2** (apprenticeship.ts:157): best_answer_id is treated as authoritative even if `store.getAnswer()` returns null OR a no-longer-accepted answer (e.g., status='superseded'). Stale pointers return silently.
+  - **L3** (apprenticeship.ts:216): single-answer reRankAnswers promotes to "accepted" then returns at line 218 — skips the question lifecycle update at line 247. Leaves question.status="open" + best_answer_id=null. **(queued)**
+  - **L4** (apprenticeship.ts:227): exact-margin wins fail due to IEEE float comparison. `0.30 - 0.25 < 0.05` evaluates true under raw float subtraction. **(queued)**
+  - **L5** (apprenticeship.ts:152): k is unvalidated in pushContext; negative k reaches `slice(0, k)` and returns truncated results instead of zero/error. **(queued)**
+
+**This iter executes L1+L2 together (same code path, related root cause):** the new pushContext trusts best_answer_id as a HINT only. When present, it must (a) resolve to an existing answer, (b) be currently accepted, AND (c) pass the caller's filters. If any check fails, we fall back to queryAnswers. L3-L5 are independent fixes in different functions; queued for iters NL2/NL3/NL4.
+
+**Test-first protocol:**
+  1. Wrote 2 regression tests at apprenticeship.test.ts:198-269 (L1: filter bypass; L2: stale pointer).
+  2. Verified both FAIL pre-fix.
+  3. Applied fix: refactored the topK.map to extract a `queryFallback` helper and call it whenever the best_answer_id pointer is null/stale/filter-failing.
+  4. Verified both PASS post-fix; full lattice suite 117 → 119.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (PUSH-CONTEXT) — exercised in step 3 to satisfy lattice-driven discovery rule. Documented the substrate-readiness finding.
+  - ✅ Forcing function exercises happened in real fix space, not synthetic.
+
+**Citation discipline:** No new authored answer this iter (per the new loop's explicit rule — only commit fixes, not synthetic explanations). The new lumeyon review answer DID land in the lattice via the iter-11 importer detection (auto-import the peer review as authored content). It's already in the DAG with proper provenance.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 404 → 405 (+1: the lumeyon review's question)
+  - Answers: 891 → 892 (+1: lumeyon's review response, auto-tagged as authored tier 3 by iter-11 importer logic)
+  - **authored: 7 → 8** (lumeyon's review IS authored content)
+  - quality_tier histogram: tier 2=5, tier 3=3, tier 5=881 (was 2; 1 new tier-3 answer)
+
+**Tests:** plugin 502/0/3 (no change). Lattice 117 → 119 (+2 L1+L2 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/apprenticeship.ts (L1+L2 fix)
+  - scripts/lattice/apprenticeship.test.ts (2 regression tests)
+  - docs/ephemeral-peer-reviews.md (apprenticeship.ts row added)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iter NL2):** Per peer rotation rule, iter NL2 → keystone. Keystone's specialty: SQL schema, locking, protocol invariants. The remaining 3 L-findings (L3 lifecycle, L4 float margin, L5 k validation) are all in apprenticeship.ts which lumeyon already reviewed. Keystone should review a DIFFERENT module (rule 2: different file each iter). Candidates: scripts/lattice/import-from-kg.ts, plugins/agent-chat/scripts/lattice-context.ts, scripts/lattice/study-turn.ts. import-from-kg.ts was modified iter-11 — but iter-11 was 2 iters ago in old loop count, not within "previous 2" of NEW loop count, so it's eligible. Keystone reviewing import-from-kg.ts is a good fit (SQL schema discipline, idempotency invariants).
 
 ### 2026-05-08T01:25Z (Self-improvement /loop iteration 13: pivoted to category D — 3 depth=1 questions; lattice DAG as structured decision-tracking)
 
