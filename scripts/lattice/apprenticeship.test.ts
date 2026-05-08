@@ -274,6 +274,56 @@ describe("pushContext — cross-domain push retrieval (forcing function 4)", () 
       tinyStore.close();
     }
   }, 30_000);
+
+  // Regression for lumeyon's NL1 L5 finding: pushContext accepted `k`
+  // from the caller without validation. Two undefined-behavior paths:
+  //   - default branch: `ranked.slice(0, k)` with k=-1 returns
+  //     "everything except the last 1" (slice's negative-index
+  //     semantics), silently SUBSAMPLING instead of refusing.
+  //   - walk branch (exclude_agent set, NL19): `out.length >= k` with
+  //     k=-1 is TRUE on the first iteration (0 >= -1), so the loop
+  //     breaks immediately and returns []. With k=NaN, the comparison
+  //     is always false → loop never breaks via the k condition →
+  //     returns ALL eligible candidates.
+  //
+  // NL26 fix: validate k at the top of pushContext. Default-on-invalid
+  // (NaN, ±Infinity, negative) → 5; floor non-integers; let 0 through
+  // (a meaningful "return nothing" request).
+  describe("L5: k validation", () => {
+    test("L5: negative k defaults to 5 in the default branch (slice path)", async () => {
+      // Seed has 4 answered candidates. Pre-fix: slice(0, -1) returns
+      // N-1 = 3 hits (everything except the last). Post-fix: defaults
+      // to 5 → returns all 4 answered candidates.
+      const hits = await pushContext(store, "deadline", { k: -1 });
+      expect(hits.length).toBe(4);
+    }, 60_000);
+
+    test("L5: NaN k defaults to 5 in the default branch", async () => {
+      // Pre-fix: slice(0, NaN) treats NaN as 0 → 0 hits. Post-fix:
+      // defaults to 5 → returns all 4 answered candidates.
+      const hits = await pushContext(store, "deadline", { k: NaN });
+      expect(hits.length).toBe(4);
+    }, 60_000);
+
+    test("L5: negative k defaults to 5 in the walk branch (exclude_agent set)", async () => {
+      // Use an exclude_agent value that doesn't match any seeded answers
+      // (all are by "orion"; "nobody" matches none). The walk branch
+      // therefore behaves equivalently to the default branch on the
+      // selection-step but exercises the iterate-walk loop.
+      // Pre-fix: walk loop `out.length >= -1` is true on iter 1 →
+      // break → 0 hits. Post-fix: defaults to 5 → 4 hits.
+      const hits = await pushContext(store, "deadline", { k: -1, exclude_agent: "nobody" });
+      expect(hits.length).toBe(4);
+    }, 60_000);
+
+    test("L5: explicit k=0 still returns 0 hits (sanity / explicit zero is meaningful)", async () => {
+      // The fix shouldn't reject 0 as "invalid" — k=0 is a legitimate
+      // request to retrieve nothing. Both pre-fix and post-fix return
+      // [] here; this test pins down that semantics.
+      const hits = await pushContext(store, "deadline", { k: 0 });
+      expect(hits.length).toBe(0);
+    }, 60_000);
+  });
 });
 
 describe("reRankAnswers — selection pressure (forcing function 3)", () => {

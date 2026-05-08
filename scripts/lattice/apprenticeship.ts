@@ -132,7 +132,24 @@ export async function pushContext(
   query: string,
   options: PushContextOptions = {},
 ): Promise<PushContextHit[]> {
-  const k = options.k ?? 5;
+  // L5 fix (NL26 / lumeyon NL1 finding): validate k. Pre-fix `k = options.k ?? 5`
+  // accepted any number; both the default-branch slice path and the
+  // walk-branch loop have undefined behavior on negative or non-finite k:
+  //   - `ranked.slice(0, -1)` returns "everything except the last 1"
+  //     (slice's negative-index semantics) → silent subsample.
+  //   - walk `out.length >= -1` is true on iter 1 → break immediately
+  //     → 0 hits. With NaN, the comparison is always false → walk never
+  //     terminates via k → returns ALL eligible candidates.
+  // Post-fix: default-on-invalid (NaN, ±Infinity, negative) → 5; floor
+  // non-integers; let explicit 0 through ("return nothing" is a meaningful
+  // request a caller might want).
+  const rawK = options.k ?? 5;
+  let k: number;
+  if (typeof rawK !== "number" || !Number.isFinite(rawK) || rawK < 0) {
+    k = 5;
+  } else {
+    k = Math.floor(rawK);
+  }
   const answeredOnly = options.answered_only ?? true;
 
   // Get the candidate question pool.

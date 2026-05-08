@@ -40,12 +40,12 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL25 commit)
+## CURRENT STATE (as of NL26 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
-- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **4 fixed: L1+L2+L4+L3**; L5 queued)
+- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **all 5 fixed: L1+L2+L3+L4+L5**)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **4 fixed: C1, C2, C3, C5**; C4 queued — design call)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **5 fixed: E6, E3, E1, E2, E7**; E4, E5 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **6 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7**; K-imp-1, 3 queued; K-imp-9 added NL12 observation)
@@ -58,10 +58,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **4 fixed: LC1, LC2, LC4, LC5**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set)
 
-### Queued findings (drainable WITHOUT fresh peer call — 7 total):
+### Queued findings (drainable WITHOUT fresh peer call — 6 total):
 
-#### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
-- **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
+#### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
 #### study-turn.ts (carina NL3) — 1 queued (C2 drained NL16, C5 drained NL20)
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
@@ -90,31 +89,32 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL26 → DRAIN L5** (apprenticeship.ts:152 pushContext k unvalidated; negative k returns truncated results).
+**NL27 → DRAIN LC3** (lattice-context.ts:71 null best_answer survives exclude_agent filter when exclude_agent is UNSET — header lies about top-K count).
 
-**Why L5:**
-- Real correctness bug. `pushContext` accepts `k` from the caller without validation. Today the topK slice (`ranked.slice(0, k)`) and the iterate-walk path (`out.length >= k`) both have undefined behavior on negative k:
-  - `slice(0, -3)` returns "everything except the last 3" — silently SUBSAMPLE without explanation.
-  - `out.length >= k` with k=-1 → loop never terminates via `break` (since out.length is always ≥ -1); only the candidates-exhausted exit fires. So pushContext with negative k effectively returns ALL candidates.
-- apprenticeship.ts last touched NL19 (6 iters gap at NL26 → file-touch rule satisfied; NL25 touched import-from-kg.ts → different file).
+**Why LC3:**
+- Partial bug remains after LC2 (NL19): when `exclude_agent` is set, pushContext now skips null-best_answer hits in the walk loop. But when `exclude_agent` is UNSET, the default branch returns hits with `best_answer: null` for questions that have no eligible accepted answer. lattice-context.ts then:
+  - computes `kept.length` BEFORE the loop (line 99 header: "top-${kept.length}"),
+  - in the loop, `if (!h.best_answer) continue;` skips null hits in output.
+  - Result: header claims "top-3" but only 2 numbered hits actually emit. Visual count mismatch in the prompt.
+- lattice-context.ts last touched NL24 (3 iters gap at NL27 → file-touch rule satisfied; NL26 touched apprenticeship.ts → different file).
 
-**Read first:** `scripts/lattice/apprenticeship.ts` `pushContext` function. Confirm: (1) k is `options.k ?? 5`; (2) both branches (`exclude_agent` set vs unset) have the negative-k issue.
+**Read first:** `plugins/agent-chat/scripts/lattice-context.ts` lines 90-105 (the header line + the for-loop).
 
-**Fix approach:**
-- Validate k at the top of pushContext: clamp to a minimum of 0 OR throw on invalid input.
-- Decision: clamp silently (k = Math.max(0, options.k ?? 5)) for forgiveness OR throw for correctness. Lean toward CLAMP to 0 (a non-negative k is required; 0 is meaningful as "return nothing" / corner case).
-- Also consider: should NaN be handled? Math.max handles NaN by returning NaN... so explicit check needed. Use: `k = Number.isInteger(options.k) && options.k >= 0 ? options.k : 5` (default-on-invalid).
+**Fix approach options:**
+- **Option A (filter null hits BEFORE counting):** add `kept = kept.filter(h => h.best_answer != null)` before computing kept.length. Simplest. Keeps both branches consistent.
+- **Option B (centralize in pushContext):** make pushContext skip null-best_answer hits in BOTH branches (currently only the exclude_agent-set branch does). Cleaner architecturally but a behavior change for any caller relying on the existing "null best_answer means cosine-only hit" semantics.
+- Recommend A. Surgical fix; doesn't change pushContext API.
 
-**Test approach (3 regression tests):**
-- Test 1 (negative k): pushContext with k=-1 returns 0 hits (or default 5 if we go the default-on-invalid route). Pre-fix: returns N-1 hits or all hits (depending on path).
-- Test 2 (zero k): pushContext with k=0 returns 0 hits. Sanity for the boundary case.
-- Test 3 (NaN k or non-integer k): handled gracefully per the chosen policy.
+**Test approach (2 regression tests):**
+- Test 1 (failure case): seed a question that has NO accepted answer (e.g., status="open", or only refuted answers). With exclude_agent UNSET, call composePushedContextBlock. Pre-fix: prompt header says "top-N" where N includes the null hit, but the body has fewer entries. Post-fix: header count matches body entry count.
+- Test 2 (sanity): all hits have valid best_answer → header count matches body count (pre-fix and post-fix).
 
-**Sequenced after NL26:**
-- NL27 → LC3 (header-only block when exclude_agent unset) — lattice-context.ts last touched NL24, eligible at NL27.
+**Sequenced after NL27:**
 - NL28 → E4 or E5 (ephemeral-peer-review.ts last touched NL24, eligible at NL28).
-- NL29+ → K-imp-1, K-imp-3, K-imp-9, C4 (design call).
+- NL29 → K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts eligible after NL25 + 4 = NL29).
+- NL30+ → C4 (design call — orion authorized via boss-pre-approval queue).
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
+- **Apprenticeship.ts module fully cleared (5/5 findings fixed at NL17 + NL26)** — no further drain needed for this module unless a fresh peer review surfaces new findings.
 
 ## STOPPING CONDITIONS
 
@@ -143,12 +143,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL25):**
+- **Cumulative ledger (post-NL26):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 24 fixed at code level (L1, L2, L3, L4, C1, C2, C3, C5, E1, E2, E3, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC4, LC5)
+  - 25 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC4, LC5)
   - 3 schema migrations shipped
-  - 7 queued findings remain
-  - Fix-rate: 80% (24/30 code) + all 3 schema migrations
+  - 6 queued findings remain (LC3, K-imp-1, K-imp-3, K-imp-9, E4, E5; plus C4 as design-call)
+  - Fix-rate: 83% (25/30 code) + all 3 schema migrations
+  - **MODULE CLEARED:** apprenticeship.ts (5/5 lumeyon NL1 findings fixed). First peer-reviewed module to fully drain.
+  - **Input-validation pattern (E6 = LC4 = L5):** substrate APIs that take user/agent-supplied numbers should validate at the API boundary rather than trust slice/encode/comparison to fail gracefully. Three instances of this pattern have now been hardened (capBytes, body_budget_bytes, k). Audit other numeric API parameters for the same pattern.
   - **SYSTEMIC pattern (LC2 = C5 = K-imp-6 = K-imp-7) confirmed FOURTH time:** SQL limit BEFORE selection logic → silent wrong-row pick. Fix templates: (a) push the missing axis into queryAnswers (LC2, C5); (b) capture the function's already-existing return value (K-imp-6); (c) compute the identifier directly via a deterministic helper (K-imp-7 with `makeAnswerId`). All boil down to: **don't re-query for what you can derive or already have.** The pattern is now closed on the queryAnswers side; future audits should look at queryQuestions + in-memory filter sites (importAllEdges? statsTotals?) for the same shape.
   - **SYSTEMIC pattern (LC4 = E7) closed via shared helper extraction:** rather than copy-pasting the TextEncoder fix into a second file, NL24 extracted `plugins/agent-chat/scripts/utf8.ts` with `truncateToUtf8Bytes` + `utf8ByteLength` and refactored both LC4's truncateForBudget and E7's composeReviewPrompt to consume it. This is the COUNTER-PATTERN to LC5 = K-imp-2 (where the trailing-marker /m regex was copy-pasted across files): when the same bug shape shows up in a second file, EXTRACT the helper rather than re-applying the fix in two places.
   - **K-imp-6 lesson: when a function returns the data you need, USE the return value — don't re-query.** Pre-fix the importer dropped `recordAnswer`'s return and then re-queried for "which answer did I just insert?", introducing a tie-break dependency on SQLite's implementation-defined ordering. Post-fix uses the returned Answer directly. Audit other call sites that drop function returns and then re-query.

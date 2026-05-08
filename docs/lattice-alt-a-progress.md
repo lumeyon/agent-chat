@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T14:25Z
+## Current state — 2026-05-08T14:55Z
 
-**Phase: NL25 — drained K-imp-7 (importPairs peer-review retro-upgrade scans only first 5 — same template as K-imp-6, fourth confirmation of the LC2/C5/K-imp-6/K-imp-7 systemic pattern). Pre-fix: catch path used `queryAnswers(limit:5)` + `find()` to locate the existing answer matching (by_agent, body); when the question had 6+ accepted answers and the target was at rank 6+ by predictive_lift, the SQL limit truncated it out and the retro-upgrade silently no-op'd. Post-fix: skipped the queryAnswers+find dance entirely; `getAnswer(makeAnswerId(question_id, body, by_agent))` finds the answer directly using its deterministic id (we just PK-conflicted on it, so it definitely exists). Cumulative: 30 REAL findings, 24 code fixes, 3 schema migrations.**
+**Phase: NL26 — drained L5 (apprenticeship.ts pushContext k unvalidated; undefined behavior for negative or non-finite k). Pre-fix: `const k = options.k ?? 5;` accepted any number; in the default branch `ranked.slice(0, -1)` returned N-1 items (silent subsample); in the walk branch `out.length >= -1` was true on iter 1 → 0 hits, while `out.length >= NaN` was always false → returned ALL eligible candidates. Post-fix: validate k at the top of pushContext — default-on-invalid (NaN, ±Infinity, negative) → 5; floor non-integers; preserve explicit 0 as a meaningful "return nothing" request. Cumulative: 30 REAL findings, 25 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,131 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T14:55Z (NL26: queue-drain L5 — pushContext k unvalidated; default-on-invalid validation policy)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains L5 — no fresh peer call. File-touch rule: NL25 touched import-from-kg.ts; this iter touches apprenticeship.ts (different file → eligible).
+
+**The bug (lumeyon NL1 L5):**
+  `pushContext` accepted `k` from the caller without validation:
+  ```typescript
+  const k = options.k ?? 5;
+  ```
+  Two undefined-behavior paths from invalid k:
+
+  1. **Default branch (line 224):** `ranked.slice(0, k)` with negative k
+     uses slice's negative-index semantics — `slice(0, -1)` returns
+     "everything except the last 1", silently subsampling. With `slice(0, NaN)`
+     JS treats NaN as 0 → returns 0 hits.
+
+  2. **Walk branch (line 215, NL19 LC2 fix added):** `out.length >= k`:
+     - With k=-1: `0 >= -1` is true on iter 1 → break → 0 hits.
+     - With k=NaN: NaN comparisons are always false → loop never breaks
+       on the k condition → returns ALL eligible candidates (which on
+       large lattices means thousands of hits).
+
+  In both branches, an invalid k either silently subsamples (bad
+  retrieval) or silently floods (bad memory + token cost). No error,
+  no log, no defensive fallback.
+
+**The fix (validate at the top, default-on-invalid):**
+  ```typescript
+  const rawK = options.k ?? 5;
+  let k: number;
+  if (typeof rawK !== "number" || !Number.isFinite(rawK) || rawK < 0) {
+    k = 5;
+  } else {
+    k = Math.floor(rawK);
+  }
+  ```
+
+  Policy:
+  - undefined → 5 (existing default).
+  - non-numeric (caller passed garbage) → 5.
+  - NaN, ±Infinity → 5.
+  - negative number → 5 (defensible: caller's intent is unclear; refuse to subsample arbitrarily).
+  - non-integer (e.g. 3.7) → floor to 3 (preserves the existing
+    observable "slice handles non-integer" behavior).
+  - explicit 0 → 0 (a meaningful "return nothing" request, e.g., a
+    feature-flag gate or a degenerate test scenario).
+
+**Test-first protocol:**
+  4 regression tests in apprenticeship.test.ts (new "L5: k validation" describe block):
+    - **L5-a (negative k, default branch):** k=-1 → expect 4 hits (default-on-invalid, capped at 4 since seed has 4 answered candidates). Pre-fix: slice(0, -1) returns 3. **Verified FAILING pre-fix.**
+    - **L5-b (NaN k, default branch):** k=NaN → 4 hits. Pre-fix: slice(0, NaN) treats NaN as 0 → 0 hits. **Verified FAILING pre-fix.**
+    - **L5-c (negative k, walk branch via exclude_agent):** k=-1 + exclude_agent="nobody" (no-op filter to exercise the walk path) → 4 hits. Pre-fix: walk loop breaks immediately at out.length=0 ≥ -1 → 0 hits. **Verified FAILING pre-fix.**
+    - **L5-d (explicit zero):** k=0 → 0 hits. Sanity / both pre-fix and post-fix return 0; ensures the fix doesn't reject 0 as "invalid". Passes pre-fix.
+
+**Why this matters:** pushContext is invoked per-turn from agent-chat's
+`cmdRun` (via `composePushedContextBlock`). Bad k from a misconfigured
+caller (e.g., a deserialized JSON with k as a string, or a config file
+with a typo) would silently degrade or balloon the cross-domain push.
+Pre-fix this would manifest as either "the agent isn't seeing relevant
+priors" (silent subsample) or "the agent's prompt is suddenly 10x
+larger" (silent flood with k=NaN in walk branch) — both hard to
+diagnose because no error is raised.
+
+**SYSTEMIC pattern (input validation):** Pre-fix the substrate accepted
+external inputs (k, capBytes from E6, body_budget_bytes from LC4) at
+face value and let downstream slice/encode/loop logic produce undefined
+behavior. Each of these has now been hardened with explicit validation:
+  - E6 (NL4): capBytes rejects NaN/negative/zero.
+  - LC4 (NL23): truncateForBudget budget≤0 → "".
+  - L5 (this): pushContext k validation default-on-invalid.
+
+The pattern: **validate at the API boundary, not at the consumption
+site.** Substrate APIs that take user/agent-supplied numbers should
+validate up front rather than trust slice/encode/comparison to fail
+gracefully.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (CROSS-DOMAIN PUSH) — pushContext is the load-bearing
+    primitive for forcing function 4. Robustness against malformed k
+    matters whenever pushContext is invoked from any caller.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 158 → 162 (+4 L5); plugin 538 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/apprenticeship.ts (k validation block at the top of pushContext)
+  - scripts/lattice/apprenticeship.test.ts (new "L5: k validation" describe block with 4 tests)
+  - docs/ephemeral-peer-reviews.md (L5 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL27 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL27):** File-touch rule blocks apprenticeship.ts immediately again. Eligible:
+- LC3 (lattice-context.ts last touched NL24 — eligible)
+- E4, E5 (ephemeral-peer-review.ts last touched NL24 — eligible)
+- K-imp-1, 3, 9 (import-from-kg.ts last touched NL25 — INELIGIBLE)
+
+**Recommend NL27 → DRAIN LC3** (lattice-context.ts:71 null best_answer survives exclude_agent filter — header-only block).
+
+Reasons:
+- Real correctness bug. After LC2's NL19 fix moved the exclude_agent filter into pushContext, the `exclude_agent`-set path is fine (pushContext skips null-best_answer hits). But when `exclude_agent` is UNSET, lattice-context.ts has no filter on null best_answer hits; pushContext can return hits with `best_answer: null`, lattice-context.ts then iterates through them and the loop's `if (!h.best_answer) continue;` skips them in the OUTPUT — but the HEADER line at line 102 says "top-${kept.length} most-similar prior Q/A" using kept.length, which COUNTS the null hits.
+- Result when exclude_agent is unset and some hits have null best_answer: the header lies about the count, and a hit can show as a header without an answer body if I misread the loop... let me re-check.
+
+Actually looking at lattice-context.ts:102-104:
+  ```typescript
+  for (let i = 0; i < kept.length; i++) {
+    const h = kept[i];
+    if (!h.best_answer) continue;  // skips null-best_answer in OUTPUT
+    ...
+  }
+  ```
+This skips null hits in output. So the prompt has FEWER hits than the count claims. The header says "top-${kept.length}" but only the non-null subset emit body lines. Visual mismatch in the prompt; agent sees "top-3" header followed by 2 numbered hits.
+
+- lattice-context.ts last touched NL24 (3 iters gap → eligible).
+- Self-contained fix: filter null-best_answer hits BEFORE computing kept.length; OR change the header to count only non-null hits; OR alway pass exclude_agent to pushContext (which already skips null hits).
+
+**Sequenced after NL27:**
+- NL28 → E4 or E5 (ephemeral-peer-review.ts last touched NL24, eligible at NL28). E4: dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked`. E5: importer path repo-layout-dependent.
+- NL29 → K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts eligible).
+- NL30+ → C4 (design call — boss-pre-approval queue authorizes; my call).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ### 2026-05-08T14:25Z (NL25: queue-drain K-imp-7 — peer-review retro-upgrade limit:5 truncation; FOURTH confirmation of LC2/C5/K-imp-6 systemic pattern)
 
