@@ -44,6 +44,14 @@ export interface PushContextBlockOptions {
   quality_tier_min?: QualityTier;
   /** Per-answer body byte budget. Default 600 (~150 tokens). */
   body_budget_bytes?: number;
+  /** Minimum cosine similarity for a hit to be included. Default
+   *  undefined (no filter — all top-K hits emitted regardless of
+   *  cosine). NL15 / carina LC1 fix: pass e.g. 0.4 to filter out
+   *  sparse-corpus pollution where pushContext returns top-K even
+   *  for low-similarity hits. iter-4 documented the production-
+   *  corpus baseline at cosines 0.21-0.31; 0.4 is the substrate-
+   *  readiness threshold. */
+  min_cosine?: number;
 }
 
 export async function composePushedContextBlock(
@@ -71,6 +79,15 @@ export async function composePushedContextBlock(
     let kept = hits;
     if (opts.exclude_agent) {
       kept = hits.filter((h) => h.best_answer && h.best_answer.by_agent !== opts.exclude_agent);
+    }
+    // LC1 fix (NL15 / carina NL12 finding): apply min_cosine floor
+    // BEFORE the top-K slice. pushContext returns top-K hits regardless
+    // of cosine — without a floor, sparse-corpus content (cosines 0.2-0.3)
+    // pollutes pushed prompts with barely-relevant priors. Filter only
+    // if min_cosine is explicitly provided; default behavior unchanged
+    // for backwards compat.
+    if (opts.min_cosine !== undefined) {
+      kept = kept.filter((h) => h.cosine >= opts.min_cosine!);
     }
     kept = kept.slice(0, k);
 

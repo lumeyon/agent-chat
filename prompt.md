@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL14 commit)
+## CURRENT STATE (as of NL15 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -56,9 +56,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 3. `scripts/lattice/validate-corpus.ts`
 
 ### Covered (added NL12):
-- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, 1 fixed: LC5; LC1-LC4 queued)
+- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **2 fixed: LC1, LC5**; LC2, LC3, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 19 total):
+### Queued findings (drainable WITHOUT fresh peer call — 18 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 2 queued
 - **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion skips question lifecycle update.
@@ -84,8 +84,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only first 5.
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
 
-#### lattice-context.ts (carina NL12) — 4 queued
-- **LC1** (lattice-context.ts:64): no cosine floor — unrelated content can be pushed for sparse corpus.
+#### lattice-context.ts (carina NL12) — 3 queued (LC1 drained NL15)
 - **LC2** (lattice-context.ts:65): over-fetches only k+5 — eligible peer hits dropped if buffer insufficient.
 - **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block.
 - **LC4** (lattice-context.ts:109): body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1). Same UTF class as E7.
@@ -102,22 +101,21 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL15 → DRAIN LC1** (lattice-context.ts no cosine floor — sparse-corpus pollution).
+**NL16 → DRAIN C2** (study-turn.ts:141 selectStudyQuestions can pick empty-body answer → spurious penalty).
 
-**Why LC1:**
-- Real correctness bug. composePushedContextBlock currently emits ALL top-K hits regardless of cosine. Iter-4 documented production-corpus cosines all ≤ 0.31. Pre-fix: pushed-context block contains barely-relevant content from the lattice, polluting cmdRun's prompt.
-- File-touch rule: NL14 touched ephemeral-peer-review.ts; lattice-context.ts last touched NL12 (2 iters gap → eligible).
-- Modest fix: add `min_cosine` parameter to composePushedContextBlock; default e.g. 0.4 to match the iter-4 substrate-readiness threshold; filter hits below it.
+**Why C2:**
+- Real correctness bug — empty body produces cosine=0 → -0.10 lift penalty (same shape as C1 fixed at NL3, but on the data side rather than the predictor side).
+- File-touch rule: NL15 touched lattice-context.ts; study-turn.ts last touched NL8 (7 iters gap → eligible).
+- Self-contained fix: add a body-non-empty filter in selectStudyQuestions's queryAnswers call.
 
-**Test approach (3 regression tests):**
-- Set up a lattice with 1 closely-matching answer (cosine ~0.7+) and 2 weakly-matching answers (cosine ~0.2-0.3).
-- Pre-fix with default k=5: all 3 emitted in the block.
-- Post-fix with `min_cosine: 0.4`: only the closely-matching answer emitted.
-- Sanity: `min_cosine: 0` (effectively unset) preserves pre-fix behavior — all 3 emitted.
+**Test approach (2 regression tests):**
+- Seed a lattice with 1 normal answer + 1 answer with empty body (status=accepted, real explanation, but empty body — needs raw INSERT to bypass any future putAnswer guards).
+- selectStudyQuestions(k: 5) — pre-fix returns both; post-fix filters out the empty-body one.
+- runStudyTurn against this corpus — pre-fix the empty-body answer gets penalized; post-fix it's excluded.
 
-**Sequenced after NL15:**
-- NL16 → C2 (study-turn empty-body filter) or L3 (single-answer reRankAnswers lifecycle gap)
-- NL17+ → drain LC2 / LC3 / LC4 (lattice-context.ts again with gap), or K-imp-1/3/4/6/7/9, or fresh peer review on stats.ts
+**Sequenced after NL16:**
+- NL17 → L3 (apprenticeship.ts:216 single-answer reRankAnswers lifecycle gap), or LC2/LC3/LC4 (lattice-context.ts after gap), or K-imp-* (import-from-kg.ts after gap)
+- Eventually: fresh peer review on stats.ts (lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
 
@@ -146,12 +144,12 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL14):**
+- **Cumulative ledger (post-NL15):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 12 fixed at code level (L1, L2, L4, C1, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC5)
+  - 13 fixed at code level (L1, L2, L4, C1, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
   - 3 schema migrations shipped
-  - 19 queued findings remain
-  - Fix-rate: 40% (12/30 code) + all 3 schema migrations
+  - 18 queued findings remain
+  - Fix-rate: 43% (13/30 code) + all 3 schema migrations
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.

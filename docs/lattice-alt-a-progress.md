@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T08:55Z
+## Current state — 2026-05-08T09:25Z
 
-**Phase: NL14 — drained E3 (ephemeral-peer-review.ts lock-failure cleanup). Pre-fix: lock acquisition was OUTSIDE the try block, so on lock failure the cleanup catch never ran and .turn stayed stuck on "orion". Post-fix: lock attempt inside try; on failure with no lock acquired, revert .turn to its pre-resume value. Foreign-owned locks (other session's lock) left untouched. Cumulative: 30 REAL findings, 12 code fixes, 3 schema migrations.**
+**Phase: NL15 — drained LC1 (lattice-context.ts no cosine floor). Added `min_cosine` parameter to composePushedContextBlock. Pre-fix: composePushedContextBlock emitted ALL top-K hits regardless of cosine, polluting cmdRun prompts with sparse-corpus content (iter-4 baseline cosines 0.21-0.31). Post-fix: optional filter applied before top-K slice; defaults preserve backwards compat. Cumulative: 30 REAL findings, 13 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,55 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T09:25Z (NL15: queue-drain LC1 — composePushedContextBlock min_cosine filter)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains LC1 — no fresh peer call. File-touch rule satisfied: NL14 touched ephemeral-peer-review.ts; lattice-context.ts last touched NL12 (3 iters gap → eligible).
+
+**The bug (carina NL12 LC1):** `composePushedContextBlock` calls `pushContext` for top-K retrieval, then emits all results (after the agent-self-exclusion filter). pushContext returns top-K regardless of cosine score. With sparse corpora — iter-4 documented production-corpus cosines all ≤ 0.31 for typical queries — every cmdRun pushed-context block contains barely-relevant content. The pushed block "Relevant prior knowledge from the lattice (top-K most-similar prior Q/A by embedding cosine)" is a misleading framing when the cosines are 0.2-0.3 (essentially noise).
+
+**The fix:** optional `min_cosine` parameter to `PushContextBlockOptions`. When set, filter hits below the threshold BEFORE the top-K slice. Default undefined (no filter) preserves backwards compat.
+
+**Why optional, not default-on:** changing default-on with a fixed threshold (e.g. 0.4) would break tests that rely on emitting low-cosine hits. Better to make callers opt in. cmdRun integration can pass `min_cosine: 0.4` when push-context is wired in.
+
+**Test-first protocol:**
+  3 regression tests at lattice-context.test.ts:
+    - LC1-a: min_cosine: 0.4 with one close-match (cosine ~0.7+) and one far-match (Tokyo time vs deploy query) — only close-match emitted post-fix. Pre-fix: both emitted.
+    - LC1-b: min_cosine: 0.99 with paraphrased query — block is empty post-fix (paraphrase cosine ~0.6-0.85, fails 0.99 threshold). Pre-fix: hit emitted regardless.
+    - LC1-c: min_cosine omitted preserves prior behavior (low-cosine hit still included). Sanity check + backwards-compat.
+  All 3 verified.
+
+**Why the systemic-bug-pattern observation matters:** LC1 is the third instance of an INVARIANT-WAS-IMPLICIT bug class — pre-fix the function "worked" but with surprising behavior at edges (sparse corpora, paraphrased content). Adding explicit parameters with defensible defaults forces callers to opt into the right behavior. Same pattern as iter-3's explanation NOT NULL (implicit "all answers have explanations" was actually optional in schema), iter-9 study-turn variance (implicit "deterministic predictions" actually wasn't), now LC1 implicit "low-cosine results aren't relevant" wasn't enforced.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (PUSH-CONTEXT) — quality of pushed retrieval improved. Future cmdRun uses with `min_cosine: 0.4` will emit only meaningfully-relevant priors.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: plugin 511 → 514 (+3 LC1)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/lattice-context.ts (min_cosine parameter + filter)
+  - plugins/agent-chat/tests/lattice-context.test.ts (3 LC1 regression tests)
+  - docs/ephemeral-peer-reviews.md (LC1 row updated to FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL16 plan; cumulative ledger)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL16):** Per file-touch rule (NL15 touched lattice-context.ts), eligible:
+- L3, L5 (apprenticeship.ts, last touched NL6)
+- C2, C4, C5 (study-turn.ts, last touched NL8)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — INELIGIBLE yet)
+- K-imp-1, 3, 4, 6, 7, 9 (import-from-kg.ts, last touched NL13 — INELIGIBLE yet)
+
+**Recommend NL16 → DRAIN C2** (study-turn.ts:141 selectStudyQuestions can pick empty-body answer → spurious penalty). Reasons:
+- Real correctness bug — empty body produces cosine=0 → -0.1 lift penalty (same shape as the C1 bug fixed at NL3, but on the data side rather than predictor side).
+- study-turn.ts last touched NL8 (7 iters gap → eligible).
+- Modest fix: filter out answers with empty body in selectStudyQuestions's queryAnswers call.
+
+After NL16, NL17+: drain L3 (apprenticeship lifecycle), or C5 (SQL limit before in-memory authored filter), or LC2-LC4.
 
 ### 2026-05-08T08:55Z (NL14: queue-drain E3 — ephemeral-peer-review.ts lock-failure cleanup)
 

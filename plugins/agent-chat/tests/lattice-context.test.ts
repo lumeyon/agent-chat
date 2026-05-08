@@ -257,4 +257,111 @@ describe("composePushedContextBlock", () => {
     // prompt — it's noise and would crowd out signal.
     expect(block).not.toContain("auto-imported");
   }, 30_000);
+
+  // Regression for carina's NL12 LC1 finding: composePushedContextBlock
+  // emitted ALL top-K hits regardless of cosine. With sparse corpora
+  // (production-corpus cosines all ≤0.31 per iter-4), low-relevance
+  // content polluted cmdRun prompts. NL15 fix: add `min_cosine`
+  // parameter; filter hits below the threshold.
+  test("LC1: min_cosine filters out below-threshold hits", async () => {
+    const store = new LatticeStore(dbPath);
+    // Seed two questions: one closely matches the query, one is unrelated.
+    const closeQ = seedQuestion(store, {
+      id: "v1:q-close",
+      framing: "How do I deploy to production?",
+    });
+    const closeA = recordAnswer(store, {
+      question_id: closeQ.id,
+      body: "Run `bun deploy.ts` from the repo root.",
+      by_agent: "lumeyon",
+      explanation: "Standard deploy.",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(closeQ.id, "answered", closeA.id);
+
+    const farQ = seedQuestion(store, {
+      id: "v1:q-far",
+      framing: "What time is it in Tokyo?",
+    });
+    const farA = recordAnswer(store, {
+      question_id: farQ.id,
+      body: "It's currently 3 AM JST.",
+      by_agent: "lumeyon",
+      explanation: "Time-zone lookup.",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(farQ.id, "answered", farA.id);
+    store.close();
+
+    // Query targets the deploy question. Without min_cosine, both hits
+    // would be emitted (the unrelated one polluting the prompt).
+    // With min_cosine: 0.4, only the close-match should survive.
+    const block = await composePushedContextBlock({
+      query: "How do I deploy to production?",
+      latticeDbPath: dbPath,
+      k: 5,
+      exclude_agent: "orion",
+      min_cosine: 0.4,
+    });
+    expect(block).toContain("bun deploy.ts");
+    // The unrelated Tokyo time hit should be filtered out.
+    expect(block).not.toContain("Tokyo");
+    expect(block).not.toContain("JST");
+  }, 30_000);
+
+  test("LC1: min_cosine: 0.99 filters out paraphrased matches (high-bar threshold)", async () => {
+    const store = new LatticeStore(dbPath);
+    const q = seedQuestion(store, { framing: "How do I deploy to production?" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "Run `bun deploy.ts`.",
+      by_agent: "lumeyon",
+      explanation: "Standard.",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+    store.close();
+
+    // Paraphrased query — cosine of paraphrased technical text typically
+    // lands in [0.6, 0.85]; should not reach 0.99 unless strings are
+    // essentially identical.
+    const block = await composePushedContextBlock({
+      query: "What's the procedure for shipping the app to prod?",
+      latticeDbPath: dbPath,
+      k: 3,
+      exclude_agent: "orion",
+      min_cosine: 0.99,
+    });
+    expect(block).toBe("");  // paraphrase filtered out
+  }, 30_000);
+
+  test("LC1: omitting min_cosine preserves prior behavior (no filter)", async () => {
+    const store = new LatticeStore(dbPath);
+    const q = seedQuestion(store, { framing: "Random topic." });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "Random body.",
+      by_agent: "lumeyon",
+      explanation: "x",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+    store.close();
+
+    // Different query — would have low cosine. Without min_cosine,
+    // pre-NL15 behavior is to include the hit anyway.
+    const block = await composePushedContextBlock({
+      query: "Completely unrelated other topic about cooking.",
+      latticeDbPath: dbPath,
+      k: 3,
+      exclude_agent: "orion",
+      // min_cosine omitted
+    });
+    // Backwards compat: the hit is included even with low cosine.
+    expect(block).toContain("Random body");
+  }, 30_000);
 });
