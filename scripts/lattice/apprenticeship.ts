@@ -235,6 +235,12 @@ export function reRankAnswers(
       // If lift is 0, leave as proposed (no signal).
       if (live[0].predictive_lift > 0) {
         promote(store, live[0]);
+        // L3 fix (NL17 / lumeyon NL1 finding): also update the question
+        // lifecycle. Pre-fix, this branch promoted the answer to
+        // "accepted" but skipped the question.status + best_answer_id
+        // update — the question stayed "open" with best_answer_id=null
+        // even though we just promoted an answer for it.
+        store.setQuestionStatus(question_id, "answered", live[0].id);
         return { question_id, promoted_to_accepted: live[0].id, demoted_to_superseded: [] };
       }
     }

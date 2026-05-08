@@ -40,12 +40,12 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL16 commit)
+## CURRENT STATE (as of NL17 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
-- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, 3 fixed: L1+L2+L4; L3, L5 queued)
+- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **4 fixed: L1+L2+L4+L3**; L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **3 fixed: C1, C2, C3**; C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **2 fixed: E6, E3**; E1, E2, E4, E5, E7 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **3 fixed: K-imp-2, K-imp-5, K-imp-8**; K-imp-1, 3, 4, 6, 7 queued; K-imp-9 added NL12 observation)
@@ -58,10 +58,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **2 fixed: LC1, LC5**; LC2, LC3, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 17 total):
+### Queued findings (drainable WITHOUT fresh peer call — 16 total):
 
-#### apprenticeship.ts (lumeyon NL1) — 2 queued
-- **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion skips question lifecycle update.
+#### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
 
 #### study-turn.ts (carina NL3) — 2 queued (C2 drained NL16)
@@ -100,20 +99,27 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL17 → DRAIN L3** (apprenticeship.ts:216 single-answer reRankAnswers lifecycle gap).
+**NL18 → DRAIN K-imp-4** (importPairs:283 question idempotency read-then-insert race).
 
-**Why L3:**
-- Real correctness bug. The single-answer branch in `reRankAnswers` calls `promote(store, live[0])` which sets the answer's status to "accepted" but does NOT call `setQuestionStatus` to update the question's best_answer_id pointer. Question stays at status="open" with best_answer_id=null even though we just promoted an answer.
-- apprenticeship.ts last touched NL6 (10 iters gap → eligible).
-- Self-contained fix: add `setQuestionStatus(question_id, "answered", a.id)` after the `promote(store, a)` call.
+**Why K-imp-4:**
+- Real concurrency bug; same shape as iter-8 K3 (DAG cycle race) which already taught us the fix template. The importer reads "does this question exist?" and then inserts — between the read and the insert, another writer can win the race, causing `UNIQUE` collision OR (worse) silent double-import depending on the surrounding logic.
+- import-from-kg.ts last touched NL13 (5 iters gap → file-touch rule satisfied).
+- File-touch rule: NL17 touched apprenticeship.ts; this picks a different file.
+
+**Fix approach options (pick during exec):**
+- **Option A — INSERT OR IGNORE:** simplest. Replace the read+conditional-insert with `INSERT OR IGNORE` for the question row, then re-read to get the canonical row. Atomic at the SQL level, no transaction needed.
+- **Option B — withImmediateWriter:** reuse the helper from sqlite-store.ts (iter-8 K3) to wrap the read+insert in `BEGIN IMMEDIATE`. Heavier but mirrors K3 exactly.
+- Pick A unless the surrounding code requires reading and acting on the result inside the transaction.
 
 **Test approach (2 regression tests):**
-- Test 1: pre-existing question + 1 proposed answer with positive predictive_lift. Run `reRankAnswers(store, q.id, { single_answer_promotes: true })`. Pre-fix: answer is now accepted but question stays open with best_answer_id=null. Post-fix: question is answered with best_answer_id pointing at the new answer.
-- Test 2: regression — multi-answer case still calls setQuestionStatus correctly (test the existing path remains intact).
+- Test 1: simulate two parallel importers via two `LatticeStore` instances on the same DB. Both call importPairs with the same question framing simultaneously. Pre-fix: one of them throws a UNIQUE-constraint error because the read missed and the insert collided. Post-fix: both succeed; only one row exists.
+- Test 2: idempotent re-run of importPairs on already-imported content — must remain a no-op for the question (not duplicate) and not throw.
 
-**Sequenced after NL17:**
-- NL18 → LC2/LC3/LC4 (lattice-context.ts after 1-iter gap), C5 (study-turn after gap), E1+E2 (race conditions, multi-test fix), K-imp-1/3/4/6/7/9
-- Eventually: fresh peer review on stats.ts (lumeyon or keystone fit)
+**Sequenced after NL18:**
+- NL19 → LC2/LC3/LC4 (lattice-context.ts NOT touched since NL15, eligible),
+- NL20 → E1+E2 (ephemeral race conditions, ephemeral-peer-review.ts last touched NL14),
+- NL21+ → C4/C5, K-imp-1/3/6/7/9, L5
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
 
@@ -142,13 +148,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL16):**
+- **Cumulative ledger (post-NL17):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 14 fixed at code level (L1, L2, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
+  - 15 fixed at code level (L1, L2, L3, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
   - 3 schema migrations shipped
-  - 17 queued findings remain
-  - Fix-rate: 47% (14/30 code) + all 3 schema migrations
+  - 16 queued findings remain
+  - Fix-rate: 50% (15/30 code) + all 3 schema migrations
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
+  - **L3 lesson: invariants need to be enforced in BOTH branches of a conditional.** Iter-5's joint-consistency invariant (status="answered" → best_answer_id non-null) was correctly enforced in setQuestionStatus AND in the multi-answer reRankAnswers branch — but the single-answer branch silently bypassed by calling the lower-level `setAnswerStatus` directly. Whenever a guard is added at the data-access layer, audit ALL call sites that could write inconsistent state, not just the obvious one.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 

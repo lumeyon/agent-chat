@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T09:55Z
+## Current state — 2026-05-08T10:25Z
 
-**Phase: NL16 — drained C2 (study-turn empty-body filter). Closes the data-side counterpart of C1 (NL3): pre-fix selectStudyQuestions could pick an accepted answer whose body was empty/whitespace; that answer would grade cosine=0 against any prediction → spurious -0.10 lift penalty on the answer's predictive_lift. Post-fix: candidate selection requires non-empty body. study-turn.ts now has both predictor-side (C1, C3) and data-side (C2) protections in place. Cumulative: 30 REAL findings, 14 code fixes, 3 schema migrations.**
+**Phase: NL17 — drained L3 (apprenticeship single-answer reRankAnswers lifecycle gap). Pre-fix: single-answer promote() set the answer's status to "accepted" but never updated the question's status or best_answer_id; question stayed "open" despite having an accepted answer. Post-fix: setQuestionStatus call added after promote(). Cumulative: 30 REAL findings, 15 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,58 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T10:25Z (NL17: queue-drain L3 — single-answer reRankAnswers lifecycle update)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains L3 — no fresh peer call. File-touch rule satisfied: NL16 touched study-turn.ts; apprenticeship.ts last touched NL6 (10 iters gap → eligible).
+
+**The bug (lumeyon NL1 L3):**
+  reRankAnswers has two promotion branches:
+    - **Single-answer** (live.length === 1, lift > 0): calls `promote(store, a)` and returns. promote() only does `setAnswerStatus(a.id, "accepted")` — it doesn't touch the question.
+    - **Multi-answer** (live.length >= 2): calls promote() on the winner, then runs the question lifecycle update (`setQuestionStatus(q.id, "answered", top.id)`).
+
+  Single-answer path skipped the question update. After running with `single_answer_promotes: true`, the answer was "accepted" but the question's `status` was still "open" and `best_answer_id` was still NULL — visible inconsistency that violated iter-5's joint-consistency invariant (status="answered" → best_answer_id non-null).
+
+**The fix:** after `promote(store, live[0])` in the single-answer branch, also call `setQuestionStatus(question_id, "answered", live[0].id)` — same shape as the multi-answer branch's lifecycle update.
+
+**Test-first protocol:**
+  2 regression tests at apprenticeship.test.ts:
+    - L3-a: single proposed answer with lift=0.5; run reRankAnswers with single_answer_promotes=true. Pre-fix: answer accepted but question.status="open" + best_answer_id=null. Post-fix: question.status="answered" + best_answer_id=a.id. **Verified FAILING pre-fix.**
+    - L3-b: single proposed answer with lift=0; run reRankAnswers. No promotion occurs (existing behavior preserved); question stays open. Sanity check.
+  Both PASS post-fix.
+
+**Why this matters:** the iter-5 joint-consistency invariant says status="answered" → best_answer_id non-null. The single-answer-promote path was technically violating that — pre-iter-5 it could leave inconsistent state, and post-iter-5 the runtime guards in setQuestionStatus would have rejected the explicit transition (so the question stayed open as a "hidden" violation). NL17 closes this by ensuring the lifecycle is always run after promotion.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 3 (SELECTION PRESSURE) — selection promotion now correctly updates the question lifecycle in both branches. The substrate's promote-the-winner mechanism produces consistent state across all paths.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 148 → 150 (+2 L3)
+
+**Files touched (4):**
+  - scripts/lattice/apprenticeship.ts (added setQuestionStatus call in single-answer branch)
+  - scripts/lattice/apprenticeship.test.ts (2 L3 regression tests)
+  - docs/ephemeral-peer-reviews.md (L3 row updated to FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL18 plan; cumulative ledger)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL18):** Per file-touch rule (NL17 touched apprenticeship.ts), eligible:
+- L5 (apprenticeship.ts — INELIGIBLE yet)
+- C4, C5 (study-turn.ts, last touched NL16 — INELIGIBLE yet)
+- LC2, LC3, LC4 (lattice-context.ts, last touched NL15 — eligible after gap)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — eligible)
+- K-imp-1, 3, 4, 6, 7, 9 (import-from-kg.ts, last touched NL13 — eligible)
+
+**Recommend NL18 → DRAIN K-imp-4** (importPairs:283 question idempotency read-then-insert race). Reasons:
+- Same race-condition shape as iter-8 K3 (DAG cycle race). Fix template is well-proven: wrap read+insert in BEGIN IMMEDIATE OR use INSERT OR IGNORE.
+- import-from-kg.ts last touched NL13 (4 iters gap → eligible).
+- Matches the existing pattern from iter-8: `withImmediateWriter` helper in sqlite-store.ts could be reused or the fix could use `INSERT OR IGNORE` SQL (simpler — no transaction needed since SQL handles it natively).
+
+After NL17/NL18, NL19+: continue draining (K-imp-1 fenced-section parsing, K-imp-3 cross-archive, K-imp-6 best_answer_id selection, K-imp-7 retro-upgrade limit, K-imp-9 NL12-observation, E1+E2 races, LC2-LC4) or fresh peer review on stats.ts.
 
 ### 2026-05-08T09:55Z (NL16: queue-drain C2 — selectStudyQuestions empty-body filter)
 

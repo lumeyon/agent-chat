@@ -381,4 +381,46 @@ describe("reRankAnswers — selection pressure (forcing function 3)", () => {
     const result = reRankAnswers(store, "v1:q1");
     expect(result).toEqual({ question_id: "v1:q1", promoted_to_accepted: null, demoted_to_superseded: [] });
   });
+
+  // Regression for lumeyon's NL1 L3 finding: the single-answer branch in
+  // reRankAnswers calls promote() (which only sets answer.status) but
+  // skips the question-lifecycle update at the end of the function.
+  // Result: question stays at status="open" with best_answer_id=null
+  // even though we just promoted an answer.
+  test("L3: single-answer promotion ALSO updates question.status + best_answer_id", () => {
+    const a = recordAnswer(store, {
+      question_id: "v1:q1",
+      body: "single answer",
+      by_agent: "orion",
+      explanation: "Real explanation",
+      predictive_lift: 0.5,
+    });
+    expect(store.getQuestion("v1:q1")?.status).toBe("open");
+    expect(store.getQuestion("v1:q1")?.best_answer_id).toBeNull();
+
+    const result = reRankAnswers(store, "v1:q1", { single_answer_promotes: true });
+    expect(result.promoted_to_accepted).toBe(a.id);
+
+    // Pre-fix: answer is "accepted" but question stays "open" with null
+    // best_answer_id. Post-fix: question lifecycle updated.
+    const q = store.getQuestion("v1:q1");
+    expect(q?.status).toBe("answered");
+    expect(q?.best_answer_id).toBe(a.id);
+  });
+
+  test("L3: existing single-answer-doesn't-promote case unchanged (lift=0)", () => {
+    recordAnswer(store, {
+      question_id: "v1:q1",
+      body: "lift-zero",
+      by_agent: "orion",
+      explanation: "x",
+      predictive_lift: 0,
+    });
+    const result = reRankAnswers(store, "v1:q1", { single_answer_promotes: true });
+    // Lift is 0 — no promotion. Question must STAY open (no spurious promotion
+    // path triggered).
+    expect(result.promoted_to_accepted).toBeNull();
+    expect(store.getQuestion("v1:q1")?.status).toBe("open");
+    expect(store.getQuestion("v1:q1")?.best_answer_id).toBeNull();
+  });
 });
