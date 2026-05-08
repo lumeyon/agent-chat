@@ -611,3 +611,87 @@ describe("ephemeral-peer-review CLI — E1 floor-stealing protection", () => {
     expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
   });
 });
+
+// Regression for lumeyon's NL4 E5 finding: importEdgeIntoLattice
+// resolved the lattice importer path via a hard-coded relative path
+// (`../../scripts/lattice/import-from-kg.ts` from SKILL_ROOT). This
+// works in the dev repo layout but in a packaged plugin layout (npm
+// package, published artifact, plugin-only deployment) the relative
+// path resolves to a non-existent file; pre-fix `fs.existsSync(path)`
+// returned false and importEdgeIntoLattice silently returned null.
+// No log of the path that was tried — the import was just MISSING with
+// no diagnostic. NL30 fix: (a) AGENT_CHAT_LATTICE_IMPORTER_PATH env
+// override, and (b) clear stderr message when the resolved importer
+// path doesn't exist.
+describe("ephemeral-peer-review CLI — E5 importer-path portability", () => {
+  test("E5: stderr logs the missing path when importer is not found", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    // Force the importer-path resolver to use a non-existent file via
+    // the new env override. Pre-fix this env var was IGNORED (the code
+    // hardcoded the relative path), so the dev-layout heuristic still
+    // found the real importer at the repo location and the import
+    // silently succeeded — no "missing importer" log was emitted. Pre-
+    // fix the test fails because the expected stderr message is absent.
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "lumeyon", "--module", moduleFile],  // NO --no-import → import path fires
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        AGENT_CHAT_MOCK_PEER_RESPONSE: "Reviewed.\n\n→ orion",
+        AGENT_CHAT_LATTICE_IMPORTER_PATH: "/definitely/nonexistent/path/to/import-from-kg.ts",
+      }),
+    );
+
+    // CLI itself should still succeed — lattice import is non-blocking.
+    expect(r.exitCode).toBe(0);
+    // Stderr should clearly name the path that was tried so an operator
+    // can see why import was skipped.
+    expect(r.stderr).toContain("lattice importer not found at");
+    expect(r.stderr).toContain("/definitely/nonexistent/path/to/import-from-kg.ts");
+  });
+
+  test("E5: AGENT_CHAT_LATTICE_IMPORTER_PATH env override is honored when set to a real script", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    // Build a tiny stub importer that emits the canonical importer
+    // output format ephemeral-peer-review parses. If the env override is
+    // honored, ephemeral-peer-review's stdout will reflect the stub's
+    // distinctive +7 / +13 numbers (different from what the real
+    // importer would produce on this test's CONVO).
+    const stubImporter = path.join(CONVO_DIR, "stub-importer.ts");
+    fs.writeFileSync(
+      stubImporter,
+      [
+        `console.log("# stub importer fired");`,
+        `console.log("questions: +7 (already existed: 0)");`,
+        `console.log("answers:   +13 (already existed: 0)");`,
+        `process.exit(0);`,
+      ].join("\n"),
+    );
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "lumeyon", "--module", moduleFile],
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        AGENT_CHAT_MOCK_PEER_RESPONSE: "Reviewed.\n\n→ orion",
+        AGENT_CHAT_LATTICE_IMPORTER_PATH: stubImporter,
+      }),
+    );
+
+    expect(r.exitCode).toBe(0);
+    // Pre-fix: env ignored; the real importer at the dev-layout path
+    // runs against this temp CONVO; stdout shows the real (much smaller)
+    // import counts (likely 1q/1a from the just-added Q/A pair).
+    // Post-fix: stub fires; ephemeral-peer-review parses its output and
+    // emits the stub's 7q/13a numbers.
+    expect(r.stdout).toContain("lattice: questions_inserted=7 answers_inserted=13");
+  });
+});

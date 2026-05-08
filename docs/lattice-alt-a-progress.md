@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T16:25Z
+## Current state — 2026-05-08T16:55Z
 
-**Phase: NL29 — drained K-imp-1 (parseSections splits on `## ` regardless of fenced-code state; quoted protocol section headers inside ```...``` blocks mis-parse as spurious sections). Pre-fix: `content.split(/(?=^## )/m)` matched any `## ` line — peer reviews quoting a sample protocol section in a fenced excerpt would inject a fake section into the lattice. Post-fix: rewrote parseSections to walk lines tracking `inFence` state via `line.startsWith("```")` toggle; `## ` lines INSIDE fences are part of the surrounding section's body, not section starts. Cumulative: 30 REAL findings, 28 code fixes, 3 schema migrations.**
+**Phase: NL30 — drained E5 (ephemeral-peer-review importer-path repo-layout-dependent; silent null in packaged plugin layout). Pre-fix: `importEdgeIntoLattice` resolved the importer via a hard-coded relative `../../scripts/lattice/import-from-kg.ts` from SKILL_ROOT — works in dev layout, silently returns null in packaged-plugin layouts where that relative path doesn't exist. Post-fix: added `AGENT_CHAT_LATTICE_IMPORTER_PATH` env override + clear stderr "lattice importer not found at <path>" log when the resolved path doesn't exist. The lattice import remains non-blocking (it's an optional side-effect), but the silent-skip is now visible. **MODULE CLEARED:** ephemeral-peer-review.ts (7/7 lumeyon NL4 findings fixed). Cumulative: 30 REAL findings, 29 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,115 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T16:55Z (NL30: queue-drain E5 — importer-path portability; env override + clear missing-path log)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains E5 — no fresh peer call. File-touch rule: NL29 touched import-from-kg.ts; this iter touches ephemeral-peer-review.ts (different file → eligible).
+
+**The bug (lumeyon NL4 E5):**
+  `importEdgeIntoLattice` resolved the lattice importer path via a
+  hard-coded relative path:
+  ```typescript
+  const importerPath = path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts");
+  if (!fs.existsSync(importerPath)) return null;
+  ```
+
+  In the dev repo layout, SKILL_ROOT is `plugins/agent-chat/` and
+  `scripts/lattice/import-from-kg.ts` is two levels up at the repo
+  root — the relative path resolves correctly. In a PACKAGED plugin
+  layout (npm package, published artifact, plugin-only deployment, or
+  any deployment where `scripts/lattice/` isn't at the same relative
+  location), the path resolves to a non-existent file. `fs.existsSync`
+  returns false; the function returns null silently; no diagnostic is
+  emitted. From the operator's perspective, lattice imports just don't
+  happen with no indication of why.
+
+**The fix (env override + visible silent skip):**
+  ```typescript
+  const importerPath = process.env.AGENT_CHAT_LATTICE_IMPORTER_PATH
+    ?? path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts");
+  if (!fs.existsSync(importerPath)) {
+    console.error(
+      `[ephemeral-peer-review] lattice importer not found at ${importerPath} — skipping import. ` +
+      `Set AGENT_CHAT_LATTICE_IMPORTER_PATH to override.`,
+    );
+    return null;
+  }
+  ```
+
+  Two changes:
+  1. **Env override:** `AGENT_CHAT_LATTICE_IMPORTER_PATH` lets operators
+     pin the importer location explicitly. Useful for packaged-layout
+     deployments where the relative-path heuristic doesn't apply.
+  2. **Visible silent skip:** when the resolved path doesn't exist
+     (whether from env override or from the dev-layout heuristic), log
+     the path that was tried and the override hint. The lattice import
+     remains non-blocking — operators can still get peer reviews even
+     when the import side-effect can't fire — but the skip is no longer
+     silent.
+
+**Test-first protocol:**
+  2 regression tests at ephemeral-peer-review.test.ts (new "E5
+  importer-path portability" describe block):
+    - **E5-a (missing-path log):** set `AGENT_CHAT_LATTICE_IMPORTER_PATH=/definitely/nonexistent/...`. Run ephemeral-peer-review without `--no-import`. Assert stderr contains "lattice importer not found at" + the absurd path. **Verified FAILING pre-fix** (env was ignored; the dev-layout heuristic resolved the real importer; import succeeded silently; no log was emitted).
+    - **E5-b (env override happy path):** create a stub importer in the test's temp dir that emits `questions: +7 (already existed: 0)` and `answers: +13 (already existed: 0)`. Set the env to point at it. Run ephemeral-peer-review. Assert stdout contains `lattice: questions_inserted=7 answers_inserted=13` (the stub's distinctive numbers, not what the real importer would produce on this CONVO). **Verified FAILING pre-fix** (env was ignored; real importer ran; emitted 1q/1a from the actual CONVO).
+
+**Why this matters:** ephemeral peer reviews are a substrate-level
+self-improvement primitive. As the substrate gets packaged for
+distribution (publishing the plugin, dropping the agent-chat skill into
+a fresh repo, etc.), the relative-path heuristic stops applying. Pre-fix
+this would manifest as "peer reviews work but lattice imports never
+fire" — a silent functional regression that's hard to detect without
+manual lattice DB inspection. With the env override + visible skip, the
+deployment friction is named explicitly; operators can either set the
+env or accept the no-import deployment (and know they're accepting it).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Substrate portability — the substrate's self-improvement
+    infrastructure is now at least diagnosable in alternate deployment
+    layouts. The lattice import remains best-effort; failures emit a
+    clear path-tried message.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 165 / 0 unchanged; plugin 541 → 543 (+2 E5)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/ephemeral-peer-review.ts (importEdgeIntoLattice now reads AGENT_CHAT_LATTICE_IMPORTER_PATH; logs missing-path on stderr)
+  - plugins/agent-chat/tests/ephemeral-peer-review.test.ts (2 E5 regression tests)
+  - docs/ephemeral-peer-reviews.md (E5 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL31 plan; cumulative ledger updated)
+
+**MODULE CLEARED:** ephemeral-peer-review.ts now has all 7 lumeyon NL4
+findings fixed (E1+E2 NL21, E3 NL14, E4 NL28, E5 NL30, E6 NL4, E7 NL24).
+Third peer-reviewed module to fully drain after apprenticeship.ts (NL26)
+and lattice-context.ts (NL27).
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL31):** File-touch rule blocks ephemeral-peer-review.ts immediately again. Eligible:
+- K-imp-3, K-imp-9 (import-from-kg.ts last touched NL29 — eligible after 2-iter gap at NL31)
+
+**Recommend NL31 → DRAIN K-imp-3** (importEdgeConvo:231 cross-archive Q→A pair lost when archiving splits).
+
+Reasons:
+- Real correctness bug. importEdgeConvo walks live CONVO.md + every sealed leaf archive's BODY.md as separate sources, calling parseSections on each independently. If a Q (user turn) is in archive A and the matching response (assistant turn) is in archive B (or in the live CONVO), the pair is split across sources and pairSections (called per-source) won't pair them.
+- import-from-kg.ts last touched NL29 (2 iters gap → eligible at NL31).
+
+**Read first:** `scripts/lattice/import-from-kg.ts` `importEdgeConvo` (line ~225) — the per-source loop and how parseSections + pairSections are called.
+
+**Fix approach:**
+- **Option A (concatenate then parse):** parse all sources into a single ordered list of sections, then pair across the full list. Risk: archive timestamps/order need to be preserved correctly.
+- **Option B (carry orphan sections across sources):** track sections that didn't pair in source N and try to pair them with the first section in source N+1.
+- Recommend A. Simpler and correctly handles the cross-archive case.
+
+**Sequenced after NL31:**
+- NL32 → K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
+- NL33+ → C4 (design call — orion authorized via boss-pre-approval queue).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
+- **Modules fully cleared:** apprenticeship.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7). 3 of 6 peer-reviewed modules now fully drained.
 
 ### 2026-05-08T16:25Z (NL29: queue-drain K-imp-1 — parseSections fenced-code respect; rejects quoted-header mis-parse)
 

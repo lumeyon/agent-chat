@@ -175,8 +175,27 @@ function turnCli(args: string[]): { status: number; stderr: string; stdout: stri
 // ─── Lattice import trigger ────────────────────────────────────────────────
 
 function importEdgeIntoLattice(edgeDir: string): { questions_inserted: number; answers_inserted: number } | null {
-  const importerPath = path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts");
-  if (!fs.existsSync(importerPath)) return null;
+  // E5 fix (NL30 / lumeyon NL4 finding): support env override and log
+  // clearly when the importer is missing. Pre-fix the relative path
+  // `../../scripts/lattice/import-from-kg.ts` worked in the dev repo
+  // layout but silently no-op'd in packaged plugin layouts (npm package,
+  // published artifact, plugin-only deployment) where the relative path
+  // resolves to a non-existent file. fs.existsSync returned false and
+  // the function returned null with no diagnostic — operators couldn't
+  // see why the lattice import was missing.
+  //
+  // Post-fix: (a) AGENT_CHAT_LATTICE_IMPORTER_PATH env var lets operators
+  // pin the importer location explicitly; (b) when the resolved path
+  // doesn't exist, log it on stderr so the silent skip becomes visible.
+  const importerPath = process.env.AGENT_CHAT_LATTICE_IMPORTER_PATH
+    ?? path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts");
+  if (!fs.existsSync(importerPath)) {
+    console.error(
+      `[ephemeral-peer-review] lattice importer not found at ${importerPath} — skipping import. ` +
+      `Set AGENT_CHAT_LATTICE_IMPORTER_PATH to override.`,
+    );
+    return null;
+  }
   const r = child_process.spawnSync(
     process.execPath,
     [importerPath, edgeDir],

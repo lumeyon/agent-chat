@@ -40,14 +40,14 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL29 commit)
+## CURRENT STATE (as of NL30 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **all 5 fixed: L1+L2+L3+L4+L5**)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **4 fixed: C1, C2, C3, C5**; C4 queued — design call)
-- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **6 fixed: E6, E3, E1, E2, E7, E4**; E5 queued)
+- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **all 7 fixed: E6, E3, E1, E2, E7, E4, E5**) — module fully cleared
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **7 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7, K-imp-1**; K-imp-3 queued; K-imp-9 added NL12 observation)
 
 ### Uncovered modules (priority for fresh peer reviews):
@@ -58,15 +58,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **all 5 fixed: LC1, LC2, LC3, LC4, LC5**) — module fully cleared
 
-### Queued findings (drainable WITHOUT fresh peer call — 3 total):
+### Queued findings (drainable WITHOUT fresh peer call — 2 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
 #### study-turn.ts (carina NL3) — 1 queued (C2 drained NL16, C5 drained NL20)
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
 
-#### ephemeral-peer-review.ts (lumeyon NL4) — 1 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24, E4 drained NL28)
-- **E5** (line 143): importer path repo-layout-dependent.
+#### ephemeral-peer-review.ts (lumeyon NL4) — 0 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24, E4 drained NL28, E5 drained NL30 — module fully cleared)
 
 #### import-from-kg.ts (keystone NL5) — 2 queued (K-imp-5 drained NL13, K-imp-4 drained NL18, K-imp-6 drained NL22, K-imp-7 drained NL25, K-imp-1 drained NL29)
 - **K-imp-3** (importEdgeConvo:231): cross-archive Q→A pair lost when archiving splits.
@@ -86,29 +85,28 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL30 → DRAIN E5** (ephemeral-peer-review.ts:143 importer path repo-layout-dependent — silent null in packaged plugin layout).
+**NL31 → DRAIN K-imp-3** (importEdgeConvo:231 cross-archive Q→A pair lost when archiving splits).
 
-**Why E5:**
-- Real portability bug: `importEdgeIntoLattice` resolves the importer path via `path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts")`. Works in the dev repo layout (where SKILL_ROOT is `plugins/agent-chat/` and `scripts/lattice/` is two levels up at the repo root). In a PACKAGED plugin layout (npm package, published artifact, plugin-only deployment) the relative path resolves to a non-existent file; `fs.existsSync(importerPath)` returns false; the import step is silently skipped. No error, no log of what path was tried — just a missing import.
-- ephemeral-peer-review.ts last touched NL28 (2 iters gap → eligible at NL30; NL29 touched import-from-kg.ts → different file).
+**Why K-imp-3:**
+- Real correctness bug. importEdgeConvo walks live CONVO.md + every sealed leaf archive's BODY.md as separate sources, calling parseSections + pairSections on each independently. If a Q (user turn) is in archive A and the matching response (assistant turn) is in archive B (or in the live CONVO), the pair is split across sources and pairSections — called per-source — won't pair them. The unpaired sections are dropped silently from the import → lost Q/A pair in the lattice.
+- import-from-kg.ts last touched NL29 (2 iters gap → eligible at NL31).
 
-**Read first:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` lines 140-165 (importEdgeIntoLattice). Confirm the existing path resolution + the silent-skip behavior.
+**Read first:** `scripts/lattice/import-from-kg.ts` `importEdgeConvo` function (around line 225). Examine the per-source loop and confirm where parseSections + pairSections are called.
 
 **Fix approach options:**
-- **Option A (loud on missing):** if the importer path doesn't exist, log the path that was tried + a hint that this is a packaged-layout situation. Don't fail the peer review (the lattice import is an optional side-effect), but make the failure visible.
-- **Option B (env override):** support `AGENT_CHAT_LATTICE_IMPORTER_PATH` env var to override the path; falls through to the relative-path heuristic if unset.
-- **Option C (multi-path search):** try multiple candidate paths (relative to SKILL_ROOT, relative to the conversations dir, relative to a configurable root); pick the first that exists.
-- Recommend A + B (clear log + env escape hatch). The fundamental issue is silent skipping; the fix is to make the skip visible and provide a manual override.
+- **Option A (concatenate then parse):** collect all sections from all sources into a single ordered list (preserving source-order), then call pairSections ONCE across the full list. Risk: archive ordering must match the natural conversation order (sealed leaves earlier than live CONVO).
+- **Option B (carry orphan sections across sources):** track unpaired tail sections from source N and prepend them to source N+1's sections before pairing.
+- Recommend A — simpler and correctly handles the cross-archive case in one pass.
 
 **Test approach (2 regression tests):**
-- Test 1: simulate the packaged-layout scenario (e.g., set the relative path to a non-existent location somehow, or mock the existsSync result). Pre-fix: import is silently skipped, no log mentioning the missing importer. Post-fix: stderr contains a clear "lattice importer not found at <path>" message.
-- Test 2: env override — set AGENT_CHAT_LATTICE_IMPORTER_PATH to a known-good location; assert it's used.
+- Test 1 (failure case): construct an edge dir with a leaf archive containing a user-turn section and a live CONVO containing the matching assistant-response section. Pre-fix: pairSections runs separately on each source; the pair is dropped. Post-fix: cross-source pairing produces 1 Q/A pair.
+- Test 2 (sanity): existing single-source happy-path tests still pass (the simple case where Q + A both live in the same CONVO).
 
-**Sequenced after NL30:**
-- NL31 → K-imp-3 (cross-archive Q→A pair lost when archiving splits) OR K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
-- NL32 → C4 (design call — orion authorized via boss-pre-approval queue).
+**Sequenced after NL31:**
+- NL32 → K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
+- NL33+ → C4 (design call — orion authorized via boss-pre-approval queue).
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
-- **Modules fully cleared:** apprenticeship.ts (5/5), lattice-context.ts (5/5). After NL30, ephemeral-peer-review.ts will be 7/7 if E5 ships.
+- **Modules fully cleared (3):** apprenticeship.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7).
 
 ## STOPPING CONDITIONS
 
@@ -137,12 +135,13 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL29):**
+- **Cumulative ledger (post-NL30):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 28 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E4, E6, E7, K-imp-1, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
+  - 29 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E4, E5, E6, E7, K-imp-1, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
   - 3 schema migrations shipped
-  - 3 queued findings remain (K-imp-3, K-imp-9, E5; plus C4 as design-call)
-  - Fix-rate: 93% (28/30 code) + all 3 schema migrations
+  - 2 queued findings remain (K-imp-3, K-imp-9; plus C4 as design-call)
+  - Fix-rate: 97% (29/30 code) + all 3 schema migrations
+  - **MODULES CLEARED (3 of 6):** apprenticeship.ts (5/5 NL17+NL26), lattice-context.ts (5/5 NL12+NL15+NL19+NL23+NL27), ephemeral-peer-review.ts (7/7 NL4+NL14+NL21+NL24+NL28+NL30).
   - **Markdown-fragility pattern (LC5 = K-imp-2 = K-imp-1):** all three are bugs in CONVO parsing where single-line regex meets multi-line content. LC5 + K-imp-2 (NL5, NL12) were trailing-marker /m strip bugs; K-imp-1 (NL29) was the section-split-not-respecting-fences bug. Future iter: extract a proper line-walking parser as the canonical CONVO reader (the way utf8.ts extracted byte-truncation as a shared primitive at NL24).
   - **MODULES CLEARED (2):** apprenticeship.ts (5/5 lumeyon NL1 findings fixed at NL17+NL26), lattice-context.ts (5/5 carina NL12 findings fixed at NL12+NL15+NL19+NL23+NL27).
   - **Input-validation pattern (E6 = LC4 = L5):** substrate APIs that take user/agent-supplied numbers should validate at the API boundary rather than trust slice/encode/comparison to fail gracefully. Three instances of this pattern have now been hardened (capBytes, body_budget_bytes, k). Audit other numeric API parameters for the same pattern.
