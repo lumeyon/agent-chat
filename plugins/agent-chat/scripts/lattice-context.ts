@@ -130,8 +130,12 @@ export function extractMostRecentPeerBody(sections: string[], myAgentName: strin
     // Found a peer's section — extract body (lines after header).
     const nl = sec.indexOf("\n");
     let body = nl < 0 ? "" : sec.slice(nl + 1);
-    // Strip trailing arrow + separator
-    body = body.replace(/\n*→\s*\S+\s*$/m, "").replace(/\n*---\s*$/m, "").trim();
+    // Strip trailing arrow + separator. NL12 / carina LC5 fix: same
+    // bug class as K-imp-2 in import-from-kg.ts — the prior /m flag made
+    // `$` match end-of-LINE, stripping internal `→ name` and `---`
+    // lines from body content. Without /m, `$` only matches end-of-
+    // string, so only the TRUE trailing markers strip (the intent).
+    body = body.replace(/\n*→\s*\S+\s*$/, "").replace(/\n*---\s*$/, "").trim();
     return body;
   }
   return "";

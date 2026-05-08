@@ -85,6 +85,38 @@ describe("extractMostRecentPeerBody", () => {
     ];
     expect(extractMostRecentPeerBody(sections, "orion")).toBe("A for orion.");
   });
+
+  // Regression for carina's NL12 LC5 finding: extractMostRecentPeerBody
+  // used `/m` flag on the trailing-marker regexes — same bug class as
+  // K-imp-2 in import-from-kg.ts. With `/m`, `$` matches end-of-LINE,
+  // so internal lines ending with `→ word` or `---` got stripped from
+  // body content. Drop /m so only the TRUE trailing markers strip.
+  test("LC5: internal '→ name' lines preserved (not stripped by trailing-marker regex)", () => {
+    const sections = [
+      "## lumeyon — review (UTC 2026-05-07T10:00:00Z)\n\nFirst line.\nWe routed it → orion\nThen we continued.\n\n→ orion\n",
+    ];
+    const body = extractMostRecentPeerBody(sections, "orion");
+    // Pre-fix: the internal line "We routed it → orion" gets stripped
+    // because $ with /m matches end-of-line.
+    // Post-fix: only the TRUE trailing "→ orion" arrow strips; the
+    // internal arrow on line 2 stays.
+    expect(body).toContain("We routed it → orion");
+    expect(body).toContain("Then we continued");
+  });
+
+  test("LC5: internal '---' separator preserved (only trailing stripped)", () => {
+    const sections = [
+      "## lumeyon — review (UTC 2026-05-07T10:00:00Z)\n\nSection A.\n---\nSection B after rule.\n\n---\n",
+    ];
+    const body = extractMostRecentPeerBody(sections, "orion");
+    // The body has TWO `---` lines: one internal (between A and B) and
+    // one trailing. Pre-fix the regex strips the FIRST match (internal
+    // line) due to /m. Post-fix it strips only the TRAILING one.
+    // Stronger assertion: structure of the body should be
+    //   Section A.\n---\nSection B after rule.
+    // NOT a hyphen-collapsed version that lost the internal rule.
+    expect(body).toBe("Section A.\n---\nSection B after rule.");
+  });
 });
 
 describe("composePushedContextBlock", () => {

@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL11 commit)
+## CURRENT STATE (as of NL12 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -51,12 +51,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **2 fixed: K-imp-2, K-imp-8**; K-imp-1, 3-7 queued)
 
 ### Uncovered modules (priority for fresh peer reviews):
-1. `plugins/agent-chat/scripts/lattice-context.ts` — cmdRun-pushContext bridge; lumeyon or carina fit
-2. `scripts/lattice/stats.ts` — lumeyon or keystone fit
-3. `scripts/lattice/synthesize-corpus.ts`
-4. `scripts/lattice/validate-corpus.ts`
+1. `scripts/lattice/stats.ts` — lumeyon or keystone fit
+2. `scripts/lattice/synthesize-corpus.ts`
+3. `scripts/lattice/validate-corpus.ts`
 
-### Queued findings (drainable WITHOUT fresh peer call — 19 total):
+### Covered (added NL12):
+- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, 1 fixed: LC5; LC1-LC4 queued)
+
+### Queued findings (drainable WITHOUT fresh peer call — 21 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 2 queued
 - **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion skips question lifecycle update.
@@ -75,13 +77,20 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **E5** (line 143): importer path repo-layout-dependent.
 - **E7** (line 87): truncation by JS string length, not bytes.
 
-#### import-from-kg.ts (keystone NL5) — 6 queued (was 7; K-imp-8 drained NL10)
+#### import-from-kg.ts (keystone NL5) — 7 queued (was 7; K-imp-8 drained NL10; +K-imp-9 added NL12)
 - **K-imp-1** (parseSections:54): false sections from `## ` inside fenced transcripts.
 - **K-imp-3** (importEdgeConvo:231): cross-archive Q→A pair lost when archiving splits.
 - **K-imp-4** (importPairs:283): question idempotency read-then-insert race.
-- **K-imp-5** (importPairs:322): try/catch swallows ALL errors as duplicate. Bug-masking.
+- **K-imp-5** (importPairs:322): try/catch swallows ALL errors as duplicate. **Bug-masking.**
 - **K-imp-6** (importPairs:338): best_answer_id chosen via queryAnswers limit:1.
 - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only first 5.
+- **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
+
+#### lattice-context.ts (carina NL12) — 4 queued
+- **LC1** (lattice-context.ts:64): no cosine floor — unrelated content can be pushed for sparse corpus.
+- **LC2** (lattice-context.ts:65): over-fetches only k+5 — eligible peer hits dropped if buffer insufficient.
+- **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block.
+- **LC4** (lattice-context.ts:109): body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1). Same UTF class as E7.
 
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
 - ~~iter-3 SQL `explanation TEXT NOT NULL`~~ — **SHIPPED NL7**
@@ -95,25 +104,21 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL12 → FRESH peer review on `plugins/agent-chat/scripts/lattice-context.ts` via carina (codex)**.
+**NL13 → DRAIN K-imp-5** (import-from-kg.ts:322 try/catch swallows ALL errors as duplicate — **bug-masking**).
 
-**Why a fresh peer review now (not queue-drain):**
-- All 3 pre-approved schema migrations DONE (NL7 NOT NULL, NL9 FK, NL11 CHECK). No more migration-template work.
-- Last fresh peer call was NL5 keystone. Six iters since (3 queue-drains, 3 schema migrations). Time to refill the findings queue with fresh material.
-- File-touch rule satisfied: NL11 touched sqlite-store.ts; lattice-context.ts is a different file (and uncovered).
-- Per peer rotation: next is carina (cycle position N+2 from NL5). Carina's specialty (embeddings, cosine math, grading thresholds) is a precise fit — lattice-context.ts wraps `pushContext` and prepares cosine-graded retrieval results for cmdRun.
-- Expected ~5-7 new REAL findings based on the established pattern (NL1=5, NL3=5, NL4=7, NL5=8 — average 6.25 REAL findings per peer review).
+**Why K-imp-5:**
+- Bug-masking is high-impact: silent failures in non-PK paths (dual-output enforcement throws, FK violations, etc.) get miscounted as duplicates. Every import run could be hiding real errors.
+- File-touch rule satisfied: NL12 touched lattice-context.ts; import-from-kg.ts last touched NL10 (2 iters gap → eligible).
+- Self-contained fix: discriminate PRIMARY KEY conflict from other errors in the catch block.
 
-**Plan for NL12:**
-1. Tests-first.
-2. Spawn `agent-chat ephemeral-peer-review --peer carina --module plugins/agent-chat/scripts/lattice-context.ts --task "Audit for REAL issues only: cosine threshold logic, push-context retrieval correctness, formatting boundary edges (truncation, empty results, peer-vs-self exclusion logic), data leak via included content, performance of large-corpus retrieval. Be terse — bullet points only with file:line citations."`.
-3. Apply 1-retry resilience rule if codex flakes.
-4. Classify findings; if any REAL → ship one fix this iter (test-first), queue rest. If all dismissed → STOP per stopping condition 6.
-5. Update tracker + journal + prompt.md.
+**Test approach:**
+- Construct a scenario where recordAnswer throws something other than PK conflict (e.g. dual-output enforcement: empty explanation). Verify the import RAISES the error or surfaces it cleanly, NOT silently increments aDup.
+- Pre-fix: aDup++ regardless of error.
+- Post-fix: only PK-conflict errors → aDup++; other errors propagate (or get logged as a separate failure category).
 
-**Sequenced after NL12:**
-- NL13+ → drain queued findings (now augmented by NL12's). With 16-21 expected total, the queue can sustain many drain iters.
-- Eventually: fresh peer reviews on the 3 remaining uncovered modules (`stats.ts`, `synthesize-corpus.ts`, `validate-corpus.ts`).
+**Sequenced after NL13:**
+- NL14+ → drain more findings (still 20+ queued post-NL13). LC1-LC4 (lattice-context, but file-touch will allow alternation), L3, L5, C2/C4/C5, E1-E5+E7, K-imp-1/3/4/6/7/9.
+- Fresh peer review on stats.ts (next uncovered module) — fits lumeyon's general-correctness OR keystone's specialty. Defer until queue thins.
 
 ## STOPPING CONDITIONS
 
@@ -142,13 +147,13 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL11):**
-  - 25 REAL findings discovered across 5 peer reviews
-  - 9 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, K-imp-8, iter-3 #2)
-  - **3 schema migrations shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK) — all pre-approved migrations DONE**
-  - 16 queued findings + 0 pre-approval schema items remaining
-  - Fix-rate: 36% (9/25 code) + all 3 schema migrations from peer findings shipped end-to-end.
-  - Substrate's SQL-level integrity now fully matches its application-level integrity.
+- **Cumulative ledger (post-NL12):**
+  - 30 REAL findings discovered across 6 peer reviews (NL12 added 5 from carina on lattice-context.ts)
+  - 10 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, K-imp-8, iter-3 #2, LC5)
+  - 3 schema migrations shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK)
+  - 21 queued findings + 0 pre-approval schema items remaining
+  - Fix-rate: 33% (10/30 code) + all 3 schema migrations
+  - **SYSTEMIC bug pattern detected (LC5 = K-imp-2):** trailing-marker /m regex copy-pasted across import-from-kg.ts AND lattice-context.ts. Code organization smell — should be a shared helper.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 

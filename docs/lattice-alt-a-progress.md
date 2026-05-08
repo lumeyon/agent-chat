@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T06:25Z
+## Current state — 2026-05-08T07:55Z
 
-**Phase: NL11 — third schema migration shipped. K2 CHECK `IN (1,2,3,4,5)` (was `BETWEEN 1 AND 5`) closes the last pre-approved schema migration. v3→v4 migration applied on production: 952 answers preserved, schema_version=4, fractional bypass-INSERT verified rejected at SQL layer. ALL THREE pre-approved schema migrations now shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK). Substrate's SQL-level integrity now fully matches its application-level integrity.**
+**Phase: NL12 — fresh peer review on lattice-context.ts via carina (codex). 5 REAL findings (no nitpicks) — same yield-pattern as prior peer reviews. LC5 (regex /m flag — same bug class as K-imp-2 in import-from-kg.ts) FIXED this iter, demonstrating a SYSTEMIC copy-paste bug pattern across 2 modules. LC1-LC4 queued. Total cumulative: 30 REAL findings, 10 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,61 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T07:55Z (NL12: fresh peer review — carina on lattice-context.ts → 5 REAL findings; LC5 fixed; systemic /m-regex bug confirmed)
+
+**Loop:** stateful peer-driven via prompt.md. Pre-approval schema queue empty post-NL11; rotated back to peer-review with carina (per rotation, cycle position N+2 from NL5 keystone). Last fresh peer call was NL5 — six iters ago.
+
+**Target:** `plugins/agent-chat/scripts/lattice-context.ts` (the cmdRun-pushContext bridge: composes pushed-context blocks from lattice retrieval, extracts most-recent-peer body for prompts). Uncovered. Lumeyon or carina fit the specialty; carina chosen per rotation + the cosine-grading domain match.
+
+**Peer used:** carina (codex). Worked first try (~3min wall clock; well within 240s budget).
+
+**Findings (5 REAL, 0 nitpicks):**
+  - **LC1** (lattice-context.ts:64): no cosine floor before emitting answer bodies. pushContext returns top-K regardless; with sparse corpus (cosines 0.21-0.31 documented iter-4), unrelated content gets pushed into prompts. (queued)
+  - **LC2** (lattice-context.ts:65): over-fetches only k+5 before self-filtering. If user has self-authored most recent corpus, all top hits could be self-authored and the +5 buffer might not be enough. (queued)
+  - **LC3** (lattice-context.ts:71): when exclude_agent unset, hits with `best_answer === null` survive agent-filter, pass empty-check at line 77, then get skipped at line 87 — produces header-only pushed block. (queued)
+  - **LC4** (lattice-context.ts:109): `body_budget_bytes` uses JS string length, not bytes; multibyte content can exceed budget; `budget <= 0` leaks via `slice(0, -1)`. (queued — same UTF-16/UTF-8 mismatch class as E7)
+  - **LC5** (lattice-context.ts:134): trailing-marker `/m` flag strips internal `→ name` and `---` lines from body content. **FIXED** this iter — drop /m flag, same fix as K-imp-2 in import-from-kg.ts.
+
+**SYSTEMIC BUG PATTERN CONFIRMED:** LC5 is the EXACT same bug class as K-imp-2 NL5: a trailing-marker stripper regex with `/m` flag that mistakenly matches end-of-LINE instead of end-of-string. The same code pattern is replicated across 2 modules (import-from-kg.ts and lattice-context.ts). This is a code-organization smell — the trailing-marker-stripping logic should be a shared helper. Adding to follow-up as observation.
+
+**LC5 fix applied:** drop `/m` flag from both regexes in extractMostRecentPeerBody (line 134). Same template as K-imp-2.
+
+**Test-first protocol:**
+  2 regression tests at lattice-context.test.ts:
+    - LC5-a: internal `→ orion` line preserved (FAILED pre-fix — pre-fix it stripped to `"We routed it "`)
+    - LC5-b: internal `---` rule preserved (FAILED pre-fix — pre-fix it produced `"Section A.\n\nSection B after rule."` losing the rule)
+  Both PASS post-fix.
+  Stronger assertions: instead of just `.toContain("---")`, used `.toBe("Section A.\n---\nSection B after rule.")` to catch the structural bug. Lesson: test-first means verify failure pre-fix; loose assertions are pre-fix-passing tautologies.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (PUSH-CONTEXT) — extractMostRecentPeerBody is the input-side of pushContext (extracts the query from CONVO.md). The bug corrupted that query, weakening retrieval relevance for ALL pushContext calls. NL12 fix restores correct query extraction.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 419 → 425 (+6 from carina's review imported as multiple Q/A pairs)
+  - Answers: 952 → 961 (+9 from carina's review + background)
+  - **authored: 11 → 12** (carina's review tier-3 authored)
+  - quality_tier: tier 2=5, tier 3=7, tier 5=949
+
+**Note on import yield:** carina's review imported as 6 Q + 9 A. Higher than typical peer reviews (usually 1 Q + 1 A). The importer's pairSections logic may be parsing carina's bulleted response as multiple sections somehow. Not a NL12 fix priority — but worth flagging as observation: import-from-kg's pairSections might be over-eagerly creating Q/A from large multi-bullet responses. Adds K-imp-9 to the queue: investigate why carina's NL12 review yielded 6Q/9A vs the usual 1Q/1A.
+
+**Tests:** plugin 508 → 510 (+2 LC5) / 0 fail / 3 skip. Lattice 144/0 (no change).
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/lattice-context.ts (LC5 fix — drop /m flag)
+  - plugins/agent-chat/tests/lattice-context.test.ts (2 LC5 regression tests)
+  - docs/ephemeral-peer-reviews.md (lattice-context.ts row added)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL13 plan; LC1-LC4 + new K-imp-9 queued; lessons updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL13):** Per file-touch rule, NL12 touched lattice-context.ts → ineligible immediately. Per queue-precedence, drain a finding from a different module. Top candidates:
+- **L3** (apprenticeship.ts, last touched NL6): single-answer reRankAnswers promotion lifecycle gap. Modest fix.
+- **K-imp-5** (import-from-kg.ts, last touched NL10): try/catch swallows ALL errors as duplicate. **Bug-masking** — high impact.
+- **C2** (study-turn.ts, last touched NL8): selectStudyQuestions can pick empty-body answer → spurious penalty. Selection-pressure correctness.
+
+**Recommend NL13 → DRAIN K-imp-5** (bug-masking is high-leverage; closes a real silent-failure pathway in the importer).
 
 ### 2026-05-08T06:25Z (NL11: SQL migration v3→v4 — answers.quality_tier CHECK IN (1,2,3,4,5); LAST pre-approved schema migration)
 
