@@ -2,11 +2,11 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T18:25Z
+## Current state — 2026-05-08T18:55Z
 
-**Phase: NL33 — investigated K-imp-9 (NL12 post-review observation: pairSections over-eagerly splits bulleted peer-review responses → 6Q/9A vs typical 1Q/1A). Outcome: RESOLVED-NOT-A-BUG. parseSections + pairSections produce EXACTLY 1 pair from the actual NL12 carina-on-lattice-context response — the 6Q/9A delta was the edge-wide import scanning the WHOLE carina-orion CONVO+archives, not the peer-review pair alone. The "typical 1Q/1A" mental model was wrong: ephemeral-peer-review's lattice import rescans the entire edge so delta includes any prior unimported AI→AI dialogue. Locked in correct behavior with 2 regression tests; queue is now EMPTY of original peer findings AND post-review observations. Cumulative: 31 code-level fixes + 3 schema migrations.**
+**Phase: NL34 — Phase A1 SHIPPED. record-turn now has an opt-in post-hook: when AGENT_CHAT_AUTO_STUDY_TURN=1, every successful turn appends a `scheduled` entry to `<conversationsDir>/.auto-study-turn.jsonl` with edge_id, agent, speaker, framing, answer_body, ts, status. Idempotent skip (sha-deduped re-record) does NOT fire the hook. Best-effort: journal-write failure is logged to stderr but doesn't block record-turn success. 5 regression tests covering opt-in path, default-off, explicit-off, idempotent-no-duplicate, and multi-turn append. NL34 ships the TRIGGER plumbing; NL35 will ship the CONSUMER (codex peer dispatched as study-turn predictor) that turns scheduled entries into actual lift updates. Cumulative since the new mission: 1 wiring step shipped (A1); + 31 prior code-level fixes + 3 schema migrations from the original-loop substrate-hardening phase.**
 
-**MILESTONE — substrate finding queue fully drained at NL33:** the 6 peer-review modules generated 30 original REAL findings + 1 post-review observation (K-imp-9). All 30 findings FIXED + K-imp-9 INVESTIGATED-AND-RESOLVED-AS-NOT-A-BUG. Plus 3 schema migrations from the boss-pre-approval queue. Plus 1 design-call drained (C4 at NL32). The substrate is at a natural pause point — the original peer-review surface has been exhausted. Next step: fresh peer review on a previously-uncovered module (stats.ts) to surface NEW findings.
+**MISSION:** wire up autonomous heterogeneous-judge selection pressure. Phase A trigger plumbing started at NL34. Phases A→B→C→D→E will land the auto-loop end-to-end with measurement.
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -19,6 +19,95 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T18:55Z (NL34: ship A1 — record-turn post-hook for auto-study-turn schedule)
+
+**Loop:** new mission per pivoted prompt.md (autonomous heterogeneous-judge selection pressure). NL34 is the first wiring step (Phase A1).
+
+**What landed:**
+  After cmdRecordTurn's success-path log line, an opt-in hook reads
+  `process.env.AGENT_CHAT_AUTO_STUDY_TURN`. If set to "1", appends one
+  JSON line to `<conversationsDir>/.auto-study-turn.jsonl`:
+  ```json
+  {"ts":"2026-05-08T...","edge_id":"boss-keystone","agent":"keystone",
+   "speaker":"boss","framing":"...","answer_body":"...","status":"scheduled"}
+  ```
+  Best-effort write — try/catch swallows journal failures with a stderr
+  log. The journal-write happens AFTER record-turn's lock has been
+  released and the success log emitted, so the trigger plumbing can't
+  block the per-turn flow.
+
+  Idempotent record-turn re-invocations (sha-deduped via the
+  `recorded_turns.jsonl` ledger) do NOT fire the hook — a phantom
+  schedule entry for content that didn't actually re-land in CONVO
+  would be misleading downstream.
+
+**Tests (5 in append-turn.test.ts new "A1 auto-study-turn schedule
+hook" describe block):**
+  - **A1-a:** AGENT_CHAT_AUTO_STUDY_TURN=1 → 1 schedule entry written
+    with all expected fields. **Verified FAILING pre-fix** (entries.length=0).
+  - **A1-b:** env unset → no journal file created (default off).
+  - **A1-c:** AGENT_CHAT_AUTO_STUDY_TURN=0 → no journal file (explicit off).
+  - **A1-d:** idempotent record-turn skip → no duplicate entry.
+    **Verified FAILING pre-fix.**
+  - **A1-e:** 3 turns → 3 distinct entries appended in order.
+    **Verified FAILING pre-fix.**
+
+  3 of 5 fail pre-fix (the opt-in path); 2 pass pre-fix (default-off
+  and explicit-off both have no journal file regardless).
+
+**Why this matters:** record-turn fires automatically on every
+conversational turn (it's the protocol-mandated post-response action
+documented in agent-chat's SKILL.md). Hooking the schedule trigger
+here is the natural place for "every new (Q, A) gets evaluated" —
+no separate cron, no separate watcher needed, the trigger fires at
+the natural ingest moment.
+
+A1 is intentionally minimal — it ships ONLY the journal write. The
+journal accumulates `scheduled` entries; nothing CONSUMES them yet.
+That's NL35 (A2). Splitting the trigger from the consumer means each
+iter is small and testable, and the consumer can be exercised in
+isolation against a hand-seeded journal during dev.
+
+**Substrate primitives unchanged:** runStudyTurn, codexPredictor,
+applyGradeToLift, reRankAnswers, ephemeral-peer-review all already
+exist. NL34 added zero new substrate; only the trigger.
+
+**Heterogeneity rule (INVIOLABLE rule 5) satisfied trivially:** A1
+doesn't pick a peer yet — it just writes the schedule entry. The peer
+selection happens in A2 where the heterogeneity-first default kicks in.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call; auto-loop not consuming yet)
+  - Answers: 961 → 961
+  - Tests: lattice 174 / 0 unchanged; plugin 543 → 548 (+5 A1)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/agent-chat.ts (post-hook in cmdRecordTurn)
+  - plugins/agent-chat/tests/append-turn.test.ts (5 A1 regression tests)
+  - prompt.md (NL35 plan; A1 marked DONE; A2 hint sequenced)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL35):** Ship A2 — journal consumer that dispatches a codex peer as the study-turn predictor.
+
+  Design sketch:
+  - New file: `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`.
+  - CLI command: process ONE oldest `scheduled` entry, dispatch codex
+    peer (rotation: lumeyon → keystone → carina → cycle), grade with
+    cosine, update lattice's predictive_lift, mark journal entry
+    `predicted` (or `failed` with error if anything went wrong).
+  - Exits after one entry — caller decides cadence (cron / interval /
+    spawned-from-record-turn-post-hook).
+  - File-touch rule satisfied: new file ≠ NL34's plugins/agent-chat/scripts/agent-chat.ts.
+
+  Heterogeneity-first: if the answer's by_agent is NOT claude (orion),
+  picking ANY codex peer satisfies. If by_agent IS claude, the peer
+  MUST be codex AND must NOT be the same agent that wrote the answer.
+
+  After A2, NL36 → A3 (auto-reRank after lift update); NL37 → wire the
+  consumer to spawn from record-turn's post-hook.
 
 ### 2026-05-08T18:25Z (NL33: investigate K-imp-9 — RESOLVED-NOT-A-BUG; metric misinterpretation, not a code bug)
 

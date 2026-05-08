@@ -393,3 +393,112 @@ describe("record-turn — overlay auto-resolve flow (vanguard's Phase-1 design)"
     expect(newConvo).toContain("u2");
   });
 });
+
+// Phase A1 (NL34): record-turn post-hook for auto-study-turn scheduling.
+//
+// When AGENT_CHAT_AUTO_STUDY_TURN=1, every successful record-turn must
+// append a "study-turn-scheduled" entry to <conversationsDir>/.auto-
+// study-turn.jsonl. The entry includes timestamp, edge_id, agent (the
+// answerer / orion in the dev case), framing (user body), and
+// answer_body. The actual study-turn execution is deferred to A2/A3;
+// A1 just ships the trigger plumbing (the schedule entry).
+//
+// When the env flag is unset (default), no journal file is created —
+// auto-study-turn is opt-in to keep per-turn LLM cost zero by default.
+//
+// Failure to write the journal MUST NOT block record-turn from
+// returning success — the auto-trigger is opportunistic plumbing, not
+// load-bearing for the per-turn flow.
+describe("record-turn — A1 auto-study-turn schedule hook", () => {
+  let tmp: string;
+  beforeEach(() => { tmp = mkTmpConversations(); });
+  afterEach(() => { rmTmp(tmp); });
+
+  function readJournal(dir: string): any[] {
+    const f = path.join(dir, ".auto-study-turn.jsonl");
+    if (!fs.existsSync(f)) return [];
+    return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  }
+
+  test("A1: AGENT_CHAT_AUTO_STUDY_TURN=1 appends a schedule entry to .auto-study-turn.jsonl", () => {
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = { ...sessionEnv(tmp, AGENT, TOPO, key), AGENT_CHAT_AUTO_STUDY_TURN: "1" };
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "what is the deadline?", "--assistant", "Friday at 5pm.",
+    ], env);
+    expect(r.exitCode).toBe(0);
+
+    const entries = readJournal(tmp);
+    expect(entries.length).toBe(1);
+    expect(entries[0].edge_id).toBe("boss-keystone");
+    expect(entries[0].agent).toBe("keystone");
+    expect(entries[0].framing).toBe("what is the deadline?");
+    expect(entries[0].answer_body).toBe("Friday at 5pm.");
+    expect(entries[0].ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(entries[0].status).toBe("scheduled");
+  });
+
+  test("A1: default (env unset) — no journal file created (opt-in only)", () => {
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = sessionEnv(tmp, AGENT, TOPO, key);
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "u", "--assistant", "a",
+    ], env);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(tmp, ".auto-study-turn.jsonl"))).toBe(false);
+  });
+
+  test("A1: AGENT_CHAT_AUTO_STUDY_TURN=0 — no journal file created (explicit opt-out)", () => {
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = { ...sessionEnv(tmp, AGENT, TOPO, key), AGENT_CHAT_AUTO_STUDY_TURN: "0" };
+
+    const r = runScript("agent-chat.ts", [
+      "record-turn", "--user", "u", "--assistant", "a",
+    ], env);
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(tmp, ".auto-study-turn.jsonl"))).toBe(false);
+  });
+
+  test("A1: idempotent record-turn skip — no duplicate journal entry", () => {
+    // record-turn is idempotent: the same (speaker, user, assistant) hash
+    // is rejected as a no-op via the ledger. The auto-study-turn hook
+    // MUST NOT fire when the underlying record-turn was a no-op (we'd
+    // get a phantom schedule entry for content that didn't actually
+    // re-land in CONVO).
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = { ...sessionEnv(tmp, AGENT, TOPO, key), AGENT_CHAT_AUTO_STUDY_TURN: "1" };
+
+    runScript("agent-chat.ts", ["record-turn", "--user", "u1", "--assistant", "a1"], env);
+    const r2 = runScript("agent-chat.ts", ["record-turn", "--user", "u1", "--assistant", "a1"], env);
+    expect(r2.exitCode).toBe(0);
+
+    const entries = readJournal(tmp);
+    // First call wrote 1 entry. Second call was idempotent skip → no new entry.
+    expect(entries.length).toBe(1);
+  });
+
+  test("A1: multiple turns each append their own entry", () => {
+    const key = fakeSessionId("ks");
+    writeSessionRecord(tmp, key, AGENT, TOPO);
+    writeCurrentSpeaker(tmp, key, "boss");
+    const env = { ...sessionEnv(tmp, AGENT, TOPO, key), AGENT_CHAT_AUTO_STUDY_TURN: "1" };
+
+    runScript("agent-chat.ts", ["record-turn", "--user", "q1", "--assistant", "a1"], env);
+    runScript("agent-chat.ts", ["record-turn", "--user", "q2", "--assistant", "a2"], env);
+    runScript("agent-chat.ts", ["record-turn", "--user", "q3", "--assistant", "a3"], env);
+
+    const entries = readJournal(tmp);
+    expect(entries.length).toBe(3);
+    expect(entries.map((e) => e.framing)).toEqual(["q1", "q2", "q3"]);
+  });
+});

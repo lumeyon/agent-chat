@@ -1409,6 +1409,35 @@ async function cmdRecordTurn(args: string[]): Promise<void> {
   }
 
   console.log(`record-turn: appended user+assistant pair on edge ${edge.id}; flipped to ${speaker}`);
+
+  // Phase A1 (NL34): auto-study-turn schedule hook.
+  //
+  // When AGENT_CHAT_AUTO_STUDY_TURN=1, append a "scheduled" entry to
+  // <conversationsDir>/.auto-study-turn.jsonl. This is the trigger that
+  // future iters (A2 = codex predictor dispatch; A3 = auto-reRank) will
+  // consume. For A1 we only ship the journal write — the actual study-
+  // turn execution is deferred so per-turn cost stays zero by default.
+  //
+  // Best-effort: a journal-write failure must NOT propagate. The auto-
+  // trigger is opportunistic plumbing; record-turn's correctness is
+  // load-bearing for the per-turn flow. Catch and swallow.
+  if (process.env.AGENT_CHAT_AUTO_STUDY_TURN === "1") {
+    try {
+      const journalPath = path.join(CONVERSATIONS_DIR, ".auto-study-turn.jsonl");
+      const entry = {
+        ts: utcStamp(),
+        edge_id: edge.id,
+        agent: id.name,           // who answered (orion in dev case)
+        speaker,                  // who asked (boss / john / etc.)
+        framing: userText,        // user-side body → maps to question.framing
+        answer_body: assistantText,  // assistant-side body → maps to answer.body
+        status: "scheduled",
+      };
+      fs.appendFileSync(journalPath, JSON.stringify(entry) + "\n");
+    } catch (err) {
+      console.error(`[agent-chat] auto-study-turn schedule failed (non-blocking): ${(err as Error)?.message ?? err}`);
+    }
+  }
 }
 
 // ----- run (Round-15a slice 1: ephemeral mode) -----------------------------

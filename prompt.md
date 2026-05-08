@@ -76,10 +76,10 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 
 ### Phase A — Auto-trigger study-turn on record-turn (cheapest, mostly plumbing)
 
-- **A1** [TODO]: Add an async post-hook to record-turn that schedules a study-turn for the affected question. Async = doesn't block the user-facing response; runs in background; logs result to a journal file.
-- **A2** [TODO]: The post-hook's predictor MUST be a codex peer (per heterogeneity rule). Default to `codexPredictor` from study-turn.ts; route to a peer chosen via the rotation table.
-- **A3** [TODO]: After applyGradeToLift writes new lift values, auto-fire reRankAnswers for the affected question. If reRank changes accepted/superseded, log it.
-- **A4** [TODO]: Add a feature flag `AGENT_CHAT_AUTO_STUDY_TURN=1` so the auto-trigger can be toggled off in tests / for users who don't want background LLM cost.
+- **A1** [DONE iter NL34]: Added record-turn post-hook that, on AGENT_CHAT_AUTO_STUDY_TURN=1, appends a `scheduled` entry to `<conversationsDir>/.auto-study-turn.jsonl` with edge_id, agent, speaker, framing, answer_body, ts, status. Idempotent skip (sha-deduped re-record) does NOT fire the hook. Best-effort: journal-write failure is logged to stderr but doesn't block record-turn success. 5 regression tests at append-turn.test.ts.
+- **A2** [TODO]: The schedule entry needs to be CONSUMED. Add a child process that reads the journal, picks the oldest `scheduled` entry, dispatches a codex peer (rotation: lumeyon → keystone → carina) as the study-turn predictor, applies the grade, marks the entry `predicted` in the journal. Consumer is async/detached; record-turn doesn't await.
+- **A3** [TODO]: After applyGradeToLift writes new lift values, auto-fire reRankAnswers for the affected question. If reRank changes accepted/superseded, mark the journal entry `reranked` with the promotion details. Closes the auto-loop.
+- **A4** [DONE in A1]: Feature flag `AGENT_CHAT_AUTO_STUDY_TURN=1` opt-in (default off) — landed alongside A1 to keep per-turn LLM cost zero by default.
 
 ### Phase B — Default study-turn predictor to a codex peer
 
@@ -107,27 +107,32 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 
 ## NEXT ITER TARGET HINT
 
-**NL34 → SHIP A1 (record-turn post-hook for async study-turn).**
+**NL35 → SHIP A2 (journal consumer that dispatches a codex peer as study-turn predictor).**
 
-**Why A1 first:**
-- It's the trigger that makes everything else autonomous. Without A1, A2/A3/B/C/D are all useful primitives but require manual invocation.
-- A1 is small: hook record-turn's success path; spawn a study-turn child process; don't await it; log to a journal file. The async nature means latency-on-user-response is unaffected.
-- A2 (predictor selection) and A3 (auto-reRank) layer cleanly on top.
+**Why A2 next:**
+- A1 wrote the schedule entries; A2 makes them DO something. Without A2, the .auto-study-turn.jsonl file accumulates "scheduled" entries forever and nothing actually runs.
+- The dispatch is async/detached so the per-turn flow stays fast.
+- Heterogeneity-first default: predictor MUST be a codex peer (per INVIOLABLE rule 5). Use the rotation table (lumeyon → keystone → carina → cycle) to pick the peer per call.
+
+**Design sketch:**
+- New file: `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`. CLI that reads `.auto-study-turn.jsonl`, picks the oldest `status: "scheduled"` entry, dispatches a codex peer via the runtime adapter to predict the answer given the question framing, grades the prediction (cosineSimilarity for now; LLM-as-judge in Phase C), updates the journal entry to `predicted` with the grade, and writes a result line to a sibling `.auto-study-turn-results.jsonl`.
+- Consumer runs as a detached child spawned from the same record-turn post-hook OR via `agent-chat auto-study-turn-tick`. Pick simplest: a CLI command that processes ONE pending entry and exits. The post-hook spawns it; cron / interval can also run it.
+- File-touch rule: NL34 touched plugins/agent-chat/scripts/agent-chat.ts; NL35 must touch a different primary file. Good — the new consumer file IS different.
 
 **Read first:**
-- `plugins/agent-chat/scripts/agent-chat.ts` — find the record-turn handler.
-- `scripts/lattice/study-turn.ts:runStudyTurn` — the orchestration entrypoint.
-- Existing CLI usage of study-turn for reference.
+- `scripts/lattice/study-turn.ts` — `runStudyTurn`, `claudePredictor`, `codexPredictor`.
+- `plugins/agent-chat/scripts/runtimes/codex.ts` — codex dispatch adapter.
+- Rotation table peers: lumeyon, keystone, carina (all codex per agents.petersen.yaml).
 
-**Test approach:**
-- Test 1: `record-turn` with `AGENT_CHAT_AUTO_STUDY_TURN=1` spawns a study-turn child; assert via journal file that the child fired.
-- Test 2: `record-turn` with `AGENT_CHAT_AUTO_STUDY_TURN=0` (default) does NOT spawn; assert no journal entry.
-- Test 3: study-turn child failure does NOT block record-turn's success — assert record-turn returns success even if the auto-study-turn child crashes.
+**Test approach (3 regression tests):**
+- Test 1 (consumer happy path): seed a `.auto-study-turn.jsonl` with one `scheduled` entry. Mock the codex dispatcher to return a known prediction. Run the consumer. Assert: (a) the journal entry is updated to `predicted` with a grade; (b) a results line was emitted; (c) the lattice's predictive_lift was updated for the affected answer.
+- Test 2 (heterogeneity guard): if AGENT_CHAT_AUTO_STUDY_TURN_PEER is forced to a non-codex agent (or to the answer's own agent), the consumer refuses with a clear error. Heterogeneity must hold.
+- Test 3 (consumer failure non-blocking): mock codex dispatch to fail. The consumer marks the entry `failed` with the error; doesn't crash; doesn't pollute other entries.
 
-**Sequenced after A1:**
-- NL35 → A2 (predictor selection from rotation table).
+**Sequenced after A2:**
 - NL36 → A3 (auto-reRank after lift update).
-- NL37+ → Phase B, C, D, E.
+- NL37 → wire the consumer to fire from record-turn's post-hook (currently only the journal write happens).
+- NL38+ → Phase B, C, D, E.
 
 ## BOSS-PRE-APPROVAL QUEUE (orion may execute without re-asking)
 
