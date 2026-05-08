@@ -356,4 +356,54 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
       expect(lenientResults[0].grade.passed).toBe(true);
     }
   }, 90_000);
+
+  // Regression for carina's NL3 C1 finding: when the predictor returns
+  // an empty string (runtime failure: AGENT_CHAT_NO_LLM=1, codex not
+  // on PATH, claude binary missing, transient API error), gradePrediction
+  // returns cosine=0, and applyGradeToLift then drops the answer's
+  // predictive_lift by ~0.10. Runtime failures of the LLM should NOT
+  // be propagated as quality signal on the lattice's content.
+  test("C1: empty predictor output does NOT penalize lift (treated as ungradable)", async () => {
+    const q = seedQuestion(store, { id: "v1:q-empty-test", framing: "Test framing" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "Real answer body",
+      by_agent: "orion",
+      explanation: "Real explanation",
+      status: "accepted",
+      quality_tier: 2,
+      predictive_lift: 0.5,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+
+    // Predictor returns empty (simulates runtime failure).
+    const emptyPredictor: Predictor = async () => "";
+
+    const results = await runStudyTurn(store, emptyPredictor, { k: 1 });
+    expect(results.length).toBe(1);
+    // The answer's predictive_lift MUST stay at 0.5 — no penalty for an
+    // ungradable result. Pre-fix it would drop to ~0.4.
+    const after = store.getAnswer(a.id)!;
+    expect(after.predictive_lift).toBe(0.5);
+    expect(results[0].lift_update.delta).toBe(0);
+  });
+
+  test("C1: whitespace-only prediction also treated as ungradable", async () => {
+    const q = seedQuestion(store, { id: "v1:q-ws-test", framing: "Whitespace test" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "Real body",
+      by_agent: "orion",
+      explanation: "x",
+      status: "accepted",
+      quality_tier: 2,
+      predictive_lift: 0.7,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+
+    const wsPredictor: Predictor = async () => "   \n\t  ";
+    const results = await runStudyTurn(store, wsPredictor, { k: 1 });
+    expect(results[0].lift_update.delta).toBe(0);
+    expect(store.getAnswer(a.id)!.predictive_lift).toBe(0.7);
+  });
 });

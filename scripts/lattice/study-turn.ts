@@ -172,6 +172,14 @@ export interface GradeResult {
   cosine: number;
   passed: boolean;
   threshold: number;
+  /** False when the prediction is empty/whitespace-only or the actual is
+   *  empty — there's no signal to grade against. NL3 / carina C1 fix:
+   *  runtime failures of the predictor (AGENT_CHAT_NO_LLM=1, codex
+   *  missing, transient API error) used to propagate as cosine=0 →
+   *  -0.10 penalty on the answer's predictive_lift, falsely signaling
+   *  the lattice's content as low-quality. Ungradable results MUST be
+   *  skipped by callers like runStudyTurn. */
+  gradable: boolean;
 }
 
 export async function gradePrediction(
@@ -180,11 +188,11 @@ export async function gradePrediction(
   threshold: number = 0.85,
 ): Promise<GradeResult> {
   if (!prediction.trim() || !actual.trim()) {
-    return { cosine: 0, passed: false, threshold };
+    return { cosine: 0, passed: false, threshold, gradable: false };
   }
   const [pe, ae] = await Promise.all([embed(prediction), embed(actual)]);
   const cosine = cosineSimilarity(pe, ae);
-  return { cosine, passed: cosine >= threshold, threshold };
+  return { cosine, passed: cosine >= threshold, threshold, gradable: true };
 }
 
 // ─── Lift update ────────────────────────────────────────────────────────────
@@ -255,7 +263,9 @@ export async function runStudyTurn(
     const prediction = await predictor(challenge);
     const grade = await gradePrediction(prediction, candidate.actual_answer.body, threshold);
     let liftUpdate: LiftUpdate;
-    if (applyUpdates) {
+    // NL3 / carina C1 fix: ungradable results (empty prediction or empty
+    // actual body) MUST NOT bump or penalize lift. Treat as a no-op.
+    if (applyUpdates && grade.gradable) {
       liftUpdate = applyGradeToLift(store, candidate.actual_answer.id, grade, lr);
     } else {
       liftUpdate = {

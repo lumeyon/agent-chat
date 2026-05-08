@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T02:43Z
+## Current state — 2026-05-08T03:08Z
 
-**Phase: New /loop iter 2 (NL2) — HALTED on substrate-health stopping condition. keystone (codex) review of `scripts/lattice/import-from-kg.ts` timed out at 240s. CLI's iter-1 park-on-failure protocol worked correctly: edge state clean, no leftover lock, .turn parked. Per the new loop's rule 2, peer call failure halts the loop — surfacing the codex flakiness as the finding.**
+**Phase: New /loop iter 3 (NL3) — boss re-fired the strict loop. Carina (codex) reviewed study-turn.ts, returned 5 REAL findings on the cosine-grading mechanics. C1 (empty predictor output → spurious -0.10 lift penalty) FIXED this iter. C2-C5 queued.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,53 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T03:08Z (NEW /loop iter 3: carina peer-review of study-turn.ts → 5 REAL findings; C1 fixed)
+
+**Loop:** strict halt-on-fail loop, re-fired by boss after NL2 halt. Same prompt as NL1/NL2.
+
+**Target:** `scripts/lattice/study-turn.ts` (the cosine grader + lift-update mechanics, where carina's specialty fits). Not touched in last 2 iters. No prior review entry.
+
+**Peer used:** carina (codex) per peer rotation rule (iter NL+2 → carina). Carina's specialty (embedding, cosine math, grading thresholds) is a precise match.
+
+**Findings (all 5 REAL, no nitpicks — strongest yield-per-call iter so far):**
+
+  - **C1** (study-turn.ts:182, 258): Empty predictor output grades cosine=0; runStudyTurn applies negative lift update at line 258. **Runtime failures of the LLM (AGENT_CHAT_NO_LLM=1, codex missing, transient API error) propagate as -0.10 quality penalty on the lattice's content.** Active harm.
+  - **C2** (study-turn.ts:141, 182): selectStudyQuestions can select an accepted answer with empty body; that answer then grades cosine=0 and gets penalized for being empty. (queued)
+  - **C3** (study-turn.ts:213, 215, 216): grade.cosine is trusted as finite. NaN cosine → NaN newLift → written to storage. (queued)
+  - **C4** (study-turn.ts:213): The lift signal `(cosine - 0.5) * 2 * lr` is asymmetric — true cosine can be negative (rare for MiniLM but possible), giving penalties below `-learningRate` while the positive side caps at `+learningRate`. (queued — design call about whether asymmetry is intended)
+  - **C5** (study-turn.ts:128, 141): SQL `limit: 5` is applied before the in-memory `requireAuthored` filter; an eligible answer ranked 6th+ is silently unreachable. (queued)
+
+**This iter executes C1 (highest-impact, regular-runtime-path bug):**
+
+**Test-first protocol:**
+  1. Wrote 2 regression tests (empty prediction → no lift change; whitespace-only prediction → no lift change). Both verified FAILING pre-fix (lift dropped by exactly -0.10 in both cases — confirms the math).
+  2. Applied fix: added `gradable: boolean` field to `GradeResult`. `gradePrediction` sets `gradable: false` when prediction or actual is empty/whitespace. `runStudyTurn` skips `applyGradeToLift` when `!grade.gradable`, treating it as a no-op.
+  3. Both tests PASS post-fix.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 2 (STUDY TURN) — exercised on real production data (the carina review itself produced grade results, but those weren't used for lift updates this iter; the test path verified the new behavior).
+  - ✅ The fix protects forcing function 3 (selection pressure) integrity going forward — runtime failures no longer corrupt the predictive_lift signal.
+
+**Citation discipline:** No new authored answer this iter. Carina's peer review imported as tier-3 authored content via iter-11 importer logic.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 406 → 407 (+1: orion's review request to carina)
+  - Answers: 892 → 893 (+1: carina's response, auto-tagged tier-3 authored)
+  - **authored: 8 → 9** (carina review)
+  - quality_tier histogram: tier 2=5, tier 3=4, tier 5=882
+
+**Tests:** plugin 502/0/3 (no change). Lattice 119 → 121 (+2 C1 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/study-turn.ts (C1 fix)
+  - scripts/lattice/study-turn.test.ts (2 regression tests)
+  - docs/ephemeral-peer-reviews.md (study-turn.ts row added)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL4):** Per peer rotation rule, iter N+3 → cycle back to lumeyon. Per file-touch rule, must NOT pick study-turn.ts (just touched) NOR apprenticeship.ts (touched NL1). Eligible: import-from-kg.ts (keystone NL2 timed out — could retry but lumeyon doesn't fit SQL specialty), stats.ts, lattice-context.ts, ephemeral-peer-review.ts, synthesize-corpus.ts, validate-corpus.ts. Lumeyon (general correctness, API design, type safety) fits lattice-context.ts (the cmdRun-pushContext bridge) or ephemeral-peer-review.ts (the CLI itself, which has never been peer-reviewed by anyone but me). Recommend ephemeral-peer-review.ts — it's the unreviewed-but-load-bearing dispatcher.
 
 ### 2026-05-08T02:43Z (NEW /loop iter 2 — HALTED: keystone (codex) review of import-from-kg.ts timed out)
 
