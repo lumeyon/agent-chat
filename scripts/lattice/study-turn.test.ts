@@ -530,3 +530,92 @@ describe("applyGradeToLift — C3 NaN/non-finite cosine guard", () => {
     expect(Number.isFinite(ok.cosine)).toBe(true);
   });
 });
+
+// Regression for carina's NL3 C5 finding: selectStudyQuestions called
+// queryAnswers with `limit: 5` (a fixed SQL limit), then applied the
+// `exclude_agent` filter in memory. When a question had ≥6 accepted
+// answers and the top-5 by predictive_lift were all by the excluded
+// agent, the eligible peer answer at rank ≥6 was silently unreachable —
+// `find` returned undefined → question skipped → 0 candidates.
+//
+// Same SHAPE as LC2 (NL19): SQL limit BEFORE in-memory filter. Fix
+// template: push the missing filter axis into the data layer.
+//
+// NL20 fix: pass `by_agent_not: options.exclude_agent` into queryAnswers
+// (using the NL19 axis), and raise the per-question limit so the
+// remaining in-memory filters (authored-explanation heuristic, non-empty
+// body) have enough candidates to find an eligible one.
+describe("selectStudyQuestions — C5 SQL-limit-before-in-memory-filter", () => {
+  test("C5: peer-authored answer at rank 6+ is reachable when top-5 are by exclude_agent", () => {
+    const q = seedQuestion(store, { id: "v1:q-c5", framing: "C5 question" });
+    // Seed 5 high-lift accepted answers by the excluded agent (orion).
+    // Pre-fix queryAnswers limit:5 would return exactly these.
+    const orionAnswers = [];
+    for (let i = 0; i < 5; i++) {
+      const a = recordAnswer(store, {
+        question_id: q.id,
+        body: `orion authored body ${i}`,
+        by_agent: "orion",
+        explanation: `Real authored explanation by orion ${i}`,
+        status: "accepted",
+        quality_tier: 2,
+        predictive_lift: 0.9 - i * 0.05,  // 0.90, 0.85, 0.80, 0.75, 0.70
+      });
+      orionAnswers.push(a);
+    }
+    // Add 1 lower-lift accepted answer by a peer. Pre-fix this gets
+    // truncated by the SQL limit:5 and never seen by the in-memory
+    // filter; post-fix the by_agent_not filter pushes it into SQL so
+    // the peer answer DOES appear in the candidate set.
+    const peerAnswer = recordAnswer(store, {
+      question_id: q.id,
+      body: "peer authored body",
+      by_agent: "lumeyon",
+      explanation: "Real authored explanation by lumeyon",
+      status: "accepted",
+      quality_tier: 2,
+      predictive_lift: 0.10,  // ranks 6th
+    });
+    // Pick orion's top answer as best_answer (any accepted FK target works).
+    store.setQuestionStatus(q.id, "answered", orionAnswers[0].id);
+
+    const out = selectStudyQuestions(store, { k: 5, exclude_agent: "orion" });
+
+    // Pre-fix: 5 orion answers fetched, all dropped by exclude_agent
+    // filter, find returns undefined, question skipped → 0 candidates.
+    // Post-fix: SQL filter excludes orion → lumeyon answer surfaces.
+    expect(out.length).toBe(1);
+    expect(out[0].question.id).toBe("v1:q-c5");
+    expect(out[0].actual_answer.by_agent).toBe("lumeyon");
+    expect(out[0].actual_answer.id).toBe(peerAnswer.id);
+  });
+
+  test("C5: existing exclude_agent behavior preserved on the simple case", () => {
+    // Sanity: the fix shouldn't alter behavior of the existing
+    // "excludes answers by exclude_agent" test pattern. Two questions,
+    // one orion-authored, one peer-authored — exclude_agent="orion"
+    // returns only the peer-authored question.
+    const q1 = seedQuestion(store, { id: "v1:q-c5-sanity-1", framing: "A" });
+    const q2 = seedQuestion(store, { id: "v1:q-c5-sanity-2", framing: "B" });
+    const a1 = recordAnswer(store, {
+      question_id: q1.id,
+      body: "orion answer",
+      by_agent: "orion",
+      explanation: "Authored.",
+      status: "accepted",
+    });
+    store.setQuestionStatus(q1.id, "answered", a1.id);
+    const a2 = recordAnswer(store, {
+      question_id: q2.id,
+      body: "lumeyon answer",
+      by_agent: "lumeyon",
+      explanation: "Authored.",
+      status: "accepted",
+    });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
+
+    const out = selectStudyQuestions(store, { k: 5, exclude_agent: "orion" });
+    expect(out.length).toBe(1);
+    expect(out[0].actual_answer.by_agent).toBe("lumeyon");
+  });
+});

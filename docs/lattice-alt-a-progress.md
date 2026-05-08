@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T11:25Z
+## Current state — 2026-05-08T11:55Z
 
-**Phase: NL19 — drained LC2 (lattice-context.ts pushContext over-fetch buffer exhaustion). Pre-fix: lattice-context.ts pre-fetched k+5 candidates from pushContext and filtered by `exclude_agent` in memory — when the calling agent dominated the top of the cosine ranking, the buffer exhausted and eligible peer hits were silently dropped from the prompt block. Post-fix: pushed `exclude_agent` into PushContextOptions and AnswerFilter (new `by_agent_not` axis); pushContext walks the cosine-ranked list, skipping ineligible hits, and accumulates up to k eligible answers. lattice-context.ts drops both the buffer and the in-memory filter. Cumulative: 30 REAL findings, 17 code fixes, 3 schema migrations.**
+**Phase: NL20 — drained C5 (study-turn.ts SQL limit applied before in-memory authored filter). Pre-fix: `selectStudyQuestions` queried answers with `limit: 5` and applied the `exclude_agent` filter in memory; when a question had ≥6 accepted answers and the top-5 by predictive_lift were all by the excluded agent, the eligible peer answer at rank ≥6 was silently unreachable. Same SHAPE as LC2 (NL19): SQL limit before in-memory filter → silent truncation. Post-fix: pushed `by_agent_not: exclude_agent` into queryAnswers using the NL19 axis; raised the per-question limit from 5 to 100; dropped the in-memory exclude_agent check. Cumulative: 30 REAL findings, 18 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,103 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T11:55Z (NL20: queue-drain C5 — SQL limit applied before in-memory authored filter)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains C5 — no fresh peer call. File-touch rule: NL19 touched lattice-context.ts/apprenticeship.ts/types.ts/sqlite-store.ts; this iter touches study-turn.ts (different file → eligible).
+
+**The bug (carina NL3 C5):**
+  `selectStudyQuestions` queried answers per-question with a fixed
+  SQL limit of 5, then applied the `exclude_agent` filter in memory:
+  ```typescript
+  const answers = store.queryAnswers({
+    question_id: q.id,
+    status: "accepted",
+    quality_tier_min: ...,
+    order_by: "predictive_lift_desc",
+    limit: 5,           // ← fixed SQL limit
+  });
+  const actual = answers.find((a) =>
+    ... && (!options.exclude_agent || a.by_agent !== options.exclude_agent),
+  );
+  if (!actual) continue;  // ← skip question if no eligible answer
+  ```
+  When a question had ≥6 accepted answers AND the top-5 by predictive_lift
+  were all by the excluded agent, the eligible peer answer at rank ≥6
+  was truncated by the SQL limit, never seen by the in-memory filter,
+  and silently unreachable — the question was dropped from the study set.
+
+  This is the EXACT shape that LC2 (NL19) had: SQL limit BEFORE in-memory
+  filter → silent truncation when the data distribution skews toward
+  filtered-out items at the top of the order. The lesson logged at NL19
+  predicted C5 would have the same fix template; this iter confirmed it.
+
+**The fix (push the filter into the data layer):**
+
+`scripts/lattice/study-turn.ts` — `selectStudyQuestions` now passes
+`by_agent_not: options.exclude_agent` into queryAnswers (using the
+`by_agent_not` axis added to AnswerFilter at NL19). The per-question
+limit is raised from 5 to 100, giving the remaining in-memory filters
+(authored-explanation heuristic, non-empty body) sufficient buffer for
+realistic cases. The in-memory exclude_agent check is dropped — its
+job is now done in SQL.
+
+**Test-first protocol:**
+  2 regression tests at study-turn.test.ts:
+    - **C5-a (failure case):** seed 1 question with 6 accepted answers —
+      5 by orion (predictive_lift 0.90, 0.85, 0.80, 0.75, 0.70) + 1 by
+      lumeyon (predictive_lift 0.10, ranks 6th). Call selectStudyQuestions
+      with `exclude_agent: "orion"`. Pre-fix: SQL limit:5 returns top-5
+      orion answers; in-memory filter drops them all; find returns
+      undefined; question skipped → 0 candidates. Post-fix: SQL filter
+      excludes orion → lumeyon answer surfaces → 1 candidate with the
+      lumeyon answer. **Verified FAILING pre-fix** (`Expected: 1,
+      Received: 0`).
+    - **C5-b (sanity / backwards-compat):** the existing simple
+      "excludes answers by exclude_agent" pattern with two single-answer
+      questions still works after the refactor.
+
+**Why this matters:** The Apprenticeship Substrate's forcing function 2
+(study turn) is the mechanism by which agents predict peer answers and
+are graded against actuals. If selectStudyQuestions silently drops
+high-stakes peer answers because the agent has heavy local authorship
+on the same question, the forcing function fails — the agent never gets
+the cross-author exposure the substrate was designed to require. C5
+restores that exposure under realistic load (heavy local authoring +
+sparse cross-author candidates).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 2 (STUDY TURN) — peer answers no longer silently
+    truncated when the calling agent has authored ≥5 of the top
+    accepted answers for a question. Selection pressure correctly
+    reaches eligible peer-authored candidates.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 152 → 154 (+2 C5)
+  - Plugin tests unchanged: 516 / 0
+
+**Files touched (4):**
+  - scripts/lattice/study-turn.ts (push by_agent_not into queryAnswers; raise limit; drop in-memory exclude_agent check)
+  - scripts/lattice/study-turn.test.ts (2 C5 regression tests)
+  - docs/ephemeral-peer-reviews.md (C5 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL21 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL21):** File-touch rule blocks study-turn.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — INELIGIBLE yet)
+- C4 (study-turn.ts last touched NL20 — INELIGIBLE; design call anyway)
+- LC3, LC4 (lattice-context.ts last touched NL19 — INELIGIBLE yet)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — eligible)
+- K-imp-1, 3, 6, 7, 9 (import-from-kg.ts last touched NL18 — INELIGIBLE yet)
+
+**Recommend NL21 → DRAIN E1+E2** (ephemeral-peer-review.ts:206 and 213 — race conditions in resume-write and lock acquisition). Reasons:
+- Two related races on the same file. E1: resume-write steals floor from any non-orion turn. E2: `.turn` flipped before lock acquired — concurrent cmdRun race. Both touched the same area as the NL14 E3 fix.
+- ephemeral-peer-review.ts last touched NL14 (6 iters gap → eligible).
+- Self-contained-ish: both fixes can ship together as one consistent rework of the resume-write protocol. Test setup already exists for E3 (stale-lock simulation).
 
 ### 2026-05-08T11:25Z (NL19: queue-drain LC2 — pushContext over-fetch buffer exhaustion)
 

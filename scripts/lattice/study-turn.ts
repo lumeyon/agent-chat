@@ -125,12 +125,25 @@ export function selectStudyQuestions(
   const out: StudyCandidate[] = [];
   for (const q of candidates) {
     if (out.length >= k) break;
+    // C5 fix (NL20 / carina NL3 finding): push `exclude_agent` into the
+    // SQL filter (uses the NL19 `by_agent_not` axis) AND raise the
+    // per-question limit. Pre-fix the SQL limit was 5 and `exclude_agent`
+    // ran in memory; if a question had ≥6 accepted answers and the top-5
+    // were all by the excluded agent, the eligible peer answer at rank
+    // ≥6 was silently unreachable.
+    //
+    // Same SHAPE as LC2 (NL19): SQL limit BEFORE in-memory filter →
+    // silent truncation. Fix template: move the SQL-friendly axis into
+    // the data layer. The remaining in-memory filters (authored-
+    // explanation heuristic, non-empty body) are not SQL-friendly, so
+    // the limit is raised to give them enough buffer for realistic cases.
     const answers = store.queryAnswers({
       question_id: q.id,
       status: "accepted",
       quality_tier_min: options.quality_tier_min,
+      by_agent_not: options.exclude_agent,
       order_by: "predictive_lift_desc",
-      limit: 5,
+      limit: 100,  // was 5; raised to mitigate the in-memory authored-explanation filter exhausting the buffer
     });
     const requireAuthored = options.require_authored_explanation !== false;
     const isAuthored = (e: string | null | undefined) =>
@@ -146,8 +159,7 @@ export function selectStudyQuestions(
     // can land in the lattice — selection must filter them out.
     const actual = answers.find((a) =>
       typeof a.body === "string" && a.body.trim().length > 0
-      && isAcceptable(a.explanation)
-      && (!options.exclude_agent || a.by_agent !== options.exclude_agent),
+      && isAcceptable(a.explanation),
     );
     if (!actual) continue;
 
