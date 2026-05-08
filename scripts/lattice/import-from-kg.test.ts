@@ -493,3 +493,70 @@ describe("importEdgeConvo — sealed archive walking", () => {
     expect(r2.answers_already_existed).toBe(2);
   });
 });
+
+// Regression for keystone's NL5 K-imp-8 finding: Date.parse accepts
+// non-strict UTC formats (offsets, missing Z, space separator, etc.)
+// despite the protocol specifying `UTC YYYY-MM-DDTHH:MM:SSZ`.
+// Pre-NL10: Date.parse("2026-05-07T10:00:00+0500") returns a valid ms
+//   but interpretation is in the +0500 offset, NOT UTC. Imported
+//   timestamp is shifted by 5 hours.
+// NL10 fix: validate the strict ISO-8601 UTC format BEFORE parsing;
+// reject non-conforming strings (counted in skippedMalformedTimestamps,
+// like the existing NaN-check).
+describe("importEdgeConvo — K-imp-8 strict UTC validation", () => {
+  test("K-imp-8: non-Z timezone offset is rejected (not silently shifted)", () => {
+    writeConvo(
+      // +0500 offset — Date.parse accepts but interprets as +05:00, not UTC
+      section("boss",  "user turn",          "2026-05-07T10:00:00+0500", "Q with offset"),
+      section("orion", "assistant response", "2026-05-07T10:00:00+0500", "A with offset"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    // Pre-fix: pair imported with shifted timestamp.
+    // Post-fix: pair skipped as malformed UTC.
+    expect(result.pairs_found).toBe(1);
+    expect(result.questions_inserted).toBe(0);
+    expect(result.answers_inserted).toBe(0);
+  });
+
+  test("K-imp-8: missing Z is rejected (Date.parse interprets as local time)", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T10:00:00", "Q no Z"),
+      section("orion", "assistant response", "2026-05-07T10:00:00", "A no Z"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    expect(result.pairs_found).toBe(1);
+    expect(result.questions_inserted).toBe(0);
+    expect(result.answers_inserted).toBe(0);
+  });
+
+  test("K-imp-8: space separator instead of T is rejected", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07 10:00:00Z", "Q space sep"),
+      section("orion", "assistant response", "2026-05-07 10:00:00Z", "A space sep"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    expect(result.pairs_found).toBe(1);
+    expect(result.questions_inserted).toBe(0);
+    expect(result.answers_inserted).toBe(0);
+  });
+
+  test("K-imp-8: strict ISO-8601 UTC with Z still imports correctly (positive)", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T10:00:00Z", "Q strict"),
+      section("orion", "assistant response", "2026-05-07T10:00:00Z", "A strict"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    expect(result.questions_inserted).toBe(1);
+    expect(result.answers_inserted).toBe(1);
+  });
+
+  test("K-imp-8: ISO-8601 with milliseconds + Z is accepted (the format Date.toISOString produces)", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T10:00:00.123Z", "Q millis"),
+      section("orion", "assistant response", "2026-05-07T10:00:00.456Z", "A millis"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    expect(result.questions_inserted).toBe(1);
+    expect(result.answers_inserted).toBe(1);
+  });
+});

@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T05:25Z
+## Current state — 2026-05-08T05:55Z
 
-**Phase: NL9 — second schema migration shipped. `questions.best_answer_id REFERENCES answers(id) ON DELETE NO ACTION` (iter-6 K1 closed end-to-end at SQL level). Idempotent v2→v3 migration with FK enforcement disabled during the rebuild. Applied on production: 415 best_answer_id pointers preserved, 0 orphans, schema_version=3. The substrate now enforces the K1 invariant at THREE layers: TypeScript type, application runtime guard (iter-7), AND SQL FK constraint (NL9). 4 test fixtures across 2 files updated to put-as-open-then-promote pattern.**
+**Phase: NL10 — drained K-imp-8 (Date.parse non-UTC validation). Added strict ISO-8601 UTC regex check before Date.parse in importPairs. Closes a real silent-data-drift bug: pre-NL10 strings like `2026-05-07T10:00:00+0500` (offset, not UTC) parsed successfully and shifted timestamps by 5 hours; missing-Z and space-separator variants similarly silently misinterpreted. Post-NL10: those formats are caught by parseStrictUtc and counted in skippedMalformedTimestamps.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,52 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T05:55Z (NL10: queue-drain K-imp-8 — strict ISO-8601 UTC validation in importPairs)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule (still 17 queued findings post-NL9), this iter drains K-imp-8 — no fresh peer call. File-touch rule satisfied: NL9 touched sqlite-store.ts; import-from-kg.ts last touched NL5 (5 iters gap).
+
+**The bug:** `importPairs` at line 274-275 used raw `Date.parse(user.utc)` and `Date.parse(assistant.utc)`. The protocol specifies strict UTC (`UTC YYYY-MM-DDTHH:MM:SSZ`) but Date.parse is permissive — it accepts:
+  - `2026-05-07T10:00:00+0500` (offset, non-UTC) → interpreted as +05:00, **shifts timestamp by 5 hours**
+  - `2026-05-07T10:00:00` (missing Z) → interpreted as local time, hours-of-shift depends on machine TZ
+  - `2026-05-07 10:00:00Z` (space separator) → may parse, may not, depending on engine
+  - Various RFC2822 / informal forms
+
+If an upstream CONVO.md ever has malformed UTC headers (e.g., from a misconfigured time library or a peer agent in a non-Z-emitting toolchain), the lattice silently absorbs shifted `posed_at` / `created_at` values. Drift accumulates over time.
+
+**The fix:** new `parseStrictUtc(s: string): number` helper validates against a strict ISO-8601 UTC regex (`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$`) BEFORE calling Date.parse. Returns NaN for non-conforming strings (consistent with Date.parse's own failure shape). The existing NaN-check in importPairs then skips the pair as malformed (counted in skippedMalformedTimestamps).
+
+**Test-first protocol:**
+  5 regression tests at import-from-kg.test.ts:496-542:
+    - Negative paths (3): `+0500` offset, missing Z, space separator — all expect 0 inserts (skipped as malformed)
+    - Positive paths (2): strict `Z` and `.123Z` (milliseconds) — both expect normal import
+  3 negative tests verified FAILING pre-fix (pre-NL10 the imports succeeded with shifted timestamps); 2 positive tests passed pre-fix (sanity).
+  All 5 PASS post-fix.
+
+**Why milliseconds form is allowed:** Date.toISOString() emits `YYYY-MM-DDTHH:MM:SS.SSSZ` natively, and many libraries default to that. Excluding it would over-restrict the protocol. The regex permits `(?:\.\d+)?` (optional fractional seconds). Strict UTC + Z suffix is the load-bearing constraint.
+
+**Production lattice:** no production data needs cleanup — existing 948 answers were imported via codepaths that emit Date.toISOString() (which is always strict UTC). Pre-NL10 import didn't have non-UTC sources in the wild. NL10 is forward-looking defense.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — protocol invariant tightened. The "UTC YYYY-MM-DDTHH:MM:SSZ" format spec is now enforced at parse time, not just documented.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 419 → 419 (no peer call, no new authoring)
+  - Answers: 948 → 948
+  - Tests: lattice 136 → 141 (+5 K-imp-8 regression)
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (parseStrictUtc helper + use it in importPairs)
+  - scripts/lattice/import-from-kg.test.ts (5 K-imp-8 regression tests)
+  - docs/ephemeral-peer-reviews.md (import-from-kg.ts row updated)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL11 plan; K-imp-8 closed; cumulative ledger)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL11):** **K2 SQL migration v3→v4** (CHECK quality_tier IN (1,2,3,4,5)) — last pre-approved schema migration. Per file-touch rule: NL10 touched import-from-kg.ts; sqlite-store.ts last touched NL9 (1-iter gap → eligible). Same v(N)→v(N+1) template as NL7 + NL9.
+
+After NL11 (K2 shipped), the entire boss-pre-approval queue's schema migrations will be done. Remaining items: petersen routing-table (config, not schema) + 3 lattice depth=1 design questions (those need real design thinking, not pattern-application). The substrate's SQL-level integrity will fully match its application-level integrity.
 
 ### 2026-05-08T05:25Z (NL9: SQL migration v2→v3 — questions.best_answer_id FK constraint; iter-6 K1 closed end-to-end)
 

@@ -161,6 +161,21 @@ export function pairSections(sections: ParsedSection[]): QAPair[] {
   return pairs;
 }
 
+/** K-imp-8 fix (NL10 keystone): strict ISO-8601 UTC parser. The protocol
+ *  specifies `UTC YYYY-MM-DDTHH:MM:SSZ` (with optional fractional seconds).
+ *  Date.parse is too permissive — it accepts offsets like `+0500`, missing
+ *  `Z` suffix, and `space-separator` variants, all of which interpret time
+ *  in non-UTC zones and silently shift the imported timestamp.
+ *
+ *  Returns NaN (consistent with Date.parse's failure shape) for any string
+ *  that doesn't match the strict format. importPairs's existing
+ *  `Number.isNaN(userMs)` check then skips the pair as malformed. */
+const STRICT_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+function parseStrictUtc(s: string): number {
+  if (!STRICT_UTC_RE.test(s)) return NaN;
+  return Date.parse(s);
+}
+
 // ─── canonical_id producer (must match kg.ts) ──────────────────────────────
 
 function canonicalIdOf(text: string): string {
@@ -274,10 +289,13 @@ function importPairs(
 
   for (const { user, assistant } of pairs) {
     // Defend against malformed UTC strings — Date.parse returns NaN
-    // for unrecognized formats. Skip with a warning rather than corrupt
-    // the lattice with NaN timestamps.
-    const userMs = Date.parse(user.utc);
-    const assistantMs = Date.parse(assistant.utc);
+    // for unrecognized formats AND silently accepts non-strict-UTC
+    // formats (e.g. "+0500" offsets, missing Z, space separator)
+    // that shift timestamps in subtle ways. K-imp-8 fix (NL10
+    // keystone): require strict ISO-8601 UTC with Z suffix BEFORE
+    // Date.parse. Skip non-conforming strings as malformed.
+    const userMs = parseStrictUtc(user.utc);
+    const assistantMs = parseStrictUtc(assistant.utc);
     if (Number.isNaN(userMs) || Number.isNaN(assistantMs)) {
       skippedMalformedTimestamps++;
       continue;
