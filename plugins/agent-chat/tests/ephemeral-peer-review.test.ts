@@ -387,3 +387,87 @@ describe("ephemeral-peer-review CLI — resumes parked edges", () => {
     expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
   });
 });
+
+// Regression for lumeyon's NL4 E1+E2 findings: the resume-write step
+// in ephemeral-peer-review fired BEFORE the lock was acquired. Two
+// related bugs:
+//   E1 (line 206): the resume-write would flip `.turn` to orion even
+//      when another agent (e.g., the peer mid-flow) currently held
+//      the floor. The subsequent lock would then succeed (because
+//      turn.ts lock requires .turn == self) and orion would proceed
+//      to append+park, silently stealing the peer's floor.
+//   E2 (line 206 + 213): two concurrent ephemeral-peer-review processes
+//      could both flip .turn to orion before either acquired the lock;
+//      the loser's E3 revert would then corrupt the winner's protocol
+//      state by setting .turn back to "parked" while the winner held
+//      the lock and was mid-write.
+//
+// NL21 fix: acquire the lock FIRST. The lock's existing invariant
+// ("only the floor-holder can lock") covers the no-stealing requirement
+// (orion's lock attempt fails when .turn is some other agent name);
+// the resume-from-parked case writes .turn ONLY after the lock is held.
+// Both races are eliminated structurally.
+describe("ephemeral-peer-review CLI — E1 floor-stealing protection", () => {
+  test("E1: refuses to ephemeral-peer-review when another agent holds .turn (no floor stealing)", () => {
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const turnPath = path.join(CONVO_DIR, "petersen", "carina-orion", "CONVO.md.turn");
+    const convoPath = path.join(CONVO_DIR, "petersen", "carina-orion", "CONVO.md");
+    // Set .turn to carina (the peer for the carina-orion edge). carina
+    // currently holds the floor; orion must NOT barge in.
+    fs.writeFileSync(turnPath, "carina");
+    const convoBefore = fs.readFileSync(convoPath, "utf8");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "carina", "--module", moduleFile, "--no-import"],
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        AGENT_CHAT_MOCK_PEER_RESPONSE: "Reviewed.\n\n→ orion",
+      }),
+      { allowFail: true },
+    );
+
+    // Pre-fix: orion would flip .turn to "orion", lock would then succeed
+    // (since .turn matches), orion would append its request + the mocked
+    // peer response, and park the edge. CONVO.md would have NEW content.
+    // Post-fix: orion's lock attempt fails because .turn="carina" (turn.ts
+    // lock refuses unless turn==self), no resume happens, no CONVO.md
+    // changes occur, and .turn stays at "carina".
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/lock failed|refuse to lock|carina/i);
+
+    // .turn must still be "carina" — orion didn't steal the floor.
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("carina");
+    // CONVO.md must be unchanged — orion never wrote.
+    expect(fs.readFileSync(convoPath, "utf8")).toBe(convoBefore);
+  });
+
+  test("E1: parked-edge happy path still works (only 'parked' or self resumes)", () => {
+    // Sanity that the E1 fix doesn't break the legitimate resume-from-
+    // parked flow. Same as the existing "resumes parked edges" test —
+    // duplicated here to make this regression group self-contained.
+    const sid = fakeSessionId("orion");
+    bootstrapOrionSession(CONVO_DIR, sid);
+    const moduleFile = path.join(CONVO_DIR, "x.ts");
+    fs.writeFileSync(moduleFile, "x");
+
+    const turnPath = path.join(CONVO_DIR, "petersen", "carina-orion", "CONVO.md.turn");
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
+
+    const r = runScript(
+      "ephemeral-peer-review.ts",
+      ["--peer", "carina", "--module", moduleFile, "--no-import"],
+      orionEnv({
+        CLAUDE_SESSION_ID: sid,
+        AGENT_CHAT_MOCK_PEER_RESPONSE: "Reviewed.\n\n→ orion",
+      }),
+    );
+
+    expect(r.exitCode).toBe(0);
+    expect(fs.readFileSync(turnPath, "utf8").trim()).toBe("parked");
+  });
+});

@@ -198,13 +198,31 @@ export async function runEphemeralPeerReview(
     capBytes,
   });
 
-  // Resume the edge to orion if parked. The protocol's "never silently
-  // resume parked" rule is an interactive-conversation discipline; for
-  // an ephemeral peer review the resume is explicit, immediate, and
-  // ends back at parked in the same lock cycle. Log the action so it's
-  // auditable.
+  // E1+E2 fix (NL21 / lumeyon NL4 findings): refuse upfront if another
+  // agent holds the floor; only resume-write when curTurn is "parked"
+  // or null. Pre-fix the resume-write unconditionally flipped .turn to
+  // orion regardless of whether the prior holder was a peer mid-flow,
+  // and the subsequent lock would silently succeed (lock-invariant
+  // refuses non-self turn was satisfied by the flip itself), stealing
+  // the peer's floor. The same code path also enabled a concurrent-
+  // orion race (E2) where two pre-lock flips → one wins lock, loser's
+  // E3 revert corrupts winner's state.
+  //
+  // turn.ts lock refuses unless .turn === self OR null (lines 110-113);
+  // "parked" is NOT exempt, so we still need to write self before
+  // locking when resuming from parked. But we now ONLY do that for the
+  // legitimate cases (parked/null) — the non-self-non-parked case is
+  // refused without any state change.
   const curTurn = readTurn(edge.turn);
   const didResume = curTurn !== id.name;
+
+  if (didResume && curTurn !== null && curTurn !== "parked") {
+    throw new Error(
+      `refuse: edge ${edge.id} has .turn="${curTurn}" — another agent currently holds the floor. ` +
+      `Park that conversation before requesting an ephemeral peer review on this edge.`,
+    );
+  }
+
   if (didResume) {
     console.error(`[ephemeral-peer-review] resuming ${edge.id} from "${curTurn ?? "uninitialized"}" → ${id.name} for ephemeral review`);
     writeTurnAtomic(edge.turn, id.name);

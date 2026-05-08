@@ -40,14 +40,14 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL20 commit)
+## CURRENT STATE (as of NL21 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **4 fixed: L1+L2+L4+L3**; L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **4 fixed: C1, C2, C3, C5**; C4 queued — design call)
-- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **2 fixed: E6, E3**; E1, E2, E4, E5, E7 queued)
+- `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **4 fixed: E6, E3, E1, E2**; E4, E5, E7 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **4 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4**; K-imp-1, 3, 6, 7 queued; K-imp-9 added NL12 observation)
 
 ### Uncovered modules (priority for fresh peer reviews):
@@ -58,7 +58,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **3 fixed: LC1, LC5, LC2**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 13 total):
+### Queued findings (drainable WITHOUT fresh peer call — 11 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
@@ -66,9 +66,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 #### study-turn.ts (carina NL3) — 1 queued (C2 drained NL16, C5 drained NL20)
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
 
-#### ephemeral-peer-review.ts (lumeyon NL4) — 5 queued (E3 drained NL14)
-- **E1** (line 206): resume-write steals floor from non-orion turn (race).
-- **E2** (line 206 + 213): `.turn` flipped before lock acquired (race; same fix area as E1).
+#### ephemeral-peer-review.ts (lumeyon NL4) — 3 queued (E3 drained NL14, E1+E2 drained NL21)
 - **E4** (line 220, 256): dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked`.
 - **E5** (line 143): importer path repo-layout-dependent.
 - **E7** (line 87): truncation by JS string length, not bytes.
@@ -96,33 +94,26 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL21 → DRAIN E1+E2 together** (ephemeral-peer-review.ts:206 resume-write race + line 213 lock-after-flip race — both in the same protocol area).
+**NL22 → DRAIN K-imp-6** (importPairs:338 best_answer_id chosen via queryAnswers limit:1 — same shape as LC2/C5).
 
-**Why E1+E2 together:**
-- Two RELATED races in the same file (ephemeral-peer-review.ts) and the same protocol area (resume-write + lock acquisition). They're intertwined; fixing one without the other risks introducing a new race. Bundling them into one iter is the principled call.
-- ephemeral-peer-review.ts last touched NL14 (6 iters gap → file-touch rule satisfied).
-- E3 (NL14) already restructured the lock-attempt-inside-try pattern; E1+E2 are the remaining races on the same protocol path. Test setup is established (stale-lock simulation with foreign-owned locks).
+**Why K-imp-6:**
+- Same SHAPE as LC2 (NL19) and C5 (NL20): SQL limit BEFORE selection logic → silent truncation. Pattern now proven THREE times — and each time has a clean fix template (push the missing axis into the data layer, raise the limit, drop the in-memory check).
+- importPairs at line 338 chooses best_answer_id by `queryAnswers limit: 1` — picks the single highest-predictive_lift accepted answer. If the highest-lift answer isn't actually the canonical "best" by some other criterion (e.g., quality_tier preference, authored explanation), wrong best_answer_id gets pinned.
+- import-from-kg.ts last touched NL18 (3 iters gap → file-touch rule satisfied; NL21 touched ephemeral-peer-review.ts → different file).
 
-**E1 description:** resume-write steals floor from any non-orion turn. The resume-write step flips `.turn` to orion's name regardless of what was there before, even if the prior turn-holder was a different agent (race with that agent's in-progress flip).
+**Read first:** `scripts/lattice/import-from-kg.ts` lines 330-345 (importPairs's best_answer_id selection logic) and `scripts/lattice/types.ts` AnswerFilter (to confirm what axes are already SQL-side).
 
-**E2 description:** `.turn` is flipped to orion BEFORE the lock is acquired. If two cmdRun invocations race, both can flip `.turn` to orion before either acquires the lock; the loser then proceeds without the lock OR re-flips a no-longer-correct `.turn`.
+**Fix approach options:**
+- **Option A (most likely):** the limit:1 already returns the highest-lift accepted answer per `predictive_lift_desc` order. The bug carina flagged might be more subtle — e.g., the selection should also prefer answers with `authored` explanations over auto-imported ones, or honor the agent that posed the question, etc. Read the original carina finding text in the tracker before designing the fix.
+- **Option B (LC2/C5 template):** raise the limit + add an in-memory tie-breaking pass; OR add a new sort axis to `order_by` that captures the desired total ordering.
 
-**Fix approach (one principled rework):**
-- Move ALL `.turn` mutations INSIDE the lock-acquired critical section. The pattern: acquire lock → check `.turn` is what we expect → write the section → flip `.turn` → release lock.
-- For resume-write: refuse to steal floor if `.turn` doesn't match expected pre-resume value (revert path already exists from E3 fix).
-- For the cmdRun race: flip `.turn` only AFTER lock is held; revert via the E3 path if anything in between fails.
+**Test approach (2 regression tests):**
+- Test 1 (failure case): seed a question with multiple accepted answers where the highest-predictive_lift one is auto-imported (or otherwise not the "right" choice) and a lower-lift one is authored. Pre-fix: best_answer_id pins to the wrong answer. Post-fix: pins to the correct one.
+- Test 2 (sanity): single-answer case still works.
 
-**Read first:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` lines 200-260 (the resume-write protocol section). Look at how E3's lock-attempt-inside-try is structured; E1+E2 should extend that pattern.
-
-**Test approach (2-3 regression tests):**
-- Test 1 (E1): simulate concurrent flip from a non-orion agent in progress while orion's resume-write fires. Pre-fix: orion's flip overwrites the other agent's mid-flip state. Post-fix: orion detects mismatch and either retries or fails cleanly without stealing the floor.
-- Test 2 (E2): two cmdRun invocations race on the resume-write step. Pre-fix: both flip `.turn` before either locks; one proceeds without the lock semantics being upheld. Post-fix: only one succeeds; the loser sees a clean `.turn` revert.
-- Test 3 (sanity): the existing E3 stale-lock-foreign-owned scenario still works.
-
-**Sequenced after NL21:**
-- NL22 → LC3 or LC4 (lattice-context.ts last touched NL19; gap satisfied for NL22)
-- NL23 → C4 (design call — boss-pre-approval queue) or K-imp-1 / K-imp-3 (import-from-kg.ts last touched NL18, gap satisfied for NL23+)
-- NL24+ → K-imp-6/7/9, L5
+**Sequenced after NL22:**
+- NL23 → K-imp-7 (peer-review retro-upgrade scans only first 5 — same template as K-imp-6) OR LC3 / LC4
+- NL24+ → K-imp-1, K-imp-3, K-imp-9, L5, E4/E5/E7, C4 (design call)
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
@@ -152,13 +143,14 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL20):**
+- **Cumulative ledger (post-NL21):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 18 fixed at code level (L1, L2, L3, L4, C1, C2, C3, C5, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-8, iter-3 #2, LC1, LC2, LC5)
+  - 20 fixed at code level (L1, L2, L3, L4, C1, C2, C3, C5, E1, E2, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-8, iter-3 #2, LC1, LC2, LC5)
   - 3 schema migrations shipped
-  - 13 queued findings remain
-  - Fix-rate: 60% (18/30 code) + all 3 schema migrations
-  - **C5 confirmed the SYSTEMIC pattern (LC2 = C5):** SQL limit BEFORE in-memory filter → silent truncation. Fix template (now proven twice): push the filter axis into queryAnswers via the `by_agent_not` (or similar) field added at NL19. Two more queued candidates for the same template: K-imp-6 (best_answer_id chosen via queryAnswers limit:1), K-imp-7 (peer-review retro-upgrade scans only first 5).
+  - 11 queued findings remain
+  - Fix-rate: 67% (20/30 code) + all 3 schema migrations
+  - **SYSTEMIC pattern (LC2 = C5):** SQL limit BEFORE in-memory filter → silent truncation. Fix template proven twice; K-imp-6 + K-imp-7 are next candidates with the same shape.
+  - **E1+E2 lesson: races involving "guarantee state X before doing operation Y" are best fixed by reordering — Y first, then validate X under Y's protection.** Pre-fix the resume-write satisfied the lock-invariant by writing turn=self before the lock attempt, but that pre-lock write was the very thing that other actors could observe and race on. By moving the floor-stealing refusal upstream of the resume-write, we eliminated the corruption window without needing additional locking primitives. Audit other "satisfy invariant before lock" patterns in the codebase for the same race shape.
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
   - **SYSTEMIC pattern (LC2 = C5):** SQL fetches a fixed limit, then in-memory filter drops candidates → silent truncation. Fix template (proven at NL19): push the missing filter axis into the data-layer query. Audit other queryAnswers callers for the same shape.
   - **L3 lesson: invariants need to be enforced in BOTH branches of a conditional.** Iter-5's joint-consistency invariant (status="answered" → best_answer_id non-null) was correctly enforced in setQuestionStatus AND in the multi-answer reRankAnswers branch — but the single-answer branch silently bypassed by calling the lower-level `setAnswerStatus` directly. Whenever a guard is added at the data-access layer, audit ALL call sites that could write inconsistent state, not just the obvious one.
