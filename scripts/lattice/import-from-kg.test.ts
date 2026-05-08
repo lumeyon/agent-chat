@@ -309,6 +309,53 @@ describe("importEdgeConvo — full import", () => {
     expect(result.pairs_found).toBe(0);
     expect(result.questions_inserted).toBe(0);
   });
+
+  // Iter-11: ephemeral peer review responses are SUBSTANTIVE content
+  // (the peer's actual review), not transcript scrape. Importer detects
+  // them by the section description prefix and tags them as authored
+  // (tier 3, real explanation) instead of auto-imported (tier 5,
+  // placeholder).
+  test("ephemeral peer review response sections are imported as authored content", () => {
+    writeConvo(
+      section("orion",   "ephemeral peer review request: foo.ts",    "2026-05-07T10:00:00Z", "Review /path/foo.ts...", "lumeyon"),
+      section("lumeyon", "ephemeral peer review response: foo.ts",   "2026-05-07T10:01:00Z", "- bug X\n- bug Y\n- bug Z", "parked"),
+    );
+    importEdgeConvo(store, edgeDir);
+
+    const lumeyonAnswers = store.queryAnswers({ by_agent: "lumeyon" });
+    expect(lumeyonAnswers.length).toBe(1);
+    const a = lumeyonAnswers[0];
+    expect(a.quality_tier).toBe(3);
+    expect(a.explanation).not.toContain("auto-imported");
+    expect(a.explanation).toContain("Peer review response from lumeyon");
+  });
+
+  test("re-importing upgrades a pre-existing auto-imported peer-review answer", () => {
+    // Step 1: pre-iter-11, import as auto-imported placeholder via
+    // recordAnswer directly (simulating the old import path).
+    writeConvo(
+      section("orion",   "ephemeral peer review request: bar.ts",    "2026-05-07T10:00:00Z", "Review /path/bar.ts...", "keystone"),
+      section("keystone","old assistant response",                   "2026-05-07T10:01:00Z", "- finding 1\n- finding 2", "parked"),
+    );
+    importEdgeConvo(store, edgeDir);
+    const before = store.queryAnswers({ by_agent: "keystone" })[0];
+    expect(before.quality_tier).toBe(5);
+    expect(before.explanation).toContain("auto-imported");
+
+    // Step 2: rewrite the assistant section's description to the new
+    // ephemeral peer review prefix and re-import. The PRIMARY KEY
+    // conflict path detects the upgrade and updates explanation + tier.
+    writeConvo(
+      section("orion",   "ephemeral peer review request: bar.ts",    "2026-05-07T10:00:00Z", "Review /path/bar.ts...", "keystone"),
+      section("keystone","ephemeral peer review response: bar.ts",   "2026-05-07T10:01:00Z", "- finding 1\n- finding 2", "parked"),
+    );
+    importEdgeConvo(store, edgeDir);
+    const after = store.queryAnswers({ by_agent: "keystone" })[0];
+    expect(after.id).toBe(before.id);  // same answer (deterministic id)
+    expect(after.quality_tier).toBe(3);  // upgraded
+    expect(after.explanation).not.toContain("auto-imported");
+    expect(after.explanation).toContain("Peer review response from keystone");
+  });
 });
 
 describe("importEdgeConvo — sealed archive walking", () => {

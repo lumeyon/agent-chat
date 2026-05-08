@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-07T23:55Z
+## Current state — 2026-05-08T00:25Z
 
-**Phase: Self-improvement /loop iteration 10 — `--threshold` flag added to study-turn CLI. Re-running with threshold=0.70 produced FIRST PASSING STUDY TURNS in lattice history (3/5 passed). predictive_lift max doubled (0.059 → 0.123) from cumulative selection-pressure signal. Substrate is producing high-confidence retrievable answers, end-to-end, on real production data.**
+**Phase: Self-improvement /loop iteration 11 — importer detects ephemeral peer review responses. Authored count 5 → 7 (lumeyon iter-1 + keystone iter-6 retroactively upgraded). FIRST stratified quality_tier histogram in lattice history: tier 2=5, tier 3=2, tier 5=880 (was: all tier 5).**
 
 ## Phase status
 
@@ -15,6 +15,44 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T00:25Z (Self-improvement /loop iteration 11: importer recognizes ephemeral peer reviews → first stratified quality_tier histogram)
+
+**Target category:** Substrate generalization — the importer was treating ephemeral peer review responses as identical to historical CONVO.md scrape (auto-imported placeholder, tier 5). But peer-review responses ARE substantive content — they're the peer's actual review, not just transcript. Iter-6's flagged "observation worth flagging for future work" became iter-11's deliverable.
+
+**Peer used:** solo. Mechanical change once the spec was clear.
+
+**What was done:**
+  1. Added `setAnswerExplanation(id, explanation)` and `setAnswerQualityTier(id, tier)` methods to LatticeStore. Honor the same dual-output non-empty guard as putAnswer.
+  2. Updated import-from-kg.ts importPairs: when assistant.description starts with "ephemeral peer review response", use a constructed authored explanation (`"Peer review response from <agent>..."`) and quality_tier 3 instead of the auto-imported placeholder + tier 5.
+  3. Added a RETROACTIVE upgrade path: when import hits a PRIMARY KEY conflict (answer already exists from a prior import) AND the section is a peer-review response AND the existing explanation contains "auto-imported", call setAnswerExplanation + setAnswerQualityTier to upgrade in place. Idempotent — re-running on already-upgraded answers is a no-op.
+  4. Added 2 tests in import-from-kg.test.ts: one for the new-import path, one for the retroactive-upgrade path.
+  5. Added 3 tests in sqlite-store.test.ts: setAnswerExplanation update, setAnswerExplanation rejects empty/null/whitespace, setAnswerQualityTier update.
+  6. Re-imported lumeyon-orion + keystone-orion edges in production. Both peer-review answers (lumeyon iter-1, keystone iter-6) upgraded from auto-imported tier 5 → authored tier 3.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — peer review responses now carry real authored explanations.
+  - ✅ Function 5 (FORMAT-UNIFORM) — quality_tier histogram now stratified per the design intent (the dual-audience-fusion contract says quality matters for buyer pricing AND agent retrieval).
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 401 → 401
+  - Answers: 885 → 887 (+2 background)
+  - **AUTHORED: 5 → 7** (+2: lumeyon iter-1 + keystone iter-6 retroactively upgraded)
+  - **quality_tier histogram FIRST STRATIFIED:** tier 2=5, tier 3=2, tier 5=880 (was: all tier 5 except authored). The substrate's quality stratification is now visible in real data — a structural milestone that pre-iter-11 was theoretical.
+  - Authored %: 0.6% → 0.8%
+
+**Tests:** plugin 502/0/3 (no change). Lattice 112 → 117 (+5: 3 sqlite-store + 2 import-from-kg).
+
+**Files touched (5):**
+  - scripts/lattice/sqlite-store.ts (2 new methods)
+  - scripts/lattice/sqlite-store.test.ts (3 new tests)
+  - scripts/lattice/import-from-kg.ts (detection + upgrade path)
+  - scripts/lattice/import-from-kg.test.ts (2 new tests)
+  - docs/lattice-alt-a-progress.md (this journal)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 12):** Re-run study-turn now that we have 7 authored Q/A (vs the 5 in iter-9/10). The 2 newly-upgraded peer-review answers — lumeyon's 9-finding review of types.ts and keystone's 3-finding review of sqlite-store.ts — are detail-rich, line-numbered content. Hypothesis: study-turn against those will produce HIGH cosines (potentially passing 0.85) because the predictor can reason about specific findings cited verbatim. Test the hypothesis empirically. Lattice metric: more passing study turns + lift histogram extends. Plus this exercises the substrate's selection: question_id selection should pick up the new authored answers organically.
 
 ### 2026-05-07T23:55Z (Self-improvement /loop iteration 10: `--threshold` flag → first passing study turns)
 

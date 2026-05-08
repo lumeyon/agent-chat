@@ -463,6 +463,33 @@ describe("LatticeStore — stats and constraints", () => {
     expect(fetched.status).toBe("answered");
     expect(fetched.best_answer_id).toBe("ans:happy");
   });
+
+  // Iter-11: setAnswerExplanation + setAnswerQualityTier — used by the
+  // importer to retroactively upgrade auto-imported peer-review answers
+  // to authored status.
+  test("setAnswerExplanation updates the explanation field", () => {
+    store.putQuestion(makeQuestion());
+    store.putAnswer(makeAnswer({ id: "ans:upgrade-me", explanation: "(auto-imported placeholder)" }));
+    store.setAnswerExplanation("ans:upgrade-me", "Real authored explanation.");
+    const a = store.getAnswer("ans:upgrade-me")!;
+    expect(a.explanation).toBe("Real authored explanation.");
+  });
+
+  test("setAnswerExplanation rejects empty/null/whitespace (mirrors putAnswer guard)", () => {
+    store.putQuestion(makeQuestion());
+    store.putAnswer(makeAnswer({ id: "ans:strict" }));
+    expect(() => store.setAnswerExplanation("ans:strict", "")).toThrow(/explanation/i);
+    expect(() => store.setAnswerExplanation("ans:strict", "   \n  ")).toThrow(/explanation/i);
+    expect(() => store.setAnswerExplanation("ans:strict", null as any)).toThrow(/explanation/i);
+  });
+
+  test("setAnswerQualityTier updates the quality_tier field", () => {
+    store.putQuestion(makeQuestion());
+    store.putAnswer(makeAnswer({ id: "ans:tier", quality_tier: 5 }));
+    store.setAnswerQualityTier("ans:tier", 3);
+    const a = store.getAnswer("ans:tier")!;
+    expect(a.quality_tier).toBe(3);
+  });
 });
 
 describe("LatticeStore — quality_tier semantics (dual-audience fusion)", () => {

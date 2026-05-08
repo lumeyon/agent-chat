@@ -304,10 +304,21 @@ function importPairs(
       qIns++;
     }
 
-    // Insert Answer (idempotent — skip if exists).
-    const explanation =
-      "(auto-imported from CONVO.md; no original explanation captured at write time. " +
-      "Subsequent answers in the lattice will require explanations per Apprenticeship Substrate forcing function 1.)";
+    // Detect ephemeral peer review responses (sections written by the
+    // ephemeral-peer-review CLI). These ARE substantive content (the
+    // peer's actual review), not transcript scrape, so they get an
+    // authored explanation + tier 3 (peer-validated) instead of the
+    // tier-5 auto-imported placeholder.
+    const isPeerReviewResponse = assistant.description
+      .toLowerCase()
+      .startsWith("ephemeral peer review response");
+
+    const explanation = isPeerReviewResponse
+      ? `Peer review response from ${assistant.agent} to orion's review request. Body content IS the substantive review — bullet points naming real issues per the QUALITY BAR rule.`
+      : "(auto-imported from CONVO.md; no original explanation captured at write time. " +
+        "Subsequent answers in the lattice will require explanations per Apprenticeship Substrate forcing function 1.)";
+    const qualityTier: QualityTier = isPeerReviewResponse ? 3 : 5;
+
     try {
       recordAnswer(store, {
         question_id: questionId,
@@ -316,7 +327,7 @@ function importPairs(
         explanation,
         predictive_lift: 0,
         status: "accepted",     // the assistant did answer; conservatively mark as accepted
-        quality_tier: 5,        // raw — auto-imported, unvalidated
+        quality_tier: qualityTier,
         validator_id: null,
         created_at: Math.floor(assistantMs / 1000),
       });
@@ -332,7 +343,23 @@ function importPairs(
       }
     } catch (e) {
       // Likely PRIMARY KEY conflict (already imported). Count as dup.
+      // For ephemeral peer review responses, RETROACTIVELY upgrade an
+      // existing auto-imported placeholder to the authored explanation
+      // and tier — happens when a peer review was imported BEFORE this
+      // detection logic existed. Idempotent: subsequent re-imports of
+      // an already-upgraded answer are no-ops because explanation and
+      // tier already match.
       aDup++;
+      if (isPeerReviewResponse) {
+        const existingAns = (() => {
+          const all = store.queryAnswers({ question_id: questionId, status: "accepted", limit: 5 });
+          return all.find((a) => a.by_agent === assistant.agent && a.body === assistant.body) ?? null;
+        })();
+        if (existingAns && (existingAns.explanation ?? "").includes("auto-imported")) {
+          store.setAnswerExplanation(existingAns.id, explanation);
+          store.setAnswerQualityTier(existingAns.id, qualityTier);
+        }
+      }
     }
   }
 

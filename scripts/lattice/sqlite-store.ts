@@ -434,6 +434,28 @@ export class LatticeStore {
     this.db.run("UPDATE answers SET predictive_lift = ? WHERE id = ?", [predictive_lift, id]);
   }
 
+  /** Update the explanation of an existing answer. Used by the importer
+   *  when an ephemeral peer review section is re-imported and we want
+   *  to upgrade it from the auto-imported placeholder to a real
+   *  provenance explanation. Honors the dual-output invariant
+   *  (non-empty string), same as putAnswer. */
+  setAnswerExplanation(id: string, explanation: string): void {
+    if (typeof explanation !== "string" || explanation.trim().length === 0) {
+      throw new Error(
+        `setAnswerExplanation: dual-output invariant — explanation must be a non-empty string ` +
+        `(got ${explanation === null ? "null" : explanation === undefined ? "undefined" : "empty/whitespace string"}).`,
+      );
+    }
+    this.db.run("UPDATE answers SET explanation = ? WHERE id = ?", [explanation, id]);
+  }
+
+  /** Update the quality_tier of an existing answer. Used to promote an
+   *  auto-imported answer to a peer-validated tier (e.g. tier 5 → 3
+   *  for content from an ephemeral peer review). */
+  setAnswerQualityTier(id: string, quality_tier: QualityTier): void {
+    this.db.run("UPDATE answers SET quality_tier = ? WHERE id = ?", [quality_tier, id]);
+  }
+
   queryAnswers(filter: AnswerFilter = {}): Answer[] {
     const conds: string[] = [];
     const params: (string | number)[] = [];
