@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as child_process from "node:child_process";
+import { extractAnswer } from "./extract.ts";
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const PROBLEMS = path.join(HERE, "..", "data", "problems.jsonl");
@@ -59,30 +60,6 @@ function buildPrompt(p: Problem): string {
     "",
     "where X is one of A, B, C, or D.",
   ].join("\n");
-}
-
-/** Extract the chosen letter from the model's response. Looks for the
- *  LAST occurrence of "Answer: <letter>" in the response (so chain-of-
- *  thought "Answer: A would be wrong because..." earlier in the body
- *  is ignored in favor of the final verdict). */
-function extractAnswer(response: string): string | null {
-  // Match "Answer: X", "Answer X", "Answer is X", with optional ** bold,
-  // optional parens around the letter.
-  const re = /(?:Answer\s*(?:is)?\s*[:\-]?\s*)\*{0,2}\(?([ABCD])\)?\*{0,2}/gi;
-  let m: RegExpExecArray | null;
-  let lastLetter: string | null = null;
-  while ((m = re.exec(response)) !== null) {
-    lastLetter = m[1].toUpperCase();
-  }
-  if (lastLetter) return lastLetter;
-  // Fallback: a lone (X) or X.) on the LAST non-empty line of the response.
-  const lines = response.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  if (lines.length > 0) {
-    const last = lines[lines.length - 1];
-    const m2 = /^\(?([ABCD])\)?\.?$/.exec(last);
-    if (m2) return m2[1];
-  }
-  return null;
 }
 
 function dispatchCodex(prompt: string, timeoutMs = 240_000): { stdout: string; stderr: string; status: number | null } {
