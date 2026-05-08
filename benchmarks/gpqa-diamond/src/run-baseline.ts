@@ -85,6 +85,58 @@ function loadProblems(): Problem[] {
   return text.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Problem);
 }
 
+/** Identify entries to RE-RUN: no-extract cases where the model didn't
+ *  get to answer (timeout / empty response). PRESERVES refusal-style
+ *  no-extracts (Usage Policy responses with len > 0) since rerunning
+ *  the same prompt with the same content yields the same refusal —
+ *  retrying buys nothing and burns LLM cost.
+ *
+ *  A "timeout-like" no-extract is recognized by:
+ *    - answer_extracted is null, AND
+ *    - response is empty (len 0), AND
+ *    - error is non-empty (cli exited / dispatch threw / etc.).
+ *
+ *  Refusals have a non-empty response (the canned refusal text); we
+ *  leave those alone.
+ */
+function findTimeoutIds(resultsPath: string): Set<string> {
+  if (!fs.existsSync(resultsPath)) return new Set();
+  const lines = fs.readFileSync(resultsPath, "utf8").split("\n").filter(Boolean);
+  const ids = new Set<string>();
+  for (const line of lines) {
+    try {
+      const r = JSON.parse(line);
+      if (r.answer_extracted === null && (!r.response || r.response.length === 0) && r.error) {
+        ids.add(r.id);
+      }
+    } catch { /* tolerate */ }
+  }
+  return ids;
+}
+
+/** Strip entries with the given IDs from a results file. Used by
+ *  --retry-timeouts to drop the failed rows so the runner re-runs them. */
+function stripIds(resultsPath: string, idsToDrop: Set<string>): number {
+  if (!fs.existsSync(resultsPath)) return 0;
+  const lines = fs.readFileSync(resultsPath, "utf8").split("\n").filter(Boolean);
+  const kept: string[] = [];
+  let dropped = 0;
+  for (const line of lines) {
+    try {
+      const r = JSON.parse(line);
+      if (idsToDrop.has(r.id)) {
+        dropped++;
+      } else {
+        kept.push(line);
+      }
+    } catch {
+      kept.push(line);
+    }
+  }
+  fs.writeFileSync(resultsPath, kept.join("\n") + (kept.length > 0 ? "\n" : ""));
+  return dropped;
+}
+
 function loadCompletedIds(resultsPath: string): Set<string> {
   if (!fs.existsSync(resultsPath)) return new Set();
   const lines = fs.readFileSync(resultsPath, "utf8").split("\n").filter(Boolean);
@@ -98,7 +150,7 @@ function loadCompletedIds(resultsPath: string): Set<string> {
   return ids;
 }
 
-function parseArgs(argv: string[]): { model: "codex" | "claude"; limit?: number; out?: string; start?: number; stop?: number } {
+function parseArgs(argv: string[]): { model: "codex" | "claude"; limit?: number; out?: string; start?: number; stop?: number; timeoutMs?: number; retryTimeouts?: boolean } {
   const out: any = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -107,9 +159,11 @@ function parseArgs(argv: string[]): { model: "codex" | "claude"; limit?: number;
     else if (a === "--out") out.out = argv[++i];
     else if (a === "--start") out.start = parseInt(argv[++i], 10);
     else if (a === "--stop") out.stop = parseInt(argv[++i], 10);
+    else if (a === "--timeout-ms") out.timeoutMs = parseInt(argv[++i], 10);
+    else if (a === "--retry-timeouts") out.retryTimeouts = true;
   }
   if (out.model !== "codex" && out.model !== "claude") {
-    console.error("usage: run-baseline.ts --model codex|claude [--limit N] [--start I] [--stop J] [--out PATH]");
+    console.error("usage: run-baseline.ts --model codex|claude [--limit N] [--start I] [--stop J] [--out PATH] [--timeout-ms N] [--retry-timeouts]");
     process.exit(2);
   }
   return out;
@@ -119,6 +173,15 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const resultsPath = args.out ?? path.join(RESULTS_DIR, `${args.model}.jsonl`);
   fs.mkdirSync(path.dirname(resultsPath), { recursive: true });
+  const timeoutMs = args.timeoutMs ?? 240_000;
+
+  // --retry-timeouts: drop existing timeout-like no-extract entries so
+  // the runner re-runs them. Refusals (non-empty response) are kept.
+  if (args.retryTimeouts) {
+    const ids = findTimeoutIds(resultsPath);
+    const dropped = stripIds(resultsPath, ids);
+    console.error(`# --retry-timeouts: dropped ${dropped} timeout entries from ${resultsPath}; will re-run with timeout-ms=${timeoutMs}`);
+  }
 
   const problems = loadProblems();
   const completed = loadCompletedIds(resultsPath);
@@ -128,7 +191,7 @@ async function main() {
   const slice = problems.slice(start, stop);
   const todo = slice.filter((p) => !completed.has(p.id)).slice(0, args.limit ?? slice.length);
 
-  console.error(`# ${args.model} baseline: ${todo.length} problems pending (${completed.size} already done; range [${start}, ${stop}))`);
+  console.error(`# ${args.model} baseline: ${todo.length} problems pending (${completed.size} already done; range [${start}, ${stop}); timeout-ms=${timeoutMs})`);
 
   let i = 0;
   for (const p of todo) {
@@ -140,7 +203,7 @@ async function main() {
     let status: number | null = null;
     let error: string | undefined;
     try {
-      const r = args.model === "codex" ? dispatchCodex(prompt) : dispatchClaude(prompt);
+      const r = args.model === "codex" ? dispatchCodex(prompt, timeoutMs) : dispatchClaude(prompt, timeoutMs);
       response = r.stdout.trim();
       stderr = r.stderr;
       status = r.status;

@@ -31,10 +31,12 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 - `id`, `domain`, `subdomain`, `prompt_chars`, `response` (full prose), `answer_extracted`, `answer_expected`, `correct`, `elapsed_ms`, `error?`.
 - Three result files JOIN cleanly by `id` for paired comparison once agent-chat lands.
 
-**Background runs status (last sampled NL38 heartbeat):**
-- Codex: 48/198 done; 41 correct (85.4%); 2 timeouts at 240s; mean elapsed 42.6s. ETA ~30-40 min more.
-- Claude: 68/198 done; 61 correct (89.7%); 1 SARS-CoV-2 Usage Policy refusal + 2 timeouts at 240s; mean elapsed 32.1s. ETA ~15-20 min more.
-- ~4% timeout rate at 240s budget so far. Counted as wrong (no extracted answer); could retry with longer budget if fairness becomes a concern.
+**Background runs status (NL38 cont):**
+- Claude FIRST PASS COMPLETED: 173/198 = **87.4%**. 9 timeouts (240s SIGTERM, empty response) + 3 Usage Policy refusals (SARS-CoV-2-class biology questions, claude-canned refusal text). By domain: Physics 84/86 = 97.7%, Chemistry 78/93 = 83.9%, Biology 11/19 = 57.9% (skewed by refusals).
+- Claude RETRY in progress (background task `bgru2dp2g`): the 9 timeout questions re-running with **20-minute budget per question** (`--timeout-ms 1200000` + `--retry-timeouts` drops the failed entries first). Refusals NOT retried (rerunning same prompt yields same refusal). ETA: probably 30-90 min wall (depends on how many of the 9 actually need long thinking budgets vs. would have finished in 5-7 min if not killed at 240s).
+- Codex first pass STILL IN PROGRESS: 149/198 (75%); some timeouts in there too (count TBD on completion); will need its own --retry-timeouts pass with 20-min budget after first pass finishes.
+
+**Fairness budget decision (NL38):** the boss called for 20-min/question across all conditions. Reason: agent-chat will fire 3 LLM calls per question (claude draft + codex critique + claude revise), so its worst-case wall is 60 min/question. We accept that — it's the fair compute budget. Claude/codex baselines retry with the SAME 20-min budget on the questions where they originally timed out.
 
 **Operational state:**
 - Monitor armed (task `bodwykny5`): tails both log files, fires on `# done`/`FATAL`/`cli exited`/`Traceback`. Persistent for the session.
