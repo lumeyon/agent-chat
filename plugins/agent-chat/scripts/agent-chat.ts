@@ -2454,6 +2454,7 @@ async function cmdStudyTurn(args: string[]): Promise<void> {
   let qualityTierMin: number | null = null;
   let excludeAgent: string | null = null;
   let includeAutoImported = false;
+  let threshold: number | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--n" || a === "-n") n = parseInt(args[++i], 10);
@@ -2462,10 +2463,14 @@ async function cmdStudyTurn(args: string[]): Promise<void> {
     else if (a === "--quality-tier-min") qualityTierMin = parseInt(args[++i], 10);
     else if (a === "--exclude-agent") excludeAgent = args[++i];
     else if (a === "--include-auto-imported") includeAutoImported = true;
+    else if (a === "--threshold") threshold = parseFloat(args[++i]);
     else if (a.startsWith("--")) die(`study-turn: unknown option ${a}`, 70);
   }
   if (!Number.isInteger(n) || n <= 0 || n > 50) {
     die("study-turn: --n must be a positive integer ≤ 50 (LLM-budget guard)", 70);
+  }
+  if (threshold !== null && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
+    die("study-turn: --threshold must be a float in [0, 1] (cosine similarity range)", 70);
   }
 
   // Resolve runtime — default to AGENT_CHAT_RUNTIME env or 'claude'.
@@ -2498,6 +2503,7 @@ async function cmdStudyTurn(args: string[]): Promise<void> {
       quality_tier_min: qualityTierMin === null ? undefined : (qualityTierMin as any),
       exclude_agent: excludeAgent ?? undefined,
       require_authored_explanation: !includeAutoImported,
+      grade_threshold: threshold ?? undefined,
     });
 
     if (results.length === 0) {
@@ -2649,13 +2655,19 @@ switch (cmd) {
       `      agent identity — the service handles every turn. Pass --peer to\n` +
       `      enable autowatch (required for autonomy); --no-service to skip\n` +
       `      the systemd install and run autowatch manually instead.\n\n` +
-      `  study-turn [--n K] [--runtime claude|codex] [--dry-run] [--exclude-agent <name>] [--quality-tier-min N]\n` +
+      `  study-turn [--n K] [--runtime claude|codex] [--dry-run]\n` +
+      `             [--exclude-agent <name>] [--quality-tier-min N]\n` +
+      `             [--threshold F] [--include-auto-imported]\n` +
       `      Apprenticeship Substrate forcing function 2: run K study turns\n` +
       `      against the global lattice. Each turn picks a question, calls\n` +
       `      the configured LLM to predict the answer, grades the prediction\n` +
       `      via embedding cosine, and updates predictive_lift on the\n` +
       `      answer. Real LLM cost: 1 call per turn. Default K=5; max 50\n` +
-      `      (LLM-budget guard). --dry-run skips the predictive_lift writes.\n\n` +
+      `      (LLM-budget guard). --dry-run skips the predictive_lift writes.\n` +
+      `      --threshold F (float in [0,1]) overrides the default cosine\n` +
+      `      pass-threshold of 0.85 — useful for empirical calibration on\n` +
+      `      paraphrased technical content where MiniLM-L6-v2 cosines for\n` +
+      `      "same topic, different phrasing" cluster in [0.6, 0.85].\n\n` +
       `  lattice-stats [--db <path>] [--json]\n` +
       `      Surface the global lattice's contents: question/answer counts,\n` +
       `      participant distribution, quality-tier breakdown, predictive_lift\n` +

@@ -318,4 +318,42 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
     expect(captured!.question_framing).toBe("What is the deadline?");
     expect(Array.isArray(captured!.peer_explanations)).toBe(true);
   }, 60_000);
+
+  // Iter-10: --threshold flag enables empirical calibration of the pass
+  // threshold. iter-9's run produced cosines 0.71-0.79 with default 0.85
+  // → 0/5 passed. Lowering the threshold should flip the pass column
+  // without changing actual cosines or lift updates.
+  test("grade_threshold option propagates to grade.threshold and grade.passed", async () => {
+    const q = seedQuestion(store, { id: "v1:q1", framing: "What is X?" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "X is a thing that exists",
+      by_agent: "orion",
+      explanation: "Because X.",
+      status: "accepted",
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+
+    // Predictor returns a paraphrase — not exact, but semantically related.
+    const paraphrasePredictor: Predictor = async () => "X is an existing thing";
+
+    // With default threshold (0.85) the paraphrase likely fails.
+    const strictResults = await runStudyTurn(store, paraphrasePredictor, {
+      k: 1, apply_updates: false, grade_threshold: 0.85,
+    });
+    expect(strictResults.length).toBe(1);
+    expect(strictResults[0].grade.threshold).toBe(0.85);
+
+    // With a lower threshold (0.5) the same paraphrase should pass.
+    const lenientResults = await runStudyTurn(store, paraphrasePredictor, {
+      k: 1, apply_updates: false, grade_threshold: 0.5,
+    });
+    expect(lenientResults[0].grade.threshold).toBe(0.5);
+    // Cosine should be the same in both runs (deterministic embedding); only
+    // threshold and passed differ.
+    expect(lenientResults[0].grade.cosine).toBeCloseTo(strictResults[0].grade.cosine, 3);
+    if (lenientResults[0].grade.cosine >= 0.5) {
+      expect(lenientResults[0].grade.passed).toBe(true);
+    }
+  }, 90_000);
 });
