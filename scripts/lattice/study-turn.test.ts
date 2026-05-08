@@ -418,6 +418,60 @@ describe("runStudyTurn — orchestration with fake predictor", () => {
 //                                      (or special non-numeric)
 // NL8 fix: applyGradeToLift treats non-finite cosine as ungradable
 // (same shape as NL3's empty-prediction handling) — no lift update.
+// Regression for carina's NL3 C2 finding: selectStudyQuestions could
+// pick an accepted answer with an empty body. Empty body grades as
+// cosine 0 against any prediction → -0.10 lift penalty (same shape as
+// C1 fixed at NL3, but on the data side rather than the predictor side).
+// NL16 fix: filter out empty-body answers in selectStudyQuestions's
+// candidate selection.
+describe("selectStudyQuestions — C2 empty-body filter", () => {
+  test("C2: answer with empty body is NOT selected as study candidate", () => {
+    const q1 = seedQuestion(store, { id: "v1:q-empty-body" });
+    const a1 = recordAnswer(store, {
+      question_id: q1.id,
+      body: "",                            // empty body — the bug case
+      by_agent: "lumeyon",
+      explanation: "Real authored explanation",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q1.id, "answered", a1.id);
+
+    const q2 = seedQuestion(store, { id: "v1:q-good-body" });
+    const a2 = recordAnswer(store, {
+      question_id: q2.id,
+      body: "A real answer body.",
+      by_agent: "lumeyon",
+      explanation: "Real authored explanation",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
+
+    const candidates = selectStudyQuestions(store, { k: 5 });
+    // Pre-fix: both candidates returned (empty-body answer slips through).
+    // Post-fix: only the good-body one.
+    expect(candidates.length).toBe(1);
+    expect(candidates[0].question.id).toBe("v1:q-good-body");
+  });
+
+  test("C2: whitespace-only body is also rejected", () => {
+    const q = seedQuestion(store, { id: "v1:q-ws-body" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "   \n\t  ",                   // whitespace-only — still empty after trim
+      by_agent: "lumeyon",
+      explanation: "Real authored explanation",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+
+    const candidates = selectStudyQuestions(store, { k: 5 });
+    expect(candidates.length).toBe(0);
+  });
+});
+
 describe("applyGradeToLift — C3 NaN/non-finite cosine guard", () => {
   test("C3: NaN cosine does not write NaN to predictive_lift", () => {
     const q = seedQuestion(store, { id: "v1:q-nan", framing: "NaN test" });

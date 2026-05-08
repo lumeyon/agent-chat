@@ -138,8 +138,15 @@ export function selectStudyQuestions(
     const isAcceptable = (e: string | null | undefined) =>
       requireAuthored ? isAuthored(e) : !!e && e.trim().length > 0;
 
+    // C2 fix (NL16 / carina NL3 finding): require non-empty body.
+    // An empty body grades as cosine 0 against any prediction → -0.10
+    // spurious lift penalty (same shape as C1 fixed at NL3, but on the
+    // data side rather than the predictor side). recordAnswer + putAnswer
+    // don't enforce non-empty body (only explanation), so empty bodies
+    // can land in the lattice — selection must filter them out.
     const actual = answers.find((a) =>
-      isAcceptable(a.explanation)
+      typeof a.body === "string" && a.body.trim().length > 0
+      && isAcceptable(a.explanation)
       && (!options.exclude_agent || a.by_agent !== options.exclude_agent),
     );
     if (!actual) continue;

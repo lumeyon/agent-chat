@@ -40,13 +40,13 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL15 commit)
+## CURRENT STATE (as of NL16 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, 3 fixed: L1+L2+L4; L3, L5 queued)
-- `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **2 fixed: C1, C3**; C2, C4, C5 queued)
+- `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **3 fixed: C1, C2, C3**; C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **2 fixed: E6, E3**; E1, E2, E4, E5, E7 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **3 fixed: K-imp-2, K-imp-5, K-imp-8**; K-imp-1, 3, 4, 6, 7 queued; K-imp-9 added NL12 observation)
 
@@ -58,14 +58,13 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **2 fixed: LC1, LC5**; LC2, LC3, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 18 total):
+### Queued findings (drainable WITHOUT fresh peer call — 17 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 2 queued
 - **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion skips question lifecycle update.
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
 
-#### study-turn.ts (carina NL3) — 3 queued (was 4; C3 drained NL8)
-- **C2** (study-turn.ts:141, 182): selectStudyQuestions can pick empty-body answer → spurious penalty.
+#### study-turn.ts (carina NL3) — 2 queued (C2 drained NL16)
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
 - **C5** (study-turn.ts:128, 141): SQL limit applied before in-memory authored filter.
 
@@ -101,20 +100,19 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL16 → DRAIN C2** (study-turn.ts:141 selectStudyQuestions can pick empty-body answer → spurious penalty).
+**NL17 → DRAIN L3** (apprenticeship.ts:216 single-answer reRankAnswers lifecycle gap).
 
-**Why C2:**
-- Real correctness bug — empty body produces cosine=0 → -0.10 lift penalty (same shape as C1 fixed at NL3, but on the data side rather than the predictor side).
-- File-touch rule: NL15 touched lattice-context.ts; study-turn.ts last touched NL8 (7 iters gap → eligible).
-- Self-contained fix: add a body-non-empty filter in selectStudyQuestions's queryAnswers call.
+**Why L3:**
+- Real correctness bug. The single-answer branch in `reRankAnswers` calls `promote(store, live[0])` which sets the answer's status to "accepted" but does NOT call `setQuestionStatus` to update the question's best_answer_id pointer. Question stays at status="open" with best_answer_id=null even though we just promoted an answer.
+- apprenticeship.ts last touched NL6 (10 iters gap → eligible).
+- Self-contained fix: add `setQuestionStatus(question_id, "answered", a.id)` after the `promote(store, a)` call.
 
 **Test approach (2 regression tests):**
-- Seed a lattice with 1 normal answer + 1 answer with empty body (status=accepted, real explanation, but empty body — needs raw INSERT to bypass any future putAnswer guards).
-- selectStudyQuestions(k: 5) — pre-fix returns both; post-fix filters out the empty-body one.
-- runStudyTurn against this corpus — pre-fix the empty-body answer gets penalized; post-fix it's excluded.
+- Test 1: pre-existing question + 1 proposed answer with positive predictive_lift. Run `reRankAnswers(store, q.id, { single_answer_promotes: true })`. Pre-fix: answer is now accepted but question stays open with best_answer_id=null. Post-fix: question is answered with best_answer_id pointing at the new answer.
+- Test 2: regression — multi-answer case still calls setQuestionStatus correctly (test the existing path remains intact).
 
-**Sequenced after NL16:**
-- NL17 → L3 (apprenticeship.ts:216 single-answer reRankAnswers lifecycle gap), or LC2/LC3/LC4 (lattice-context.ts after gap), or K-imp-* (import-from-kg.ts after gap)
+**Sequenced after NL17:**
+- NL18 → LC2/LC3/LC4 (lattice-context.ts after 1-iter gap), C5 (study-turn after gap), E1+E2 (race conditions, multi-test fix), K-imp-1/3/4/6/7/9
 - Eventually: fresh peer review on stats.ts (lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
@@ -144,12 +142,12 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL15):**
+- **Cumulative ledger (post-NL16):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 13 fixed at code level (L1, L2, L4, C1, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
+  - 14 fixed at code level (L1, L2, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
   - 3 schema migrations shipped
-  - 18 queued findings remain
-  - Fix-rate: 43% (13/30 code) + all 3 schema migrations
+  - 17 queued findings remain
+  - Fix-rate: 47% (14/30 code) + all 3 schema migrations
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.

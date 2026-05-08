@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T09:25Z
+## Current state — 2026-05-08T09:55Z
 
-**Phase: NL15 — drained LC1 (lattice-context.ts no cosine floor). Added `min_cosine` parameter to composePushedContextBlock. Pre-fix: composePushedContextBlock emitted ALL top-K hits regardless of cosine, polluting cmdRun prompts with sparse-corpus content (iter-4 baseline cosines 0.21-0.31). Post-fix: optional filter applied before top-K slice; defaults preserve backwards compat. Cumulative: 30 REAL findings, 13 code fixes, 3 schema migrations.**
+**Phase: NL16 — drained C2 (study-turn empty-body filter). Closes the data-side counterpart of C1 (NL3): pre-fix selectStudyQuestions could pick an accepted answer whose body was empty/whitespace; that answer would grade cosine=0 against any prediction → spurious -0.10 lift penalty on the answer's predictive_lift. Post-fix: candidate selection requires non-empty body. study-turn.ts now has both predictor-side (C1, C3) and data-side (C2) protections in place. Cumulative: 30 REAL findings, 14 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,55 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T09:55Z (NL16: queue-drain C2 — selectStudyQuestions empty-body filter)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains C2 — no fresh peer call. File-touch rule satisfied: NL15 touched lattice-context.ts; study-turn.ts last touched NL8 (8 iters gap).
+
+**The bug (carina NL3 C2):** `selectStudyQuestions` filtered candidates by status, quality_tier, exclude_agent, and explanation acceptability — but NOT by body non-emptiness. An accepted answer with empty/whitespace body could pass selection, then grade as cosine=0 against any prediction (since gradePrediction returns gradable=false for empty actual at NL3-fixed line 182). Pre-NL3 fix: that produced -0.10 spurious lift penalty. Post-NL3 fix: gradable=false skips lift updates — but the candidate is still WASTED on the predictor (LLM call burned).
+
+This is the data-side counterpart of C1. NL3 closed the predictor-side path (empty prediction → no penalty). NL16 closes the data-side (empty actual → not selected).
+
+**The fix:** add `a.body.trim().length > 0` check in `selectStudyQuestions`'s `answers.find` predicate (study-turn.ts:142).
+
+**Test-first protocol:**
+  2 regression tests at study-turn.test.ts:
+    - C2-a: seed 1 question with empty-body accepted answer + 1 question with good-body accepted answer. selectStudyQuestions(k:5) returns 1 (good-body) post-fix; pre-fix returns both.
+    - C2-b: whitespace-only body also rejected.
+  Both verified FAILING pre-fix; PASS post-fix.
+
+**Why putAnswer doesn't enforce non-empty body:** the schema is `body TEXT NOT NULL` — empty string passes. recordAnswer only validates explanation. Body emptiness is a study-turn concern (we need substantive content to grade against), not a substrate-wide invariant.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 2 (STUDY TURN) — selection integrity restored.
+  - ✅ Function 3 (SELECTION PRESSURE) — empty-body candidates can no longer waste LLM calls + accidentally penalize themselves.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 146 → 148 (+2 C2)
+
+**Files touched (4):**
+  - scripts/lattice/study-turn.ts (body-non-empty filter at line 142)
+  - scripts/lattice/study-turn.test.ts (2 C2 regression tests)
+  - docs/ephemeral-peer-reviews.md (C2 row updated to FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL17 plan; cumulative ledger)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL17):** Per file-touch rule (NL16 touched study-turn.ts), eligible:
+- L3, L5 (apprenticeship.ts, last touched NL6 — eligible)
+- LC2, LC3, LC4 (lattice-context.ts, last touched NL15 — INELIGIBLE yet)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — eligible after gap)
+- K-imp-1, 3, 4, 6, 7, 9 (import-from-kg.ts, last touched NL13 — eligible)
+
+**Recommend NL17 → DRAIN L3** (apprenticeship.ts:216 single-answer reRankAnswers lifecycle gap). Reasons:
+- Real correctness bug — single-answer promotion sets the answer to "accepted" but skips the question lifecycle update; question stays open.
+- apprenticeship.ts last touched NL6 (10 iters gap → eligible).
+- Self-contained fix: after the promote() call in the single-answer branch, also run setQuestionStatus to update best_answer_id.
+
+After NL17, NL18+: continue draining (LC2 byte budget, K-imp-1 fenced-section parsing, E1+E2 race conditions, etc.) or fresh peer review on stats.ts.
 
 ### 2026-05-08T09:25Z (NL15: queue-drain LC1 — composePushedContextBlock min_cosine filter)
 
