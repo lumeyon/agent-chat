@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T00:55Z
+## Current state — 2026-05-08T01:25Z
 
-**Phase: Self-improvement /loop iteration 12 — third study-turn run, this time across 7 authored answers including the 2 peer-review responses. predictive_lift max 0.123 → 0.156 (3rd-pass selection pressure). 0/7 passed at strict 0.85; the detail-rich-content hypothesis is PARTIALLY confirmed (lumeyon's 9-bullet review hit 0.819, highest of all 7) but variance across LLM runs dominates the signal at this scale.**
+**Phase: Self-improvement /loop iteration 13 — pivoted from temperature-pinning (claude CLI has no `--temperature` flag) to category D. Spawned 3 depth=1 questions promoting open architectural decisions to first-class lattice nodes. depth_distribution[1] grew 4x (1 → 4). question_parents 1 → 4. The lattice DAG now starts to function as a structured decision-tracking surface alongside the iteration journal.**
 
 ## Phase status
 
@@ -15,6 +15,48 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T01:25Z (Self-improvement /loop iteration 13: pivoted to category D — 3 depth=1 questions; lattice DAG as structured decision-tracking)
+
+**Target category (planned):** I (NEW BUG SURFACE — pin claude predictor temperature to 0). **PIVOTED to D** when the precondition wasn't met.
+
+**Pivot reason:** the claude CLI exposes no `--temperature` flag (verified via `claude --help`). Settings can be passed as JSON via `--settings <json>`, but the schema isn't documented for the temperature key — would require empirical probing AND likely API-key-only scope. Cost/value didn't justify a half-iteration of CLI archeology. Pivoted to category D (depth>0 questions): low-risk metric move that exercises the substrate's question-DAG primitive.
+
+**Peer used:** solo. Pure substrate write.
+
+**3 depth=1 questions spawned:**
+
+  1. **`Should putQuestion forbid status='answered' and 'closed' entirely, forcing every promotion through setQuestionStatus?`**
+     - parent: iter-5 joint-consistency Q (`v1:bc5fba80f5d4a28e`)
+     - WHY this question: iter-5's invariant only catches null/non-null mismatch at putQuestion; iter-7's K1 FK guard runs only at setQuestionStatus. Tightening putQuestion to forbid non-open inserts would eliminate the test-fixture loophole iter-7 deliberately preserved.
+
+  2. **`Are there other lattice write operations (besides addCitation and addQuestionParent) that mix a SELECT-based check with an INSERT/UPDATE and need BEGIN IMMEDIATE wrapping for cross-connection safety?`**
+     - parent: iter-8 K3 atomic-DAG Q (`v1:cd2e10e240527727`)
+     - WHY this question: iter-8 fixed two specific call sites; the broader pattern (read-then-write under BEGIN IMMEDIATE) might apply elsewhere in lattice ops. Worth a peer audit of sqlite-store.ts looking specifically for SELECT + UPDATE/INSERT patterns.
+
+  3. **`Can the claude predictor be made deterministic for study-turn (e.g., via temperature pinning) so empirical threshold calibration becomes possible without ±0.19 variance dominating?`**
+     - parent: iter-3 explanation-invariant Q (`v1:477192c96d6e8abb`)
+     - WHY this question: iter-12 documented the variance, but the path forward needs CLI archeology + design call. Promoting it to a lattice question makes the open architectural decision visible.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — 3 new questions + 3 question_parent edges all carry full provenance.
+  - ⚠️ Function 1 (DUAL-OUTPUT) NOT exercised on the new questions — they're posed open, intentionally, since each represents an open architectural decision boss should weigh in on (per inviolable principle 4).
+
+**Lattice metrics (BEFORE → AFTER) — DAG-structure heavy:**
+  - Questions: 401 → 404 (+3)
+  - **question_parents: 1 → 4** (4x growth in one iter; first time the DAG has fan-out — multiple distinct parents each have 1 child)
+  - **depth_distribution[1]: 1 → 4** (4x growth)
+  - Answers: 887 → 891 (+4 background)
+  - Authored, citations, predictive_lift: unchanged (this iter only spawned open questions)
+
+**Tests:** plugin 502/0/3, lattice 117/0 (no change — no code modification).
+
+**Files touched (1):**
+  - docs/lattice-alt-a-progress.md (this iteration log)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (iteration 14):** The boss-approval queue is becoming unwieldy. There are now 7 open architectural questions across (a) the lattice depth=1 nodes from iter-4 and iter-13, and (b) the journal-tracked items (SQL NOT NULL migration, schema FK constraint, K2 fractional-tier CHECK, petersen routing-table). Iter 14 should consolidate: write a single docs/boss-questions.md with all 7 items, link each to the relevant lattice question or journal entry, and explicitly mark which need boss approval before iter-N+ can proceed. This is **category H (DOCS DRIFT CHECK)** territory and is overdue (the rule says use H sparingly — at most 1 in 5 iterations; iters 1-13 have used H 0 times, so iter 14 is well-justified). Substrate use: forcing function 4 (push-context) — query the lattice for all status='open' questions, verify the consolidated doc covers each.
 
 ### 2026-05-08T00:55Z (Self-improvement /loop iteration 12: third study-turn run with full 7-answer authored corpus; variance characterization)
 
