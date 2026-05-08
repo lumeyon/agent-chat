@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T16:55Z
+## Current state — 2026-05-08T17:25Z
 
-**Phase: NL30 — drained E5 (ephemeral-peer-review importer-path repo-layout-dependent; silent null in packaged plugin layout). Pre-fix: `importEdgeIntoLattice` resolved the importer via a hard-coded relative `../../scripts/lattice/import-from-kg.ts` from SKILL_ROOT — works in dev layout, silently returns null in packaged-plugin layouts where that relative path doesn't exist. Post-fix: added `AGENT_CHAT_LATTICE_IMPORTER_PATH` env override + clear stderr "lattice importer not found at <path>" log when the resolved path doesn't exist. The lattice import remains non-blocking (it's an optional side-effect), but the silent-skip is now visible. **MODULE CLEARED:** ephemeral-peer-review.ts (7/7 lumeyon NL4 findings fixed). Cumulative: 30 REAL findings, 29 code fixes, 3 schema migrations.**
+**Phase: NL31 — drained K-imp-3 (importEdgeConvo cross-archive Q→A pair lost when archiving splits the conversation across leaves). Pre-fix: per-source loop called parseSections + pairSections separately on live CONVO + each archive's BODY.md; when a Q lived in arch_N and the matching A lived in arch_N+1 (or in live CONVO), per-source pairing dropped both halves silently. Post-fix: collect all sections into one ordered list (archives chronologically first, live last) and run pairSections ONCE on the combined list; per-section `source_context` is preserved through to `posed_in_context` so per-source debug breadcrumbs are kept. Cumulative: 30 REAL findings, 30 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,139 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T17:25Z (NL31: queue-drain K-imp-3 — cross-archive Q→A pair recognition; concatenate-then-pair refactor)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-3 — no fresh peer call. File-touch rule: NL30 touched ephemeral-peer-review.ts; this iter touches import-from-kg.ts (different file → eligible).
+
+**The bug (keystone NL5 K-imp-3):**
+  importEdgeConvo's per-source loop was:
+  ```typescript
+  for (const src of sources) {
+    const sections = parseSections(content);
+    const pairs = pairSections(sections);    // ← per-source pairing
+    importPairs(store, pairs, ctx, ...);
+  }
+  ```
+
+  The archiver seals every ~200 lines of CONVO.md content into a leaf
+  archive (per the agent-chat protocol). Once a conversation grows
+  beyond ~200 lines, ANY ongoing Q→A pair can be split across the
+  archive boundary: the boss's user-turn lives in arch_N's BODY.md, and
+  orion's matching assistant-response lives in arch_N+1's BODY.md (or
+  in the live CONVO.md if the response landed after the most-recent
+  archive).
+
+  Per-source pairing dropped these split pairs silently:
+  - Source = arch_N: parseSections returns [user-turn]; pairSections
+    sees a single section, returns []. The user-turn becomes an
+    "orphaned" question that pre-fix wasn't even imported.
+  - Source = arch_N+1 (or live): parseSections returns [assistant-
+    response]; pairSections sees a single section, returns []. The
+    assistant-response is also dropped.
+
+  Result: every cross-archive Q/A pair vanishes from the imported
+  lattice. As the substrate accumulates more conversation depth and
+  more archives, this bug bites more often.
+
+**The fix (concatenate sections then pair across all):**
+
+  Refactored importEdgeConvo to:
+  1. Walk all sources (archives sorted alphabetically/chronologically
+     first, then live CONVO last) and parse sections from each.
+  2. Tag each parsed section with its source via a new optional
+     `source_context?: string` field on `ParsedSection` (e.g.
+     `<edge>#arch_L_001` or `<edge>#live`).
+  3. Concatenate ALL sections from ALL sources into one ordered list.
+  4. Run pairSections ONCE on the combined list. Cross-archive
+     adjacency is now visible to the pairing logic.
+  5. importPairs uses each pair's user.source_context (if set) for
+     `posed_in_context`, falling back to the function's `context` arg.
+
+  Order matters: archives are appended FIRST (sorted by arc id, which
+  matches chronological order since arc ids are sequenced over time),
+  THEN the live CONVO. This matches the natural conversation flow —
+  oldest archive content first, newest live tail last. pairSections's
+  adjacent-pair logic then sees the right ordering at the
+  archive-to-archive and archive-to-live boundaries.
+
+  The per-source `source_context` debug info is preserved end-to-end:
+  imported questions retain a `posed_in_context` value that names the
+  exact source (e.g. `<edge>#arch_L_001` or `<edge>#live`), so an
+  operator can trace back to the originating archive even after the
+  cross-source pairing has happened.
+
+**Test-first protocol:**
+  3 regression tests at import-from-kg.test.ts (sealed-archive-walking
+  describe block):
+    - **K-imp-3-a (cross-archive failure case):** empty live CONVO;
+      arch_1's BODY.md has a user-turn; arch_2's BODY.md has the
+      matching assistant-response. Pre-fix: pairs_found=0
+      (per-source pairing fails on both single-section archives).
+      Post-fix: pairs_found=1, questions_inserted=1, answers_inserted=1.
+      **Verified FAILING pre-fix.**
+    - **K-imp-3-b (archive-to-live boundary case):** live CONVO has the
+      assistant-response; arch_1's BODY.md has the user-turn. Pre-fix:
+      pairs_found=0 (per-source). Post-fix: pairs_found=1.
+      **Verified FAILING pre-fix.**
+    - **K-imp-3-c (sanity):** same-source pairs (Q+A both in same
+      archive, plus another Q+A both in live CONVO) still pair as 2
+      pairs. Backwards compat for the common case.
+
+  Existing 4 sealed-archive-walking tests still pass (the consolidated
+  pairing on combined-sections still recognizes within-source pairs).
+
+**Why this matters:** the lattice is the substrate's training-data
+substrate; every Q/A pair lost to per-source pairing is a missing piece
+of the conversational record. As edges accumulate archives over time,
+the K-imp-3 loss compounds — every cross-archive boundary potentially
+drops a pair. Fixing this restores the lattice's promise of "every
+real Q/A pair from a CONVO turn ends up imported."
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (training-data-shaped artifacts) — the lattice's
+    completeness as a training-data corpus is now correct under the
+    archive lifecycle. Edges can grow indefinitely; cross-archive
+    pairs are no longer silently dropped.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call; production lattice not re-imported)
+  - Answers: 961 → 961
+  - Tests: lattice 165 → 168 (+3 K-imp-3); plugin 543 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (added `source_context?` to ParsedSection; refactored importEdgeConvo to concatenate-then-pair across sources; importPairs uses per-pair source_context)
+  - scripts/lattice/import-from-kg.test.ts (3 K-imp-3 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-3 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL32 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL32):** File-touch rule blocks import-from-kg.ts immediately again. Eligible:
+- K-imp-9 (import-from-kg.ts last touched NL31 — INELIGIBLE)
+- C4 (study-turn.ts last touched NL20, eligible — design call though, on the boss-pre-approval queue).
+
+Hmm — only K-imp-9 is queued and it's blocked by the file-touch rule. The substrate has reached a point where most queued findings are exhausted. Time to surface options:
+
+**Option A — touch a different module** (queue is otherwise empty for non-current-iter file). Look for candidates that AREN'T queued findings:
+- Fresh peer review on stats.ts (the next uncovered module per the original plan).
+- Drain C4 (study-turn.ts last touched NL20, eligible). C4 is a queued design-call: "negative cosine asymmetric lift penalty exceeds -learningRate". Can be drained as orion-authorized via boss-pre-approval queue.
+- Pick up from architectural decisions queue (depth=1 questions from iter-13, etc.).
+
+**Option B — pause loop temporarily and request fresh peer review.** Per the rotation table, next peer is carina (last fresh peer call was NL5 keystone). Fresh peer review against a previously-uncovered module (`scripts/lattice/stats.ts`) would surface 5-8 new findings to drain.
+
+**Recommend NL32 → DRAIN C4** (orion-authorized design call). Reasons:
+- C4: study-turn.ts negative cosine asymmetric lift penalty exceeds `-learningRate`. Per carina's NL3 finding: when cosine is negative (rare but possible — embedding misalignment), the lift adjustment can swing more negative than `-learningRate * 1.0`. The fix is to clamp the magnitude.
+- study-turn.ts last touched NL16 (15 iters gap → eligible).
+- File-touch rule: NL31 touched import-from-kg.ts; study-turn.ts is a different file.
+- Boss-pre-approval queue authorizes C4-class fixes.
+
+**Sequenced after NL32:**
+- NL33 → K-imp-9 (eligible after NL31 + 2 = NL33).
+- NL34 → fresh peer review on stats.ts (carina, first fresh peer call since NL5).
+- Eventually: full review-pass complete summary commit if all queued + freshly-discovered findings are drained.
+- **Modules fully cleared (3 of 6):** apprenticeship.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7).
 
 ### 2026-05-08T16:55Z (NL30: queue-drain E5 — importer-path portability; env override + clear missing-path log)
 

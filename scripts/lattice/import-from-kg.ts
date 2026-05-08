@@ -41,6 +41,11 @@ interface ParsedSection {
   description: string;
   utc: string;        // ISO8601 string from the header
   body: string;       // section body excluding the `## ...` header line
+  /** K-imp-3 fix (NL31): the importer's source context for this section
+   *  (e.g., "<edge>#live" or "<edge>#arch_L_001"). Set by importEdgeConvo
+   *  AFTER parseSections so cross-archive pair-matching can preserve
+   *  per-source debug info. parseSections itself doesn't populate this. */
+  source_context?: string;
 }
 
 /** Parse a CONVO.md text into ordered ParsedSection records.
@@ -260,19 +265,21 @@ export function importEdgeConvo(
   context: string = edgeDir,
 ): ImportResult {
   let qIns = 0, qDup = 0, aIns = 0, aDup = 0;
-  let sectionsParsed = 0;
-  let pairsFound = 0;
   let archivesWalked = 0;
 
-  // Build the list of source files to import: live CONVO.md + every
-  // archives/leaf/*\/BODY.md.
-  type Source = { filePath: string; subContext: string };
-  const sources: Source[] = [];
-
-  const convoPath = path.join(edgeDir, "CONVO.md");
-  if (fs.existsSync(convoPath)) {
-    sources.push({ filePath: convoPath, subContext: `${context}#live` });
-  }
+  // K-imp-3 fix (NL31 / keystone NL5 finding): collect all sections
+  // from all sources into a single ordered list BEFORE pairing. Pre-fix
+  // each source (live CONVO + each leaf archive's BODY.md) was parsed
+  // and paired independently — when archiving split a Q→A pair across
+  // sources (Q in arch_N, A in arch_N+1 or in live), per-source pairing
+  // dropped both halves silently.
+  //
+  // Order: archives first (alphabetical = chronological by arc id),
+  // then live CONVO last. This matches the natural conversation order
+  // — sealed archives are older content, live CONVO is the newest tail.
+  // pairSections then runs ONCE on the combined list and recognizes
+  // cross-archive adjacency as a pair.
+  const allSections: ParsedSection[] = [];
 
   const leafDir = path.join(edgeDir, "archives", "leaf");
   if (fs.existsSync(leafDir)) {
@@ -280,14 +287,28 @@ export function importEdgeConvo(
       const arcDir = path.join(leafDir, arc);
       if (!fs.statSync(arcDir).isDirectory()) continue;
       const bodyPath = path.join(arcDir, "BODY.md");
-      if (fs.existsSync(bodyPath)) {
-        sources.push({ filePath: bodyPath, subContext: `${context}#${arc}` });
-        archivesWalked++;
-      }
+      if (!fs.existsSync(bodyPath)) continue;
+      const content = fs.readFileSync(bodyPath, "utf8");
+      const sections = parseSections(content);
+      const ctx = `${context}#${arc}`;
+      for (const s of sections) s.source_context = ctx;
+      allSections.push(...sections);
+      archivesWalked++;
     }
   }
 
-  if (sources.length === 0) {
+  const convoPath = path.join(edgeDir, "CONVO.md");
+  if (fs.existsSync(convoPath)) {
+    const content = fs.readFileSync(convoPath, "utf8");
+    const sections = parseSections(content);
+    const ctx = `${context}#live`;
+    for (const s of sections) s.source_context = ctx;
+    allSections.push(...sections);
+  }
+
+  const sectionsParsed = allSections.length;
+
+  if (allSections.length === 0) {
     return {
       edge_dir: edgeDir, sections_parsed: 0, pairs_found: 0,
       questions_inserted: 0, questions_already_existed: 0,
@@ -296,20 +317,14 @@ export function importEdgeConvo(
     };
   }
 
-  for (const src of sources) {
-    const content = fs.readFileSync(src.filePath, "utf8");
-    const sections = parseSections(content);
-    sectionsParsed += sections.length;
-    const pairs = pairSections(sections);
-    pairsFound += pairs.length;
-    const ctx = src.subContext;
-    importPairs(store, pairs, ctx, (cnts) => {
-      qIns += cnts.qIns;
-      qDup += cnts.qDup;
-      aIns += cnts.aIns;
-      aDup += cnts.aDup;
-    });
-  }
+  const pairs = pairSections(allSections);
+  const pairsFound = pairs.length;
+  importPairs(store, pairs, context, (cnts) => {
+    qIns += cnts.qIns;
+    qDup += cnts.qDup;
+    aIns += cnts.aIns;
+    aDup += cnts.aDup;
+  });
 
   return {
     edge_dir: edgeDir,
@@ -366,6 +381,11 @@ function importPairs(
     // was status="answered"+best_answer_id=null, which transiently
     // violated the joint-consistency invariant the iter-5 guard now
     // enforces (sqlite-store.ts:enforceQuestionStatusInvariant).
+    // K-imp-3 fix (NL31): use the user-section's source_context if set
+    // (cross-archive pair-aware), falling back to the importEdgeConvo-
+    // level default. Preserves per-source debug breadcrumbs even after
+    // sections from multiple sources are concatenated for pairing.
+    const posedInContext = user.source_context ?? context;
     const q: Question = {
       id: questionId,
       framing: user.body,
@@ -373,7 +393,7 @@ function importPairs(
       best_answer_id: null,
       posed_at: posedAt,
       posed_by: user.agent,
-      posed_in_context: context,
+      posed_in_context: posedInContext,
       depth: 0,
     };
     const inserted = store.tryPutQuestion(q);

@@ -584,6 +584,72 @@ describe("importEdgeConvo — sealed archive walking", () => {
     expect(r2.questions_already_existed).toBe(2);
     expect(r2.answers_already_existed).toBe(2);
   });
+
+  // Regression for keystone's NL5 K-imp-3 finding: importEdgeConvo
+  // walked live CONVO.md + every sealed leaf archive's BODY.md as
+  // SEPARATE sources, calling parseSections + pairSections on each
+  // independently. When the conversation gets archived mid-pair (a
+  // user-turn in arch_N's BODY.md and the matching assistant-response
+  // in arch_N+1's BODY.md or in the live CONVO), pre-fix per-source
+  // pairing left both halves unpaired → the Q/A pair was silently
+  // dropped from the import.
+  //
+  // NL31 fix: collect all sections from all sources into a single
+  // ordered list (archives first in alphabetical/chronological order,
+  // live CONVO last), then call pairSections ONCE on the combined
+  // list. Cross-archive pairs are now recognized correctly.
+  test("K-imp-3: cross-archive Q→A pair (Q in arch_1, A in arch_2) is recognized", () => {
+    writeConvo();  // empty live convo
+    writeArchive("arch_1",
+      section("boss", "user turn", "2026-05-07T08:00:00Z", "What is the cross-archive Q?"),
+    );
+    writeArchive("arch_2",
+      section("orion", "assistant response", "2026-05-07T09:00:00Z", "Cross-archive A.", "boss"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    // Pre-fix: pairs_found=0 (arch_1 sees a single section, arch_2 sees
+    // a single section, neither pairs internally).
+    // Post-fix: pairs_found=1 (combined section list has both sections
+    // adjacent → pairs correctly).
+    expect(result.archives_walked).toBe(2);
+    expect(result.pairs_found).toBe(1);
+    expect(result.questions_inserted).toBe(1);
+    expect(result.answers_inserted).toBe(1);
+  });
+
+  test("K-imp-3: cross-boundary pair (Q in last archive, A in live CONVO) is recognized", () => {
+    writeConvo(
+      section("orion", "assistant response", "2026-05-07T11:00:00Z", "Live A.", "boss"),
+    );
+    writeArchive("arch_1",
+      section("boss", "user turn", "2026-05-07T10:00:00Z", "Last archived Q?"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    // Pre-fix: arch_1 has 1 section (no pair), live has 1 section (no pair).
+    // Post-fix: combined list → arch_1's Q + live's A pair correctly.
+    expect(result.archives_walked).toBe(1);
+    expect(result.pairs_found).toBe(1);
+    expect(result.questions_inserted).toBe(1);
+    expect(result.answers_inserted).toBe(1);
+  });
+
+  test("K-imp-3: same-source paired sections still work (sanity)", () => {
+    // Backwards compat: both halves of the pair in the same archive,
+    // plus another pair in live CONVO. Pre-fix and post-fix both find
+    // 2 pairs.
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T11:00:00Z", "live Q"),
+      section("orion", "assistant response", "2026-05-07T11:00:00Z", "live A", "boss"),
+    );
+    writeArchive("arch_1",
+      section("boss",  "user turn",          "2026-05-07T08:00:00Z", "arc Q"),
+      section("orion", "assistant response", "2026-05-07T08:00:00Z", "arc A", "boss"),
+    );
+    const result = importEdgeConvo(store, edgeDir);
+    expect(result.pairs_found).toBe(2);
+    expect(result.questions_inserted).toBe(2);
+    expect(result.answers_inserted).toBe(2);
+  });
 });
 
 // Regression for keystone's NL5 K-imp-8 finding: Date.parse accepts

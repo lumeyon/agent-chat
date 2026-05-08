@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL30 commit)
+## CURRENT STATE (as of NL31 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -48,7 +48,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **all 5 fixed: L1+L2+L3+L4+L5**)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **4 fixed: C1, C2, C3, C5**; C4 queued — design call)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **all 7 fixed: E6, E3, E1, E2, E7, E4, E5**) — module fully cleared
-- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **7 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7, K-imp-1**; K-imp-3 queued; K-imp-9 added NL12 observation)
+- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **all 8 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4, K-imp-6, K-imp-7, K-imp-1, K-imp-3**) — module fully cleared from original peer findings; K-imp-9 (NL12 observation) still queued
 
 ### Uncovered modules (priority for fresh peer reviews):
 1. `scripts/lattice/stats.ts` — lumeyon or keystone fit
@@ -58,7 +58,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **all 5 fixed: LC1, LC2, LC3, LC4, LC5**) — module fully cleared
 
-### Queued findings (drainable WITHOUT fresh peer call — 2 total):
+### Queued findings (drainable WITHOUT fresh peer call — 1 + 1 design-call):
 
 #### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
@@ -67,9 +67,11 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 #### ephemeral-peer-review.ts (lumeyon NL4) — 0 queued (E3 drained NL14, E1+E2 drained NL21, E7 drained NL24, E4 drained NL28, E5 drained NL30 — module fully cleared)
 
-#### import-from-kg.ts (keystone NL5) — 2 queued (K-imp-5 drained NL13, K-imp-4 drained NL18, K-imp-6 drained NL22, K-imp-7 drained NL25, K-imp-1 drained NL29)
-- **K-imp-3** (importEdgeConvo:231): cross-archive Q→A pair lost when archiving splits.
+#### import-from-kg.ts (keystone NL5) — 1 queued (K-imp-5 drained NL13, K-imp-4 drained NL18, K-imp-6 drained NL22, K-imp-7 drained NL25, K-imp-1 drained NL29, K-imp-3 drained NL31)
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
+
+#### study-turn.ts — 1 queued design-call (orion-authorized via boss-pre-approval queue)
+- **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call → boss-pre-approval queue authorizes orion to make this call.
 
 #### lattice-context.ts (carina NL12) — 0 queued (LC1 drained NL15, LC2 drained NL19, LC4 drained NL23, LC3 drained NL27 — module fully cleared)
 
@@ -85,28 +87,32 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL31 → DRAIN K-imp-3** (importEdgeConvo:231 cross-archive Q→A pair lost when archiving splits).
+**NL32 → DRAIN C4** (study-turn.ts:213 negative cosine asymmetric lift penalty exceeds `-learningRate` — design call, orion-authorized via boss-pre-approval queue).
 
-**Why K-imp-3:**
-- Real correctness bug. importEdgeConvo walks live CONVO.md + every sealed leaf archive's BODY.md as separate sources, calling parseSections + pairSections on each independently. If a Q (user turn) is in archive A and the matching response (assistant turn) is in archive B (or in the live CONVO), the pair is split across sources and pairSections — called per-source — won't pair them. The unpaired sections are dropped silently from the import → lost Q/A pair in the lattice.
-- import-from-kg.ts last touched NL29 (2 iters gap → eligible at NL31).
+**Why C4 + why now:**
+- File-touch rule blocks import-from-kg.ts at NL32 (NL31 just touched it). K-imp-9 (the only other queued finding) is in import-from-kg.ts → INELIGIBLE.
+- Substrate has reached a thinning queue: only K-imp-9 + C4 remain. C4 is design-call so it was queued for boss authorization; the boss-pre-approval queue authorizes orion to make these design decisions. Now is the right time to drain it.
+- study-turn.ts last touched NL20 (12 iters gap → eligible).
 
-**Read first:** `scripts/lattice/import-from-kg.ts` `importEdgeConvo` function (around line 225). Examine the per-source loop and confirm where parseSections + pairSections are called.
+**The bug (carina NL3 C4):** `applyGradeToLift` computes `delta = signal * learningRate` where signal is derived from cosine. For a high-positive cosine (~1.0), delta = +learningRate. For a high-negative cosine (~-1.0), delta = -learningRate * <some-multiplier>. Carina noted the asymmetry — the negative side could swing more than the positive side. Need to verify the exact code path and design the symmetric clamp.
 
-**Fix approach options:**
-- **Option A (concatenate then parse):** collect all sections from all sources into a single ordered list (preserving source-order), then call pairSections ONCE across the full list. Risk: archive ordering must match the natural conversation order (sealed leaves earlier than live CONVO).
-- **Option B (carry orphan sections across sources):** track unpaired tail sections from source N and prepend them to source N+1's sections before pairing.
-- Recommend A — simpler and correctly handles the cross-archive case in one pass.
+**Read first:** `scripts/lattice/study-turn.ts` `applyGradeToLift` function (around line 213). Examine the signal-from-cosine computation and the clamp at the apply step.
+
+**Fix approach (design call):**
+- **Option A (clamp delta magnitude):** after computing delta, clamp `Math.max(-learningRate, Math.min(learningRate, delta))`. Bounded change per study turn regardless of cosine sign.
+- **Option B (clamp signal):** clamp the signal value before multiplying. Same effect, different code position.
+- **Option C (rethink the cosine→signal mapping):** if the asymmetry comes from a non-linear mapping, redesign the mapping to be symmetric.
+- Recommend A — simplest, mechanistically robust, doesn't need a new mapping.
 
 **Test approach (2 regression tests):**
-- Test 1 (failure case): construct an edge dir with a leaf archive containing a user-turn section and a live CONVO containing the matching assistant-response section. Pre-fix: pairSections runs separately on each source; the pair is dropped. Post-fix: cross-source pairing produces 1 Q/A pair.
-- Test 2 (sanity): existing single-source happy-path tests still pass (the simple case where Q + A both live in the same CONVO).
+- Test 1 (failure case): construct a grade with cosine = -1.0 and learningRate = 0.1. Apply to an answer with predictive_lift = 0.5. Pre-fix: lift drops by more than 0.1. Post-fix: lift drops by exactly 0.1 (clamped).
+- Test 2 (sanity): cosine = +1.0 still adds learningRate exactly.
 
-**Sequenced after NL31:**
-- NL32 → K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
-- NL33+ → C4 (design call — orion authorized via boss-pre-approval queue).
-- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
-- **Modules fully cleared (3):** apprenticeship.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7).
+**Sequenced after NL32:**
+- NL33 → K-imp-9 (eligible after NL31 + 2 = NL33).
+- NL34 → fresh peer review on stats.ts (carina, first fresh peer call since NL5 keystone).
+- Eventually: full review-pass complete summary commit if all queued + freshly-discovered findings drained.
+- **Modules fully cleared (3 of 6):** apprenticeship.ts (5/5), lattice-context.ts (5/5), ephemeral-peer-review.ts (7/7). After NL32, study-turn.ts will be 5/5 (C1, C2, C3, C5 already shipped) and import-from-kg.ts will be 8/8 once K-imp-9 ships at NL33.
 
 ## STOPPING CONDITIONS
 
@@ -135,14 +141,15 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL30):**
+- **Cumulative ledger (post-NL31):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 29 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E4, E5, E6, E7, K-imp-1, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
+  - 30 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E4, E5, E6, E7, K-imp-1, K-imp-2, K-imp-3, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
   - 3 schema migrations shipped
-  - 2 queued findings remain (K-imp-3, K-imp-9; plus C4 as design-call)
-  - Fix-rate: 97% (29/30 code) + all 3 schema migrations
-  - **MODULES CLEARED (3 of 6):** apprenticeship.ts (5/5 NL17+NL26), lattice-context.ts (5/5 NL12+NL15+NL19+NL23+NL27), ephemeral-peer-review.ts (7/7 NL4+NL14+NL21+NL24+NL28+NL30).
+  - 1 queued finding remains (K-imp-9 NL12 observation; plus C4 design-call)
+  - Fix-rate: 100% (30/30 of original peer findings; K-imp-9 is a separate NL12 observation)
+  - **MODULES CLEARED (3 of 6):** apprenticeship.ts (5/5 NL17+NL26), lattice-context.ts (5/5 NL12+NL15+NL19+NL23+NL27), ephemeral-peer-review.ts (7/7 NL4+NL14+NL21+NL24+NL28+NL30). import-from-kg.ts ALSO cleared from original peer findings (8/8 keystone NL5) at NL31 — only the post-review NL12 K-imp-9 observation remains.
   - **Markdown-fragility pattern (LC5 = K-imp-2 = K-imp-1):** all three are bugs in CONVO parsing where single-line regex meets multi-line content. LC5 + K-imp-2 (NL5, NL12) were trailing-marker /m strip bugs; K-imp-1 (NL29) was the section-split-not-respecting-fences bug. Future iter: extract a proper line-walking parser as the canonical CONVO reader (the way utf8.ts extracted byte-truncation as a shared primitive at NL24).
+  - **K-imp-3 lesson: aggregate-then-process > per-source-loop when sources can interact.** Pre-fix per-source pairing dropped cross-archive pairs silently. The fix wasn't to make pairSections smarter — it was to give pairSections the COMPLETE input (concatenated sections from all sources) instead of artificially fragmenting it. When a function operates on sequences, fragmenting the input across processing loops can hide cross-fragment relationships.
   - **MODULES CLEARED (2):** apprenticeship.ts (5/5 lumeyon NL1 findings fixed at NL17+NL26), lattice-context.ts (5/5 carina NL12 findings fixed at NL12+NL15+NL19+NL23+NL27).
   - **Input-validation pattern (E6 = LC4 = L5):** substrate APIs that take user/agent-supplied numbers should validate at the API boundary rather than trust slice/encode/comparison to fail gracefully. Three instances of this pattern have now been hardened (capBytes, body_budget_bytes, k). Audit other numeric API parameters for the same pattern.
   - **Counting consistency (LC2 = LC3):** when filters drop hits, the counts (header lengths, top-K claims) and emission (loop body) must agree. LC2 (NL19) handled the exclude_agent-set branch in pushContext; LC3 (NL27) handled the exclude_agent-unset branch in lattice-context.ts. Together they close the count-vs-emission consistency story for cross-domain push.
