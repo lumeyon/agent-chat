@@ -47,19 +47,49 @@ interface ParsedSection {
  *  Sections that don't match the canonical header pattern are skipped
  *  (they're either header banners, archive breadcrumb HTML comments,
  *  embedded code-block headings, or other non-protocol content).
+ *
+ *  K-imp-1 fix (NL29 / keystone NL5 finding): walks lines tracking
+ *  fenced-code state. `## ` lines INSIDE a ```...``` block are NOT
+ *  treated as section starts — they're part of the surrounding section's
+ *  body. Pre-fix the regex split `(?=^## )/m` matched any `## ` line
+ *  regardless of fence context, so peer reviews that quoted sample
+ *  protocol sections (canonical "## agent — desc (UTC ...)" format)
+ *  inside ``` blocks would mis-parse those quoted headers as REAL
+ *  sections, polluting the lattice with spurious Q/A pairs.
  */
 export function parseSections(content: string): ParsedSection[] {
-  // Split on lines that start a `## ` block (matches embedded `## ...` too,
-  // but the regex below filters non-protocol headers).
-  const parts = content.split(/(?=^## )/m).filter((p) => p.trim().startsWith("## "));
+  const lines = content.split("\n");
+  // Pass 1: find section start indices (lines that match `## ` and are
+  // OUTSIDE any fenced code block).
+  const sectionStartLineIdx: number[] = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // ANY line starting with three backticks toggles fence state. Match
+    // language-tagged fences too (```typescript, ```python, ```bash, etc.).
+    if (line.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence && line.startsWith("## ")) {
+      sectionStartLineIdx.push(i);
+    }
+  }
+
+  // Pass 2: extract each section by slicing lines from its start (inclusive)
+  // to the next section's start (exclusive), or end-of-text.
   const out: ParsedSection[] = [];
-  for (const part of parts) {
-    const newlineIdx = part.indexOf("\n");
-    const headerLine = (newlineIdx < 0 ? part : part.slice(0, newlineIdx)).trim();
+  for (let s = 0; s < sectionStartLineIdx.length; s++) {
+    const start = sectionStartLineIdx[s];
+    const end = s + 1 < sectionStartLineIdx.length ? sectionStartLineIdx[s + 1] : lines.length;
+    const headerLine = lines[start].trim();
     const m = SECTION_HEADER_RE.exec(headerLine);
     if (!m) continue;  // not a protocol section header
     const [, agent, description, utc] = m;
-    let body = newlineIdx < 0 ? "" : part.slice(newlineIdx + 1);
+    // Body is everything between the header line (exclusive) and the
+    // next section start (or end-of-text). Joined back as the original
+    // multi-line content; downstream tools rely on body fidelity.
+    let body = lines.slice(start + 1, end).join("\n");
     // Strip trailing `→ <next>` arrow protocol markers and `---` separators
     // in any order. Repeat until stable so chained markers all strip.
     // K-imp-2 fix (NL5 keystone): the prior /m flag made `$` match

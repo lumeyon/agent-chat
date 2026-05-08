@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T15:55Z
+## Current state — 2026-05-08T16:25Z
 
-**Phase: NL28 — drained E4 (ephemeral-peer-review.ts dispatch failure leaves CONVO tail's arrow at "→ peer" while .turn=parked — protocol invariant gap). Pre-fix: orion's request section was appended (CONVO tail "→ <peer>") BEFORE dispatch; if dispatch failed, the catch block parked the edge but left the CONVO tail unchanged — a Monitor reading CONVO would see "the floor was just handed to <peer>" while the wire-state file said parked. Post-fix: added `abortSection` helper + tracked `orionRequestAppended`/`peerResponseAppended` flags; in the catch path when locked AND orion-request-was-appended-but-no-peer-response-yet, append an "ephemeral peer review aborted" section ending with `→ parked` BEFORE the park call. CONVO tail now agrees with `.turn=parked`. Cumulative: 30 REAL findings, 27 code fixes, 3 schema migrations.**
+**Phase: NL29 — drained K-imp-1 (parseSections splits on `## ` regardless of fenced-code state; quoted protocol section headers inside ```...``` blocks mis-parse as spurious sections). Pre-fix: `content.split(/(?=^## )/m)` matched any `## ` line — peer reviews quoting a sample protocol section in a fenced excerpt would inject a fake section into the lattice. Post-fix: rewrote parseSections to walk lines tracking `inFence` state via `line.startsWith("```")` toggle; `## ` lines INSIDE fences are part of the surrounding section's body, not section starts. Cumulative: 30 REAL findings, 28 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,122 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T16:25Z (NL29: queue-drain K-imp-1 — parseSections fenced-code respect; rejects quoted-header mis-parse)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-1 — no fresh peer call. File-touch rule: NL28 touched ephemeral-peer-review.ts; this iter touches import-from-kg.ts (different file → eligible).
+
+**The bug (keystone NL5 K-imp-1):**
+  parseSections split CONVO content on `(?=^## )/m`:
+  ```typescript
+  const parts = content.split(/(?=^## )/m).filter((p) => p.trim().startsWith("## "));
+  ```
+  Any line starting with `## ` was a candidate section start, regardless
+  of whether it appeared inside a fenced code block. The downstream
+  `SECTION_HEADER_RE.exec(headerLine)` filtered out `## sub-heading`-style
+  lines that didn't match the canonical `## <agent> — <desc> (UTC ...)`
+  pattern — so PURE quoted prose with `## something` got dropped silently.
+  But protocol-formatted headers quoted INSIDE a fence (`## carina —
+  sample (UTC 2026-05-07T09:00:00Z)`) would mis-parse as REAL sections,
+  injecting spurious Q/A pairs into the lattice.
+
+  Common path: peer reviews quote sample sections in their bodies to
+  comment on them. As the substrate accumulates more peer-review content
+  (see ephemeral-peer-review's "ephemeral peer review response" sections
+  in CONVO archives), every quoted protocol header would become a fake
+  section in the lattice. Cumulative pollution.
+
+**The fix (walk lines, track fence state):**
+  Rewrote parseSections from a regex split into a two-pass algorithm:
+
+  Pass 1 — find section starts:
+  ```typescript
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (line.startsWith("```")) { inFence = !inFence; continue; }
+    if (!inFence && line.startsWith("## ")) {
+      sectionStartLineIdx.push(i);
+    }
+  }
+  ```
+
+  Pass 2 — slice each section by start indices, parse the header, build
+  the body from the lines between starts, run the existing trailing-
+  marker stripping logic.
+
+  Fence detection toggles on ANY line starting with three backticks
+  (matches both ``` alone AND language-tagged fences like ```typescript /
+  ```python / ```bash). This is the standard markdown convention — most
+  CONVO content with code or quoted protocol uses it.
+
+**Test-first protocol:**
+  3 regression tests in import-from-kg.test.ts (parseSections describe block):
+    - **K-imp-1-a (failure case, plain ```):** orion's peer-review section
+      contains a fenced quote of `## carina — sample section (UTC ...)`
+      surrounded by ``` ... ```. Pre-fix returns 2 sections (orion +
+      spurious carina). Post-fix returns 1 (orion only); the carina
+      line is preserved in orion's body. **Verified FAILING pre-fix**
+      (Expected: 1, Received: 2).
+    - **K-imp-1-b (failure case, ```typescript):** language-tagged fence
+      variant. Same mis-parse pre-fix. **Verified FAILING pre-fix.**
+    - **K-imp-1-c (sanity / backwards compat):** non-fenced multi-section
+      CONVO with two real sections still parses both correctly.
+
+**Why this matters:** parseSections is the foundational ingest primitive
+for the lattice — every section it returns becomes a Q/A pair via
+pairSections + recordAnswer. False positives here propagate downstream
+as fake questions and fake answers, polluting the substrate's training
+data. The bug bites more often as the substrate accumulates more
+peer-review content (which routinely quotes protocol-formatted text
+inside fences).
+
+**Same-source bug pattern (LC5 = K-imp-2 = K-imp-1):** all three are
+markdown-fragility bugs in CONVO parsing. LC5 + K-imp-2 (NL5, NL12)
+were the trailing-marker /m regex strip; K-imp-1 is the `## ` split
+regex. Together they show the cost of doing markdown parsing with
+single-line regex on multi-line content. A future iter could extract a
+proper line-walking parser as the canonical CONVO reader (the way utf8.ts
+extracted byte-truncation as a shared primitive at NL24).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (training-data-shaped artifacts) — the lattice now
+    rejects fake sections from quoted protocol fragments. Imported Q/A
+    pairs are guaranteed to come from real protocol turns, not from
+    peer reviews quoting sample protocol shape.
+  - ✅ Substrate ingest correctness — parseSections is the choke point
+    for every CONVO → lattice import; correctness here scales to every
+    edge in every topology.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 162 → 165 (+3 K-imp-1); plugin 541 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (rewrote parseSections with line-walking + fence-state tracking; preserved existing header-pattern + trailing-marker stripping logic)
+  - scripts/lattice/import-from-kg.test.ts (3 K-imp-1 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-1 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL30 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL30):** File-touch rule blocks import-from-kg.ts immediately again. Eligible:
+- E5 (ephemeral-peer-review.ts last touched NL28 — eligible after 2-iter gap at NL30)
+- K-imp-3, K-imp-9 (import-from-kg.ts last touched NL29 — INELIGIBLE)
+
+**Recommend NL30 → DRAIN E5** (ephemeral-peer-review.ts:143 importer path repo-layout-dependent — silent null in packaged plugin layout).
+
+Reasons:
+- Real portability bug. `importEdgeIntoLattice` resolves the importer path via `path.resolve(SKILL_ROOT, "../../scripts/lattice/import-from-kg.ts")`. This works in the dev repo layout (where SKILL_ROOT is `plugins/agent-chat/` and scripts/lattice/ is two levels up at the repo root). In a PACKAGED plugin layout (e.g., distributed via npm or a similar package, where `scripts/lattice/` isn't at the same relative location), the path resolves to a non-existent file; `fs.existsSync(importerPath)` returns false; the import step is silently skipped. No error, no log of the path that was tried — just "import didn't run".
+- ephemeral-peer-review.ts last touched NL28 (2 iters gap → eligible at NL30).
+- Self-contained-ish: detect when the importer is missing AND log clearly which path was tried; OR support a configurable importer path via env var; OR fail more loudly if ephemeral-peer-review is invoked in a layout where the importer can't be found.
+
+**Sequenced after NL30:**
+- NL31 → K-imp-3 (cross-archive Q→A pair lost when archiving splits) OR K-imp-9 (pairSections over-eagerly splits bulleted peer-review responses).
+- NL32 → C4 (design call — orion authorized via boss-pre-approval queue).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
+- **Modules fully cleared:** apprenticeship.ts (5/5), lattice-context.ts (5/5). After NL30, ephemeral-peer-review.ts will be 7/7 if E5 ships at NL30.
 
 ### 2026-05-08T15:55Z (NL28: queue-drain E4 — dispatch failure leaves CONVO arrow vs .turn protocol invariant violation)
 

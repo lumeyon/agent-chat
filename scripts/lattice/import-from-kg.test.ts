@@ -176,6 +176,98 @@ describe("parseSections — header pattern", () => {
     // trailing alike.)
     expect(sections[0].body).toContain("---");
   });
+
+  // Regression for keystone's NL5 K-imp-1 finding: parseSections splits
+  // on `(?=^## )` regardless of fenced-code state. When a section's
+  // body contains a fenced code block (```...```) that quotes ANOTHER
+  // protocol section header verbatim (canonical agent-chat format with
+  // `(UTC ...)` and all), pre-fix would mis-parse the fenced quote as
+  // a real section — producing spurious questions/answers from quoted
+  // content. Common path: peer-review responses that quote sample
+  // sections to comment on them.
+  //
+  // NL29 fix: parseSections walks lines and tracks fenced-code state;
+  // `## ` lines INSIDE ``` blocks are NOT treated as section starts.
+  test("K-imp-1: section header inside fenced code block does NOT split into a spurious section", () => {
+    const text = [
+      "# CONVO header",
+      "",
+      "## orion — peer review response (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "The original section the peer was quoting:",
+      "",
+      "```",
+      "## carina — sample section (UTC 2026-05-07T09:00:00Z)",
+      "",
+      "Sample body content.",
+      "",
+      "→ parked",
+      "```",
+      "",
+      "My comments on the above are: ...",
+      "",
+      "→ parked",
+      "",
+    ].join("\n");
+    const sections = parseSections(text);
+    // Pre-fix: 2 sections (orion + spurious carina from inside the fence).
+    // Post-fix: 1 section (orion only); the carina line is part of orion's
+    // body content (preserved verbatim for the peer review's audit trail).
+    expect(sections.length).toBe(1);
+    expect(sections[0].agent).toBe("orion");
+    expect(sections[0].description).toBe("peer review response");
+    // The fenced `## carina` quote MUST be preserved in orion's body —
+    // splitting it out would lose the peer review's quoted excerpt.
+    expect(sections[0].body).toContain("## carina");
+    expect(sections[0].body).toContain("Sample body content");
+  });
+
+  test("K-imp-1: typescript-fenced section header also recognized as fenced (not just ``` alone)", () => {
+    // Common path: peer reviews include code samples with language tags
+    // (```typescript, ```python, ```bash). The fence-state tracker must
+    // toggle on any line starting with ``` regardless of the language tag.
+    const text = [
+      "## orion — peer review response (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "The protocol shape looks like:",
+      "",
+      "```typescript",
+      "## carina — example (UTC 2026-05-07T09:00:00Z)",
+      "// commentary",
+      "```",
+      "",
+      "→ parked",
+      "",
+    ].join("\n");
+    const sections = parseSections(text);
+    expect(sections.length).toBe(1);
+    expect(sections[0].agent).toBe("orion");
+  });
+
+  test("K-imp-1: real `## name — desc (UTC ...)` OUTSIDE a fence still parses as a section header (sanity)", () => {
+    // The fix must NOT break the legitimate case where multiple real
+    // sections appear in CONVO.md without any fences.
+    const text = [
+      "## boss — user turn (UTC 2026-05-07T10:00:00Z)",
+      "",
+      "Question.",
+      "",
+      "→ orion",
+      "",
+      "---",
+      "",
+      "## orion — assistant response (UTC 2026-05-07T10:01:00Z)",
+      "",
+      "Answer.",
+      "",
+      "→ boss",
+      "",
+    ].join("\n");
+    const sections = parseSections(text);
+    expect(sections.length).toBe(2);
+    expect(sections[0].agent).toBe("boss");
+    expect(sections[1].agent).toBe("orion");
+  });
 });
 
 describe("pairSections — Q/A pairing", () => {
