@@ -1,5 +1,12 @@
 # Stateful peer-driven audit loop
 
+> **STOPPED at NL33 by boss request (2026-05-08).** Substrate finding
+> queue is fully drained: 30/30 original peer findings fixed, 1/1
+> post-review observation resolved (K-imp-9), 1/1 design-call drained
+> (C4), 3 schema migrations shipped. The original 6-module peer-review
+> surface is exhausted. To resume: edit this file's STOPPING line OR
+> invoke `/loop` with a fresh instruction.
+
 Each iter: read this file → execute the next iter → update this file with state for the iter after.
 The substrate is built; this loop's job is to find real bugs and ship narrow fixes one at a time.
 
