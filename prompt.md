@@ -40,11 +40,11 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL8 commit)
+## CURRENT STATE (as of NL9 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
-- `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, 2 fixed; K2 in pre-approval queue)
+- `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 closed at code level**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 SQL-level migration is the one remaining pre-approval item)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, 3 fixed: L1+L2+L4; L3, L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **2 fixed: C1, C3**; C2, C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, E6 fixed; E1-E5 + E7 queued)
@@ -86,8 +86,8 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
 - ~~iter-3 SQL `explanation TEXT NOT NULL`~~ — **SHIPPED NL7**
-- iter-6 K1 schema FK constraint on `best_answer_id` — pending NL9 (or later); same migration pattern as NL7
-- iter-6 K2 schema CHECK `quality_tier IN (1,2,3,4,5)` — pending NL10 (or later); same pattern
+- ~~iter-6 K1 schema FK constraint on `best_answer_id`~~ — **SHIPPED NL9**
+- iter-6 K2 schema CHECK `quality_tier IN (1,2,3,4,5)` — pending NL11 (NL10 must skip sqlite-store.ts per file-touch rule); same migration pattern (v3→v4)
 - iter-1 petersen routing-table mismatch (vanguard not direct neighbor — adjust agents.petersen.yaml or accept lumeyon-as-substitute pattern; consider mid-cycle)
 - 3 lattice depth=1 questions from iter-13:
   - Should putQuestion forbid status="answered"/"closed" entirely?
@@ -96,7 +96,26 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL9 → SQL migration v2→v3: K1 best_answer_id FK constraint** (sqlite-store.ts).
+**NL10 → DRAIN K-imp-8** (import-from-kg.ts:274 Date.parse non-UTC validation).
+
+**Why K-imp-8:**
+- File-touch rule: NL9 just touched sqlite-store.ts → K2 schema migration ineligible this iter; defer to NL11.
+- import-from-kg.ts last touched NL5 (4 iters gap) — eligible.
+- K-imp-8 is small: validate timestamp parses as the strict UTC `...Z` format; reject non-UTC strings.
+- Closes a real silent-data-drift bug (Date.parse accepts loose formats and may shift `posed_at`/`created_at` if the upstream CONVO.md ever has malformed UTC headers).
+
+**Test approach:**
+- Pass a CONVO.md section with a non-strict UTC timestamp (e.g., `2026-05-08T10:00:00+0000` or `2026-05-08 10:00:00`) — Date.parse accepts these, current code uses the parsed ms.
+- Pre-fix: timestamp shifts silently (or accepted with wrong tz interpretation).
+- Post-fix: validate the string matches `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z` before Date.parse; on mismatch, throw or skip the pair (counted in skippedMalformedTimestamps).
+
+**Sequenced after NL10:**
+- NL11 → K2 schema migration v3→v4 (CHECK quality_tier IN (1,2,3,4,5)). Last pre-approved schema migration.
+- NL12+ → continue draining queued findings (still 17 remaining: L3, L5, C2, C4, C5, E1-E5+E7, K-imp-1, 3-7); or fresh peer review on lattice-context.ts (cycle returns to carina).
+
+**Old NL9 plan (kept for reference, now superseded by SHIPPED NL9):**
+
+  ~~SQL migration v2→v3: K1 best_answer_id FK constraint~~ — done.
 
 **Why K1 next:**
 - Boss pre-approved (high priority).
@@ -150,12 +169,12 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger:**
+- **Cumulative ledger (post-NL9):**
   - 25 REAL findings discovered across 5 peer reviews
-  - 8 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, iter-3 #2 closed end-to-end NL7)
-  - 1 schema migration shipped (NL7: v1→v2 explanation NOT NULL)
-  - 18 queued findings + 3 pre-approval queue items remain (was 19+4 pre-NL8)
-  - Fix-rate: 32% (8/25). Trending up as queue-drain iters continue.
+  - 8 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, iter-3 #2)
+  - 2 schema migrations shipped (NL7: v1→v2 explanation NOT NULL; NL9: v2→v3 best_answer_id FK)
+  - 17 queued findings + 2 pre-approval queue items remain (K2 + petersen routing)
+  - Fix-rate: 32% (8/25 code + 2 schema migrations / 25). Trending up.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 

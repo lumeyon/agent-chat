@@ -29,7 +29,7 @@ import type {
   QuestionStatus,
 } from "./types.ts";
 
-const SCHEMA_VERSION = 2;  // v2 (NL7): explanation TEXT NOT NULL on answers
+const SCHEMA_VERSION = 3;  // v3 (NL9): questions.best_answer_id REFERENCES answers(id) — FK constraint
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS questions (
   id                TEXT PRIMARY KEY,
   framing           TEXT NOT NULL,
   status            TEXT NOT NULL CHECK(status IN ('open','answered','closed','reopened')),
-  best_answer_id    TEXT,
+  best_answer_id    TEXT REFERENCES answers(id) ON DELETE NO ACTION,
   posed_at          INTEGER NOT NULL,
   posed_by          TEXT NOT NULL,
   posed_in_context  TEXT,
@@ -103,7 +103,12 @@ function ensureSchema(db: Database): void {
   db.exec(SCHEMA_SQL);
   // Run any pending migrations on existing databases. New DBs get the
   // current schema directly from CREATE TABLE; the migrations are no-ops.
+  // IMPORTANT: migrations run BEFORE PRAGMA foreign_keys = ON because
+  // table-rebuild patterns (DROP + CREATE) can't run cleanly with FK
+  // enforcement on. Migrations themselves disable+restore FK explicitly
+  // for paranoid safety.
   migrateV1toV2(db);
+  migrateV2toV3(db);
   // Record schema version for future migrations.
   db.run(
     `INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)`,
@@ -183,6 +188,92 @@ function migrateV1toV2(db: Database): void {
     try { db.exec("ROLLBACK"); } catch {}
     throw e;
   }
+}
+
+/** Migration v2 → v3 (NL9): add FK constraint
+ *  `questions.best_answer_id REFERENCES answers(id) ON DELETE NO ACTION`.
+ *  Iter-7 K1 added a runtime guard at setQuestionStatus that prevents new
+ *  writes from creating bad pointers; v3 enforces the same invariant at
+ *  the SQL level (defense in depth — even raw-SQL bypassers get blocked).
+ *
+ *  ON DELETE NO ACTION (the SQLite default) means: deleting an answer
+ *  that's a question's best_answer is REFUSED. Callers must NULL the
+ *  best_answer_id first (or change the question status), which preserves
+ *  the iter-5 joint-consistency invariant. CASCADE/SET NULL would either
+ *  destroy data or violate the invariant.
+ *
+ *  Idempotency: detected via PRAGMA foreign_key_list. No-op if already
+ *  migrated.
+ *
+ *  Safety: pre-flight orphan audit. If any questions have a non-null
+ *  best_answer_id pointing at a non-existent answer, the migration
+ *  refuses (don't propagate corrupt data to the new schema). */
+function migrateV2toV3(db: Database): void {
+  const fkList = db
+    .query<{ from: string; table: string }, []>(`PRAGMA foreign_key_list(questions)`)
+    .all();
+  const hasBestAnswerFk = fkList.some(
+    (fk) => fk.from === "best_answer_id" && fk.table === "answers",
+  );
+  if (hasBestAnswerFk) return;  // already migrated
+
+  const orphansRow = db
+    .query<{ c: number }, []>(`
+      SELECT COUNT(*) as c FROM questions
+      WHERE best_answer_id IS NOT NULL
+        AND best_answer_id NOT IN (SELECT id FROM answers)
+    `)
+    .get();
+  const orphans = (orphansRow as { c: number }).c;
+  if (orphans > 0) {
+    throw new Error(
+      `migrateV2toV3 aborted: ${orphans} question row(s) have best_answer_id ` +
+      `pointing at non-existent answers. Iter-7's runtime guard prevents new ` +
+      `writes from creating these — investigate the data source. NULL or fix ` +
+      `the orphans before re-running.`,
+    );
+  }
+
+  // Disable FK enforcement for the rebuild (DROP TABLE questions would
+  // fail with question_parents.parent_question_id and child_question_id
+  // FKs in flight; same protection as v1→v2 path which relied on the
+  // default-OFF state).
+  const fkOnRow = db.query<{ foreign_keys: number }, []>(`PRAGMA foreign_keys`).get();
+  const fkWasOn = (fkOnRow as { foreign_keys: number }).foreign_keys === 1;
+  if (fkWasOn) db.exec("PRAGMA foreign_keys = OFF");
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(`
+      CREATE TABLE questions_new (
+        id                TEXT PRIMARY KEY,
+        framing           TEXT NOT NULL,
+        status            TEXT NOT NULL CHECK(status IN ('open','answered','closed','reopened')),
+        best_answer_id    TEXT REFERENCES answers(id) ON DELETE NO ACTION,
+        posed_at          INTEGER NOT NULL,
+        posed_by          TEXT NOT NULL,
+        posed_in_context  TEXT,
+        depth             INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    db.exec(`
+      INSERT INTO questions_new (id, framing, status, best_answer_id, posed_at, posed_by, posed_in_context, depth)
+      SELECT id, framing, status, best_answer_id, posed_at, posed_by, posed_in_context, depth FROM questions
+    `);
+    db.exec(`DROP TABLE questions`);
+    db.exec(`ALTER TABLE questions_new RENAME TO questions`);
+    // Recreate indexes that were attached to the old questions table.
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_q_status   ON questions(status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_q_posed_at ON questions(posed_at)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_q_posed_by ON questions(posed_by)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_q_depth    ON questions(depth)`);
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    if (fkWasOn) db.exec("PRAGMA foreign_keys = ON");
+    throw e;
+  }
+  if (fkWasOn) db.exec("PRAGMA foreign_keys = ON");
 }
 
 /** Compute a deterministic answer id from its content fields. */

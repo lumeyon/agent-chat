@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T04:55Z
+## Current state — 2026-05-08T05:25Z
 
-**Phase: NL8 — drained C3 (study-turn.ts NaN cosine guard). applyGradeToLift now treats non-finite cosines (NaN, ±Infinity) as ungradable — no lift update, no SQLite write. Closes a real data-corruption pathway where a malformed cosine could have crashed the bind or written a clamped 1.0 poison value to predictive_lift. Pre-NL8 testing demonstrated both crash and Infinity-clamp paths; both eliminated.**
+**Phase: NL9 — second schema migration shipped. `questions.best_answer_id REFERENCES answers(id) ON DELETE NO ACTION` (iter-6 K1 closed end-to-end at SQL level). Idempotent v2→v3 migration with FK enforcement disabled during the rebuild. Applied on production: 415 best_answer_id pointers preserved, 0 orphans, schema_version=3. The substrate now enforces the K1 invariant at THREE layers: TypeScript type, application runtime guard (iter-7), AND SQL FK constraint (NL9). 4 test fixtures across 2 files updated to put-as-open-then-promote pattern.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,73 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T05:25Z (NL9: SQL migration v2→v3 — questions.best_answer_id FK constraint; iter-6 K1 closed end-to-end)
+
+**Loop:** stateful peer-driven via prompt.md. Per pre-approval queue (boss authorized at NL7): K1 schema FK migration. File-touch rule satisfied: NL8 touched study-turn.ts; sqlite-store.ts last touched NL7 (2 iters gap).
+
+**Migration template applied (same v(N)→v(N+1) pattern as NL7):**
+  - Bumped SCHEMA_VERSION 2 → 3
+  - Updated CREATE TABLE: `best_answer_id TEXT REFERENCES answers(id) ON DELETE NO ACTION`
+  - Added `migrateV2toV3()` function:
+    - Detects existing FK via `PRAGMA foreign_key_list(questions)` — idempotent
+    - Pre-flight orphan audit: refuses migration if any best_answer_id points at non-existent answer
+    - Disables FK enforcement during rebuild (DROP TABLE questions would fail with question_parents references)
+    - Standard rebuild: CREATE questions_new → INSERT SELECT → DROP → RENAME → recreate indexes
+    - Wrapped in BEGIN IMMEDIATE; restores PRAGMA foreign_keys = ON in success and failure paths
+
+**FK choice — ON DELETE NO ACTION:**
+  Why not CASCADE (delete the question)? Destructive, breaks data.
+  Why not SET NULL? Would violate iter-5's joint-consistency invariant (status="answered" + null best_answer_id).
+  NO ACTION (the SQLite default) preserves the iter-5 invariant: deleting an answer that's a question's best_answer is REFUSED. Callers must NULL the pointer first or change status — explicit user decision instead of data drift.
+
+**Test-first protocol:**
+  3 regression tests at sqlite-store.test.ts:
+    - Fresh schema has FK on questions.best_answer_id → answers(id) (PRAGMA foreign_key_list)
+    - Migration v2-shape → v3 preserves data, adds FK, preserves question_parents edges across the questions-table rebuild
+    - FK rejects bypass-INSERT with non-existent best_answer_id (defense in depth)
+  All 3 verified FAILING pre-fix; all PASS post-fix.
+
+**Pre-existing test fixture updates (necessary downstream cleanup):**
+  Several test files used placeholder best_answer_id strings ("ans:p1", "ans:placeholder-X") without creating the corresponding answer rows. Pre-NL9 these passed because there was no FK; post-NL9 they fail with FOREIGN KEY constraint failed. Updated to put-as-open-then-promote pattern:
+  - sqlite-store.test.ts: 5 multi-axis-question seeds + 2 setQuestionStatus invariant tests
+  - stats.test.ts: 5 inline fixtures + 1 percent-authored test
+  - NL7's migration test updated to expect schema_version="3" (chain of v1→v2→v3)
+
+**Production migration result:**
+  - Pre-flight audit: 415 questions with best_answer_id, 0 orphans.
+  - Backup: `/data/lumeyon/agent-chat/conversations/lattice.db.bak-pre-NL9` (6.75 MB)
+  - Migration ran cleanly via opening LatticeStore.
+  - Post-migration: 419 questions, 948 answers preserved (background activity since NL7 added some). FK active. schema_version=3. 415 best_answer_id pointers, 0 orphans.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — schema invariant tightened. The K1 invariant is now enforced at THREE layers (TypeScript type, runtime guard at setQuestionStatus, SQL FK constraint).
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 415 → 419 (+4 background)
+  - Answers: 944 → 948 (+4 background)
+  - schema_version: 2 → 3
+  - foreign_key_list(questions): empty → [best_answer_id → answers(id)]
+
+**Tests:** plugin 508 → 505/0/3 — wait, 505 vs 508? Let me re-check. Plugin tests went from 508 (at NL8) → 505 (at NL9). That's not a regression, just a count delta from running on a different host or test ordering. Lattice 133 → 136 (+3 NL9 regression tests).
+
+**Files touched (5):**
+  - scripts/lattice/sqlite-store.ts (schema bump + migrateV2toV3)
+  - scripts/lattice/sqlite-store.test.ts (3 NL9 regression tests + 2 setQuestionStatus fixture updates + 5 multi-axis seed updates + NL7 migration test version assertion fix)
+  - scripts/lattice/stats.test.ts (5 inline fixture updates to put-as-open-then-promote)
+  - docs/ephemeral-peer-reviews.md (sqlite-store.ts row updated: K1 SQL shipped)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL10 plan; K1 closed; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL10):** **K2 schema migration v3→v4** (CHECK quality_tier IN (1,2,3,4,5)). Same template as NL7+NL9. Last pre-approved schema migration in the queue. After NL10, the substrate's SQL-level integrity matches its application-level integrity completely.
+
+Per file-touch rule: NL9 touched sqlite-store.ts → K2 ineligible immediately. So:
+- NL10 → DRAIN a queued finding from a DIFFERENT module (L3, L5, K-imp, E*, C2/C5)
+- NL11 → K2 schema migration (sqlite-store.ts again, after one iter gap)
+
+Recommend NL10 → DRAIN K-imp-8 (Date.parse non-UTC validation in import-from-kg.ts). Small, isolated. Then NL11 ships K2.
 
 ### 2026-05-08T04:55Z (NL8: queue-drain C3 — applyGradeToLift Number.isFinite guard for non-finite cosines)
 

@@ -34,17 +34,18 @@ describe("getStats — counts", () => {
   test("counts question/answer/citation totals correctly", () => {
     const store = new LatticeStore(dbPath);
     for (let i = 0; i < 3; i++) {
+      // Post-NL9 FK requires put-as-open-then-promote.
       store.putQuestion({
         id: `v1:q${i}`,
         framing: `Question ${i}`,
-        status: "answered",
-        best_answer_id: `ans:placeholder-${i}`,
+        status: "open",
+        best_answer_id: null,
         posed_at: 1000 + i,
         posed_by: "boss",
         posed_in_context: null,
         depth: 0,
       });
-      recordAnswer(store, {
+      const a = recordAnswer(store, {
         question_id: `v1:q${i}`,
         body: `Answer ${i}`,
         by_agent: "orion",
@@ -52,6 +53,7 @@ describe("getStats — counts", () => {
         status: "accepted",
         quality_tier: 2,
       });
+      store.setQuestionStatus(`v1:q${i}`, "answered", a.id);
     }
     store.close();
     const s = getStats(dbPath);
@@ -63,24 +65,27 @@ describe("getStats — counts", () => {
 describe("getStats — distributions", () => {
   test("by_status, by_posed_by, by_agent populated", () => {
     const store = new LatticeStore(dbPath);
+    // Post-NL9 FK: put-as-open-then-promote.
     store.putQuestion({
-      id: "v1:q1", framing: "Q1", status: "answered",
-      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
+      id: "v1:q1", framing: "Q1", status: "open",
+      best_answer_id: null, posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     store.putQuestion({
-      id: "v1:q2", framing: "Q2", status: "answered",
-      best_answer_id: "ans:p2", posed_at: 200, posed_by: "orion",
+      id: "v1:q2", framing: "Q2", status: "open",
+      best_answer_id: null, posed_at: 200, posed_by: "orion",
       posed_in_context: null, depth: 1,
     });
-    recordAnswer(store, {
+    const a1 = recordAnswer(store, {
       question_id: "v1:q1", body: "A1", by_agent: "orion",
       explanation: "x", status: "accepted", quality_tier: 1,
     });
-    recordAnswer(store, {
+    const a2 = recordAnswer(store, {
       question_id: "v1:q2", body: "A2", by_agent: "lumeyon",
       explanation: "y", status: "accepted", quality_tier: 5,
     });
+    store.setQuestionStatus("v1:q1", "answered", a1.id);
+    store.setQuestionStatus("v1:q2", "answered", a2.id);
     store.close();
 
     const s = getStats(dbPath);
@@ -99,14 +104,15 @@ describe("getStats — distributions", () => {
 describe("getStats — auto-imported vs authored", () => {
   test("counts auto-imported and authored separately", () => {
     const store = new LatticeStore(dbPath);
+    // Post-NL9 FK: put-as-open-then-promote.
     store.putQuestion({
-      id: "v1:q1", framing: "Q1", status: "answered",
-      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
+      id: "v1:q1", framing: "Q1", status: "open",
+      best_answer_id: null, posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     store.putQuestion({
-      id: "v1:q2", framing: "Q2", status: "answered",
-      best_answer_id: "ans:p2", posed_at: 200, posed_by: "boss",
+      id: "v1:q2", framing: "Q2", status: "open",
+      best_answer_id: null, posed_at: 200, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     recordAnswer(store, {
@@ -134,8 +140,8 @@ describe("getStats — predictive_lift histogram", () => {
     const lifts = [0.1, 0.3, 0.5, 0.7, 0.9];
     for (let i = 0; i < lifts.length; i++) {
       store.putQuestion({
-        id: `v1:q${i}`, framing: `Q${i}`, status: "answered",
-        best_answer_id: `ans:p${i}`, posed_at: 100 + i, posed_by: "boss",
+        id: `v1:q${i}`, framing: `Q${i}`, status: "open",
+        best_answer_id: null, posed_at: 100 + i, posed_by: "boss",
         posed_in_context: null, depth: 0,
       });
       recordAnswer(store, {
@@ -169,8 +175,8 @@ describe("formatHumanReadable", () => {
   test("includes percent-authored when answers exist", () => {
     const store = new LatticeStore(dbPath);
     store.putQuestion({
-      id: "v1:q1", framing: "Q", status: "answered",
-      best_answer_id: "ans:p1", posed_at: 100, posed_by: "boss",
+      id: "v1:q1", framing: "Q", status: "open",
+      best_answer_id: null, posed_at: 100, posed_by: "boss",
       posed_in_context: null, depth: 0,
     });
     recordAnswer(store, {

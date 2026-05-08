@@ -85,14 +85,21 @@ describe("LatticeStore — Question CRUD", () => {
 describe("LatticeStore — multi-axis question query", () => {
   beforeEach(() => {
     // Seed a varied set of questions for filtering tests.
-    const seeds: Question[] = [
-      makeQuestion({ id: "v1:q1", posed_at: 100, posed_by: "boss",  status: "open",     depth: 0 }),
-      makeQuestion({ id: "v1:q2", posed_at: 200, posed_by: "boss",  status: "answered", depth: 1, best_answer_id: "ans:q2-best" }),
-      makeQuestion({ id: "v1:q3", posed_at: 300, posed_by: "orion", status: "answered", depth: 2, best_answer_id: "ans:q3-best" }),
-      makeQuestion({ id: "v1:q4", posed_at: 400, posed_by: "orion", status: "closed",   depth: 0, best_answer_id: "ans:q4-best" }),
-      makeQuestion({ id: "v1:q5", posed_at: 500, posed_by: "john",  status: "reopened", depth: 1 }),
-    ];
-    for (const q of seeds) store.putQuestion(q);
+    // Post-NL9 schema has FK on best_answer_id → answers(id), so we must
+    // create the answers first, then put the question with the FK-valid
+    // best_answer_id pointer. (Pre-NL9 used placeholder strings.)
+    // For "answered"/"closed" seeds: putQuestion with status="open" first,
+    // then putAnswer, then setQuestionStatus to promote.
+    const promoteToAnswered = (qid: string, posedBy: string, posedAt: number, depth: number, status: "answered" | "closed", aid: string) => {
+      store.putQuestion(makeQuestion({ id: qid, posed_at: posedAt, posed_by: posedBy, status: "open", depth, best_answer_id: null }));
+      store.putAnswer(makeAnswer({ id: aid, question_id: qid, status: "accepted" }));
+      store.setQuestionStatus(qid, status, aid);
+    };
+    store.putQuestion(makeQuestion({ id: "v1:q1", posed_at: 100, posed_by: "boss",  status: "open",     depth: 0 }));
+    promoteToAnswered("v1:q2", "boss",  200, 1, "answered", "ans:q2-best");
+    promoteToAnswered("v1:q3", "orion", 300, 2, "answered", "ans:q3-best");
+    promoteToAnswered("v1:q4", "orion", 400, 0, "closed",   "ans:q4-best");
+    store.putQuestion(makeQuestion({ id: "v1:q5", posed_at: 500, posed_by: "john",  status: "reopened", depth: 1 }));
   });
 
   test("filter by status (single)", () => {
@@ -398,18 +405,23 @@ describe("LatticeStore — stats and constraints", () => {
   });
 
   test("setQuestionStatus rejects open status with non-null best_answer_id", () => {
-    store.putQuestion(makeQuestion({ status: "answered", best_answer_id: "ans:x" }));
-    store.putAnswer(makeAnswer({ id: "ans:x" }));
+    // Post-NL9 FK requires answer to exist first; put-as-open-then-promote.
+    const q = makeQuestion();
+    store.putQuestion(q);
+    store.putAnswer(makeAnswer({ id: "ans:x", status: "accepted" }));
+    store.setQuestionStatus(q.id, "answered", "ans:x");
     expect(() =>
-      store.setQuestionStatus(makeQuestion().id, "open", "ans:x"),
+      store.setQuestionStatus(q.id, "open", "ans:x"),
     ).toThrow(/best_answer_id|status/i);
   });
 
   test("setQuestionStatus rejects answered status with null best_answer_id", () => {
-    store.putQuestion(makeQuestion({ status: "answered", best_answer_id: "ans:x" }));
-    store.putAnswer(makeAnswer({ id: "ans:x" }));
+    const q = makeQuestion();
+    store.putQuestion(q);
+    store.putAnswer(makeAnswer({ id: "ans:x", status: "accepted" }));
+    store.setQuestionStatus(q.id, "answered", "ans:x");
     expect(() =>
-      store.setQuestionStatus(makeQuestion().id, "answered", null),
+      store.setQuestionStatus(q.id, "answered", null),
     ).toThrow(/best_answer_id|status/i);
   });
 
@@ -620,11 +632,13 @@ describe("schema migration: explanation NOT NULL (iter-3 / NL7)", () => {
         expect(a!.explanation).toBe("real explanation");
         expect(a!.by_agent).toBe("orion");
 
-        // Schema version bumped to 2.
+        // Schema version is at the current head (3 after NL9). The v1→v2
+        // migration runs first and tightens explanation; v2→v3 runs next
+        // and adds the FK. The chain is intentional and idempotent.
         const ver = (migrated as any).db
           .query(`SELECT value FROM schema_meta WHERE key = ?`)
           .get("schema_version") as { value: string } | null;
-        expect(ver?.value).toBe("2");
+        expect(ver?.value).toBe("3");
       } finally {
         migrated.close();
       }
@@ -649,6 +663,149 @@ describe("schema migration: explanation NOT NULL (iter-3 / NL7)", () => {
           ["ans:bypass", "v1:q-bypass", "body", null, "orion", "accepted", 5, 1],
         );
       }).toThrow(/NOT NULL/i);
+    } finally {
+      fresh.close();
+    }
+  });
+});
+
+// NL9: schema migration v2→v3 — questions.best_answer_id REFERENCES
+// answers(id). Iter-7's K1 runtime guard at setQuestionStatus prevents
+// new writes from creating bad pointers; v3 enforces the same invariant
+// at the SQL level (defense in depth).
+describe("schema migration v2→v3: best_answer_id FK (iter-6 K1 / NL9)", () => {
+  test("fresh schema has FK on questions.best_answer_id → answers(id)", () => {
+    const fresh = new LatticeStore(":memory:");
+    try {
+      const fkList = (fresh as any).db
+        .query(`PRAGMA foreign_key_list(questions)`)
+        .all() as Array<{ from: string; table: string; to: string }>;
+      const bestAnswerFk = fkList.find(
+        (fk) => fk.from === "best_answer_id" && fk.table === "answers",
+      );
+      expect(bestAnswerFk).toBeDefined();
+      expect(bestAnswerFk!.to).toBe("id");
+    } finally {
+      fresh.close();
+    }
+  });
+
+  test("migration v2→v3 preserves data and adds the FK", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const { Database } = require("bun:sqlite");
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lattice-v2v3-"));
+    const dbFile = path.join(tmp, "v2.db");
+    try {
+      // Build a v2-shape DB (post-NL7 NOT NULL but pre-NL9 no FK).
+      const oldDb = new Database(dbFile);
+      oldDb.exec(`
+        CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO schema_meta VALUES ('schema_version', '2');
+        CREATE TABLE questions (
+          id TEXT PRIMARY KEY,
+          framing TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('open','answered','closed','reopened')),
+          best_answer_id TEXT,
+          posed_at INTEGER NOT NULL,
+          posed_by TEXT NOT NULL,
+          posed_in_context TEXT,
+          depth INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE answers (
+          id TEXT PRIMARY KEY,
+          question_id TEXT NOT NULL,
+          body TEXT NOT NULL,
+          explanation TEXT NOT NULL,
+          by_agent TEXT NOT NULL,
+          predictive_lift REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
+          quality_tier INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5),
+          created_at INTEGER NOT NULL,
+          validator_id TEXT,
+          FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE citations (
+          parent_answer_id TEXT NOT NULL,
+          child_answer_id TEXT NOT NULL,
+          PRIMARY KEY (parent_answer_id, child_answer_id),
+          FOREIGN KEY (parent_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_answer_id) REFERENCES answers(id) ON DELETE CASCADE
+        );
+        CREATE TABLE question_parents (
+          parent_question_id TEXT NOT NULL,
+          child_question_id TEXT NOT NULL,
+          PRIMARY KEY (parent_question_id, child_question_id),
+          FOREIGN KEY (parent_question_id) REFERENCES questions(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+      `);
+      // Seed: 1 question with best_answer_id, 1 answer for it, 1 question_parent edge.
+      oldDb.run(
+        `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ["ans:r1", "v1:qchild", "body1", "x", "orion", "accepted", 2, 100],
+      );
+      oldDb.run(
+        `INSERT INTO questions (id, framing, status, best_answer_id, posed_at, posed_by) VALUES (?, ?, ?, ?, ?, ?)`,
+        ["v1:qchild", "child q", "answered", "ans:r1", 100, "boss"],
+      );
+      oldDb.run(
+        `INSERT INTO questions (id, framing, status, best_answer_id, posed_at, posed_by, depth) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ["v1:qparent", "parent q", "open", null, 99, "boss", 0],
+      );
+      oldDb.run(
+        `INSERT INTO question_parents VALUES (?, ?)`,
+        ["v1:qparent", "v1:qchild"],
+      );
+      oldDb.close();
+
+      // Re-open via LatticeStore — should detect v2 schema and migrate.
+      const migrated = new LatticeStore(dbFile);
+      try {
+        // FK now present.
+        const fkList = (migrated as any).db
+          .query(`PRAGMA foreign_key_list(questions)`)
+          .all() as Array<{ from: string; table: string; to: string }>;
+        expect(
+          fkList.some((fk) => fk.from === "best_answer_id" && fk.table === "answers"),
+        ).toBe(true);
+
+        // Schema version bumped to 3.
+        const ver = (migrated as any).db
+          .query(`SELECT value FROM schema_meta WHERE key = ?`)
+          .get("schema_version") as { value: string } | null;
+        expect(ver?.value).toBe("3");
+
+        // Data preserved.
+        const q = migrated.getQuestion("v1:qchild");
+        expect(q?.best_answer_id).toBe("ans:r1");
+        expect(q?.status).toBe("answered");
+        const parent = migrated.getQuestion("v1:qparent");
+        expect(parent?.status).toBe("open");
+        // question_parents edge preserved across the rebuild.
+        const children = migrated.getQuestionChildren("v1:qparent");
+        expect(children.map((c) => c.child_question_id)).toEqual(["v1:qchild"]);
+      } finally {
+        migrated.close();
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("FK rejects bypass-INSERT with non-existent best_answer_id", () => {
+    const fresh = new LatticeStore(":memory:");
+    try {
+      // Direct INSERT bypassing setQuestionStatus's runtime guard. SQLite
+      // FK with foreign_keys=ON should reject the dangling pointer.
+      expect(() => {
+        (fresh as any).db.run(
+          `INSERT INTO questions (id, framing, status, best_answer_id, posed_at, posed_by) VALUES (?, ?, ?, ?, ?, ?)`,
+          ["v1:bypass", "x", "answered", "ans:nonexistent", 100, "boss"],
+        );
+      }).toThrow(/FOREIGN KEY/i);
     } finally {
       fresh.close();
     }
