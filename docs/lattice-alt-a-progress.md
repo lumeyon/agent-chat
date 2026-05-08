@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T18:55Z
+## Current state — 2026-05-08T19:25Z
 
-**Phase: NL34 — Phase A1 SHIPPED. record-turn now has an opt-in post-hook: when AGENT_CHAT_AUTO_STUDY_TURN=1, every successful turn appends a `scheduled` entry to `<conversationsDir>/.auto-study-turn.jsonl` with edge_id, agent, speaker, framing, answer_body, ts, status. Idempotent skip (sha-deduped re-record) does NOT fire the hook. Best-effort: journal-write failure is logged to stderr but doesn't block record-turn success. 5 regression tests covering opt-in path, default-off, explicit-off, idempotent-no-duplicate, and multi-turn append. NL34 ships the TRIGGER plumbing; NL35 will ship the CONSUMER (codex peer dispatched as study-turn predictor) that turns scheduled entries into actual lift updates. Cumulative since the new mission: 1 wiring step shipped (A1); + 31 prior code-level fixes + 3 schema migrations from the original-loop substrate-hardening phase.**
+**Phase: NL35 — Phase A2 SHIPPED. New file `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`: reads `.auto-study-turn.jsonl`, picks the oldest unprocessed entry (cross-references `.auto-study-turn-results.jsonl`), looks up Q/A in the lattice via `canonicalIdOf` + `makeAnswerId`, picks a codex peer (hash-deterministic rotation, skips the answer's own author per heterogeneity rule), dispatches via the codex runtime adapter (mockable via `AGENT_CHAT_MOCK_PEER_RESPONSE`), grades via `gradePrediction` cosineSimilarity, applies via `applyGradeToLift`, appends a result line. ONE entry per invocation — caller decides cadence. Plus `canonicalIdOf` exported from import-from-kg.ts. 6 regression tests covering happy path, heterogeneity guard, dispatch failure, empty journal, idempotent re-run, missing-answer diagnostic. NL34 (A1) wired the trigger; NL35 (A2) wired the consumer. NL36 will wire the consumer to FIRE FROM the record-turn post-hook (currently the consumer must be invoked manually). Cumulative since new mission: 2 wiring steps (A1 + A2); + 31 prior fixes + 3 schema migrations from the substrate-hardening phase.**
 
 **MISSION:** wire up autonomous heterogeneous-judge selection pressure. Phase A trigger plumbing started at NL34. Phases A→B→C→D→E will land the auto-loop end-to-end with measurement.
 
@@ -19,6 +19,80 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T19:25Z (NL35: ship A2 — auto-study-turn consumer dispatching codex peer as predictor)
+
+**Loop:** new mission per pivoted prompt.md (autonomous heterogeneous-judge selection pressure). NL35 is the second wiring step (Phase A2).
+
+**What landed:**
+  - **`plugins/agent-chat/scripts/auto-study-turn-consumer.ts`** (NEW, 175 lines): a CLI command that processes ONE pending entry per invocation. Steps:
+    1. Reads `.auto-study-turn.jsonl` and `.auto-study-turn-results.jsonl`.
+    2. Cross-references by schedule_ts to find unprocessed entries.
+    3. Picks the OLDEST pending entry.
+    4. Computes `canonical_id = canonicalIdOf(framing)` and `answer_id = makeAnswerId(canonical_id, answer_body, agent)`.
+    5. Looks up the question + answer in the lattice. Missing → result entry status="failed" with diagnostic; exit 0.
+    6. **Heterogeneity guard:** picks a codex peer via `pickPredictorPeer(question_id, excludeAgent=entry.agent)`. Hash-based deterministic rotation across [lumeyon, keystone, carina]. If the picked peer matches the answer's author, advances forward; never picks the answer's own author.
+    7. Builds the predictor function — either the mock seam (`AGENT_CHAT_MOCK_PEER_RESPONSE`) or the codex runtime adapter (`runtimes/codex.ts:dispatch`).
+    8. Calls `buildStudyPrompt(candidate)` then `predictor(challenge)` → prediction string.
+    9. Calls `gradePrediction(prediction, actualBody, threshold=0.85)` → cosine + gradable.
+    10. If gradable, calls `applyGradeToLift(store, answer.id, grade, lr=0.1)` → updates predictive_lift.
+    11. Appends a result entry to `.auto-study-turn-results.jsonl`: `{schedule_ts, ts, peer, status: "predicted", prediction (truncated), grade, lift_update}`.
+    12. On any error during the dispatch/grade/apply path, marks the entry `status: "failed"` with truncated error message and exits 0.
+
+  - **`scripts/lattice/import-from-kg.ts`**: exported `canonicalIdOf` (was private). The consumer needs it to derive the canonical question_id from the journal entry's framing. Same function previously used by importPairs internally.
+
+**Tests (6 in tests/auto-study-turn-consumer.test.ts):**
+  - **A2-a (happy path):** seed Q/A in lattice (orion-authored, predictive_lift=0.5); seed 1 scheduled entry; mock codex returns matching answer → high cosine → positive lift bump. Assert: result entry status=predicted with peer ∈ {lumeyon, keystone, carina} (never orion); lattice's predictive_lift incremented.
+  - **A2-b (heterogeneity guard):** answer authored by lumeyon. The hash-derived peer might be lumeyon; consumer must skip and pick keystone or carina. Assert: result.peer ∈ {keystone, carina}, never lumeyon.
+  - **A2-c (dispatch failure non-blocking):** with AGENT_CHAT_NO_LLM=1 (default in freshEnv) the codex adapter returns reason=not-found. Consumer marks the entry failed; processes only ONE entry per invocation; doesn't crash.
+  - **A2-d (empty journal):** no journal file → exits 0 silently; writes nothing.
+  - **A2-e (idempotent re-run):** after first run, the entry has a matching result. Second invocation skips it; no new result.
+  - **A2-f (missing answer):** schedule entry references Q/A not in lattice; consumer marks entry failed with diagnostic ("question not found"); doesn't crash.
+
+  Plugin tests: 548 → 554 (+6 A2). Lattice tests unchanged.
+
+**Why one-entry-per-invocation:**
+  Keeps each run small, crash-isolated, and predictable in cost. A consumer that processed all pending entries in a single invocation would risk runaway LLM cost if the journal had accumulated dozens of entries. One-per-tick + caller-decides-cadence (cron / interval / spawned-from-record-turn) gives operators explicit cost control.
+
+**Heterogeneity rule (INVIOLABLE rule 5) is now active:**
+  Every dispatch the consumer makes is to a codex peer (all 9 petersen
+  peers run codex per agents.petersen.yaml), AND the picked peer is
+  never the answer's own author. The cross-model evidence loop
+  (claude-orion answers → codex peer predicts → cosine grade → lift
+  adjusts) is wired end-to-end.
+
+**Substrate primitives unchanged — A2 is composition, not extension:**
+  The consumer reuses `canonicalIdOf` (newly exported), `makeAnswerId`,
+  `LatticeStore.getQuestion`/`getAnswer`, `buildStudyPrompt`,
+  `gradePrediction`, `applyGradeToLift`. Plus the codex runtime
+  adapter. No new lattice primitives, no schema changes.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no production peer call; auto-loop not yet auto-firing)
+  - Answers: 961 → 961
+  - Tests: lattice 174 / 0 unchanged; plugin 548 → 554 (+6 A2)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/auto-study-turn-consumer.ts (NEW)
+  - plugins/agent-chat/tests/auto-study-turn-consumer.test.ts (NEW: 6 A2 tests)
+  - scripts/lattice/import-from-kg.ts (export canonicalIdOf)
+  - prompt.md (NL36 plan; A2 marked DONE; A3 sequenced)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL36):** Wire the consumer to fire from record-turn's post-hook (so the auto-loop runs without manual invocation). File-touch: re-touches agent-chat.ts (last touched NL34, eligible after 1-iter gap).
+
+  Design sketch:
+  - In cmdRecordTurn's post-hook, after the journal-write, spawn the consumer as a detached child process.
+  - Use child_process.spawn with `detached: true, stdio: "ignore"` so the parent doesn't block on the child.
+  - Best-effort: if the spawn fails, log to stderr but don't crash record-turn.
+  - This closes Phase A's "auto-trigger" loop end-to-end.
+
+**Sequenced after NL36:**
+- NL37 → A3 (rerank inside consumer post-grade).
+- NL38 → Phase B (study-turn CLI defaults to a codex peer; refuse claude-self-predict).
+- NL39+ → Phase C (LLM-as-judge), Phase D (challenger), Phase E (measurement).
 
 ### 2026-05-08T18:55Z (NL34: ship A1 — record-turn post-hook for auto-study-turn schedule)
 

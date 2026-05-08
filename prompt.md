@@ -77,8 +77,8 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 ### Phase A — Auto-trigger study-turn on record-turn (cheapest, mostly plumbing)
 
 - **A1** [DONE iter NL34]: Added record-turn post-hook that, on AGENT_CHAT_AUTO_STUDY_TURN=1, appends a `scheduled` entry to `<conversationsDir>/.auto-study-turn.jsonl` with edge_id, agent, speaker, framing, answer_body, ts, status. Idempotent skip (sha-deduped re-record) does NOT fire the hook. Best-effort: journal-write failure is logged to stderr but doesn't block record-turn success. 5 regression tests at append-turn.test.ts.
-- **A2** [TODO]: The schedule entry needs to be CONSUMED. Add a child process that reads the journal, picks the oldest `scheduled` entry, dispatches a codex peer (rotation: lumeyon → keystone → carina) as the study-turn predictor, applies the grade, marks the entry `predicted` in the journal. Consumer is async/detached; record-turn doesn't await.
-- **A3** [TODO]: After applyGradeToLift writes new lift values, auto-fire reRankAnswers for the affected question. If reRank changes accepted/superseded, mark the journal entry `reranked` with the promotion details. Closes the auto-loop.
+- **A2** [DONE iter NL35]: Added `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`. Reads `.auto-study-turn.jsonl`, picks the oldest unprocessed entry (cross-references `.auto-study-turn-results.jsonl` for already-processed sha), looks up Q/A in the lattice via `canonicalIdOf` + `makeAnswerId`, picks a codex peer (hash-based rotation; skips the answer's own author per heterogeneity rule), dispatches via the codex runtime adapter (mockable via `AGENT_CHAT_MOCK_PEER_RESPONSE`), grades via `gradePrediction`, applies via `applyGradeToLift`, appends a result line. ONE entry per invocation — caller decides cadence. 6 regression tests (happy path, heterogeneity guard, dispatch failure, empty journal, idempotent re-run, missing-answer diagnostic). Plus `canonicalIdOf` exported from import-from-kg.ts.
+- **A3** [TODO]: After applyGradeToLift writes new lift values, auto-fire reRankAnswers for the affected question. If reRank changes accepted/superseded, append the promotion details to the result entry (or write a sibling reRank-result line). Closes the auto-loop.
 - **A4** [DONE in A1]: Feature flag `AGENT_CHAT_AUTO_STUDY_TURN=1` opt-in (default off) — landed alongside A1 to keep per-turn LLM cost zero by default.
 
 ### Phase B — Default study-turn predictor to a codex peer
@@ -107,32 +107,29 @@ Phases run roughly in order; cross-phase tasks fine if they don't conflict on th
 
 ## NEXT ITER TARGET HINT
 
-**NL35 → SHIP A2 (journal consumer that dispatches a codex peer as study-turn predictor).**
+**NL36 → SHIP A3 (auto-fire reRankAnswers after lift updates).**
 
-**Why A2 next:**
-- A1 wrote the schedule entries; A2 makes them DO something. Without A2, the .auto-study-turn.jsonl file accumulates "scheduled" entries forever and nothing actually runs.
-- The dispatch is async/detached so the per-turn flow stays fast.
-- Heterogeneity-first default: predictor MUST be a codex peer (per INVIOLABLE rule 5). Use the rotation table (lumeyon → keystone → carina → cycle) to pick the peer per call.
+**Why A3 next:**
+- A2 lands lift updates per study-turn. If a previously-superseded answer's lift now exceeds the accepted answer's lift by more than `margin`, reRankAnswers should promote it. Without A3, lift drifts but ranks don't change — selection pressure is incomplete.
+- File-touch rule: NL35 touched plugins/agent-chat/scripts/auto-study-turn-consumer.ts; NL36 must touch a different primary file. Options:
+  - Modify auto-study-turn-consumer.ts to call reRankAnswers post-grade. (SAME FILE — blocked by rule.)
+  - Add a separate `auto-rerank-tick.ts` consumer that watches for lift changes and triggers reRankAnswers. (Different file. Works but more plumbing.)
+  - Modify the consumer's INVOCATION (record-turn post-hook) to fire BOTH the consumer AND a rerank tick. (Touches agent-chat.ts again — would re-touch the NL34 file; OK because NL35 didn't touch agent-chat.ts.)
+- Recommend: extend `auto-study-turn-consumer.ts` to call reRankAnswers immediately after applyGradeToLift, in the same try block. The result entry's `lift_update` becomes part of a richer object that also includes `rerank_result`. **Note: this DOES re-touch consumer.ts.** Alternative: defer A3 by one iter — ship something else NL36 (e.g., A4/wire-up that fires the consumer from record-turn, in agent-chat.ts), then come back to A3 at NL37.
 
-**Design sketch:**
-- New file: `plugins/agent-chat/scripts/auto-study-turn-consumer.ts`. CLI that reads `.auto-study-turn.jsonl`, picks the oldest `status: "scheduled"` entry, dispatches a codex peer via the runtime adapter to predict the answer given the question framing, grades the prediction (cosineSimilarity for now; LLM-as-judge in Phase C), updates the journal entry to `predicted` with the grade, and writes a result line to a sibling `.auto-study-turn-results.jsonl`.
-- Consumer runs as a detached child spawned from the same record-turn post-hook OR via `agent-chat auto-study-turn-tick`. Pick simplest: a CLI command that processes ONE pending entry and exits. The post-hook spawns it; cron / interval can also run it.
-- File-touch rule: NL34 touched plugins/agent-chat/scripts/agent-chat.ts; NL35 must touch a different primary file. Good — the new consumer file IS different.
+**Recommended: pivot NL36 → wire the consumer to fire from record-turn's post-hook (different from A1's journal-write).** Currently the consumer must be invoked manually. The natural place to fire it is right after the journal-write in cmdRecordTurn — spawn a detached child process running the consumer. This closes Phase A's "auto-trigger" loop. File-touch: agent-chat.ts again (last touched at NL34, 2 iters ago — eligible).
 
-**Read first:**
-- `scripts/lattice/study-turn.ts` — `runStudyTurn`, `claudePredictor`, `codexPredictor`.
-- `plugins/agent-chat/scripts/runtimes/codex.ts` — codex dispatch adapter.
-- Rotation table peers: lumeyon, keystone, carina (all codex per agents.petersen.yaml).
+Then NL37 → A3 (reRank inside consumer).
 
-**Test approach (3 regression tests):**
-- Test 1 (consumer happy path): seed a `.auto-study-turn.jsonl` with one `scheduled` entry. Mock the codex dispatcher to return a known prediction. Run the consumer. Assert: (a) the journal entry is updated to `predicted` with a grade; (b) a results line was emitted; (c) the lattice's predictive_lift was updated for the affected answer.
-- Test 2 (heterogeneity guard): if AGENT_CHAT_AUTO_STUDY_TURN_PEER is forced to a non-codex agent (or to the answer's own agent), the consumer refuses with a clear error. Heterogeneity must hold.
-- Test 3 (consumer failure non-blocking): mock codex dispatch to fail. The consumer marks the entry `failed` with the error; doesn't crash; doesn't pollute other entries.
+**A3 fix approach (when we get there):**
+- After `applyGradeToLift(store, answer.id, grade, lr)` writes the new lift, call `reRankAnswers(store, question.id, { single_answer_promotes: false, margin: 0.05 })`.
+- If the reRank promoted/demoted anything, include `rerank_result: { promoted_to_accepted, demoted_to_superseded }` in the journal result entry.
+- Test: seed two answers for the same question with different lifts; after a study-turn that boosts the lower-lift one above the upper, assert the rerank promoted the previously-lower answer.
 
-**Sequenced after A2:**
-- NL36 → A3 (auto-reRank after lift update).
-- NL37 → wire the consumer to fire from record-turn's post-hook (currently only the journal write happens).
-- NL38+ → Phase B, C, D, E.
+**Sequenced after NL36:**
+- NL37 → A3 (rerank inside consumer).
+- NL38 → Phase B (default study-turn predictor to a codex peer; refuse claude-self-predict).
+- NL39+ → Phase C (LLM-as-judge), Phase D (challenger), Phase E (measurement).
 
 ## BOSS-PRE-APPROVAL QUEUE (orion may execute without re-asking)
 

@@ -231,7 +231,7 @@ function parseStrictUtc(s: string): number {
 
 // ─── canonical_id producer (must match kg.ts) ──────────────────────────────
 
-function canonicalIdOf(text: string): string {
+export function canonicalIdOf(text: string): string {
   const normalized = normalizeString(text);
   const hash = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
   return `v1:${hash}`;
