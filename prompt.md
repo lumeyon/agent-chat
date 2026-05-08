@@ -1,30 +1,44 @@
 # GPQA Diamond benchmark — single-model controls + agent-chat condition
 
-> **Mission (NL37+):** measure whether agent-chat (claude-orion + codex peers + the substrate) beats single-model baselines on a hard benchmark. Pick: **GPQA Diamond** (198 expert-validated multiple-choice graduate-level science questions, "Google-proof"). Public leaderboard ballparks: claude top ~60-65%, codex top ~60-65%. Headroom + automated scoring + manageable size.
+> **Mission (NL37+):** measure whether agent-chat (claude-orion + codex peers + the substrate) beats single-model baselines on a hard benchmark. Pick: **GPQA Diamond** (198 expert-validated multiple-choice graduate-level science questions, "Google-proof").
+>
+> **Public ballpark vs OBSERVED partial signal (NL38):** public leaderboards put top claude/codex at ~60-65%. Our partial runs are higher: codex 41/48 = 85.4%, claude 61/68 = 89.7% so far. Likely reasons: newer model versions (claude-sonnet-4.6, codex-cli 0.128) than the published reports, plus our chain-of-thought prompt template. **This raises the bar for agent-chat** — it needs to add real value over ~85-90%, not over 60-65%.
 >
 > Three conditions, same 198 problems, same answer-extraction:
 >   1. **Codex baseline** — `codex exec <prompt>` per question, single shot.
 >   2. **Claude baseline** — `claude -p <prompt>` per question, single shot.
 >   3. **Agent-chat condition** — orion (claude) drafts an answer; ephemeral-peer-review dispatches a codex peer (lumeyon/keystone/carina) for a critique; orion produces a revised answer; final answer = orion's revised. Final answer parsed and compared to the same answer key.
 >
-> Win condition: agent-chat's accuracy > max(codex_baseline, claude_baseline) by a margin that's larger than ~3% noise floor (rough envelope for n=198).
+> **Win condition:** agent-chat accuracy > max(codex, claude) by a margin > ~3% noise floor (rough envelope for n=198). At 85-90% baselines, even a +3% delta is meaningful; +5% is solid.
+>
+> **Loss path is informative.** If agent-chat < baselines, the response logs explain why — codex critique misled orion? orion ignored good critique? peer review introduced new errors? Each failure mode tells us how to redesign.
 
 The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred) is paused for this mission. The autonomous selection-pressure plumbing is shippable substrate but not yet validated as ACTUALLY producing useful signal — that validation comes from this benchmark.
 
-## CURRENT STATE (as of NL37 commit / kickoff of this mission)
+## CURRENT STATE (as of NL38, baselines mid-flight)
 
-**Benchmark scaffolding shipped:**
+**Benchmark scaffolding shipped (NL37+NL38):**
 - `benchmarks/gpqa-diamond/data/raw.csv` — 198-question Diamond CSV from idavidrein/gpqa@main (password `deserted-untie-orchid`).
 - `benchmarks/gpqa-diamond/data/problems.jsonl` — normalized: `{id, domain, subdomain, question, choices: {A,B,C,D}, answer}`. Choice positions deterministically shuffled per record_id (mulberry32 PRNG, stringSeed of recordId).
 - `benchmarks/gpqa-diamond/src/prepare.ts` — CSV → JSONL normalizer with seed-shuffled choices.
-- `benchmarks/gpqa-diamond/src/run-baseline.ts` — single-model runner. Resumable (skips IDs already in output), supports `--limit`, `--start`, `--stop`, `--out`. Extracts `Answer: X` from response (last occurrence wins so chain-of-thought doesn't false-positive).
+- `benchmarks/gpqa-diamond/src/run-baseline.ts` — single-model runner. Resumable (skips IDs already in output), supports `--limit`, `--start`, `--stop`, `--out`. Imports the canonical `extractAnswer` from extract.ts.
+- `benchmarks/gpqa-diamond/src/extract.ts` (NL38) — canonical extractor. Handles `Answer: X`, markdown bold, parens, lowercase/all-caps, single-letter responses, refusals. Last-occurrence wins so chain-of-thought doesn't false-positive on intermediate "Answer: D would be wrong".
+- `benchmarks/gpqa-diamond/src/extract.test.ts` (NL38) — 25 unit tests covering all common LLM response shapes + edge cases. All pass.
+- `benchmarks/gpqa-diamond/src/rescore.ts` (NL38) — re-applies the canonical extractor to a saved results.jsonl. Useful for any results files written before extract.ts existed; cheap pure-text re-parse, no LLM cost.
 - `benchmarks/gpqa-diamond/src/score.ts` — per-domain accuracy, confusion table.
 
-**Pilot results (2 questions per model):**
-- Codex: 2/2 correct, ~18s/Q.
-- Claude: 2/2 correct, ~9s/Q.
+**Per-question data captured for every condition** (in `results/<model>.jsonl`):
+- `id`, `domain`, `subdomain`, `prompt_chars`, `response` (full prose), `answer_extracted`, `answer_expected`, `correct`, `elapsed_ms`, `error?`.
+- Three result files JOIN cleanly by `id` for paired comparison once agent-chat lands.
 
-**Full baselines running in background as of this commit.**
+**Background runs status (last sampled NL38 heartbeat):**
+- Codex: 48/198 done; 41 correct (85.4%); 2 timeouts at 240s; mean elapsed 42.6s. ETA ~30-40 min more.
+- Claude: 68/198 done; 61 correct (89.7%); 1 SARS-CoV-2 Usage Policy refusal + 2 timeouts at 240s; mean elapsed 32.1s. ETA ~15-20 min more.
+- ~4% timeout rate at 240s budget so far. Counted as wrong (no extracted answer); could retry with longer budget if fairness becomes a concern.
+
+**Operational state:**
+- Monitor armed (task `bodwykny5`): tails both log files, fires on `# done`/`FATAL`/`cli exited`/`Traceback`. Persistent for the session.
+- The /loop wakes itself on Monitor events OR every ~25-30 min as a heartbeat fallback.
 
 ## INVIOLABLE RULES
 
@@ -36,33 +50,32 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 
 ## NEXT ITER TARGETS
 
-**NL37 (this iter): scaffolding + kickoff baselines.** ✅ DONE.
+**NL37 — scaffolding + kickoff baselines.** ✅ DONE.
 
-**NL38 — verify baselines completed; score and report:**
-- Wait for codex + claude background runs to finish (~30-60 min wall clock).
-- Run `score.ts` on each result file.
-- Add unit tests for `extractAnswer` (covering common LLM response shapes).
-- Report: codex %, claude %, mean elapsed, per-domain breakdown, confusion matrix.
+**NL38 (mid-flight):** ✅ extract.ts pulled into its own module + 25 unit tests + rescore.ts harness for post-hoc re-parsing of saved responses. Run-baseline.ts now imports the canonical extractor. Sanity: rescore on partial baselines = 0 deltas (old + new extractors agree on every observed shape). **Still pending in NL38: wait for both baselines to finish, run `rescore.ts` (no-op expected; defensive), run `score.ts`, report final aggregates per model + per-domain + confusion matrix.**
 
-**NL39 — agent-chat condition design:**
-- Adapt the runner to drive agent-chat instead of a single CLI.
-- Approach: a new `run-agent-chat.ts` that, per problem:
-  1. Prompts orion (claude) for an initial answer.
-  2. Dispatches `ephemeral-peer-review` against the question + orion's draft. Picks a codex peer per the rotation table; the peer reviews orion's reasoning.
-  3. Prompts orion (claude) again with the original question + peer feedback; orion produces a revised answer.
-  4. Extracts the final letter from orion's revised answer.
-- Each problem gets exactly 1 peer review (1 codex call + 2 claude calls = 3 LLM calls per problem). Cost: ~$0.10/problem × 198 = ~$20.
-- Existing `ephemeral-peer-review.ts` is the right primitive but it currently expects a MODULE PATH for code review. The benchmark needs a different review prompt: "given this question and this proposed answer, critique the reasoning". May need a `--task-text` option OR a new lightweight wrapper.
+**NL39 — agent-chat condition runner:**
+- New file: `benchmarks/gpqa-diamond/src/run-agent-chat.ts`. Same shape as run-baseline.ts (resumable, JSONL output), but each problem fires 3 LLM calls:
+  1. **Draft**: orion (claude) sees question + choices; produces an initial reasoning + answer using the SAME prompt template baselines use.
+  2. **Critique**: codex peer (rotation by question_id hash: lumeyon → keystone → carina) sees the question + claude's draft + a critique prompt: "review the reasoning for errors; argue for a different choice if you disagree; otherwise endorse".
+  3. **Revise**: orion (claude) sees the original question + its draft + the codex critique; produces a final answer with reasoning. Final letter extracted via the same extract.ts.
+- Per-problem captures (in `results/agent-chat.jsonl`): `id`, `domain`, `claude_draft_response`, `claude_draft_letter`, `codex_critique_response`, `peer` (which codex agent), `claude_revised_response`, `answer_extracted` (= revised letter), `answer_expected`, `correct`, `elapsed_ms_total`, `elapsed_ms_per_call`, `error?`. JOINs by `id` against both baselines.
+- Cost per problem: 2 claude calls (~10s each) + 1 codex call (~18s) ≈ 38s × 198 ≈ ~2h wall clock. Token cost ~$15-25.
+- **Heterogeneity rule:** the codex peer is hash-deterministic per question_id, never claude. Same logic as `pickPredictorPeer` in NL35's auto-study-turn-consumer.ts; reuse if convenient.
+- **Critique prompt design** (load-bearing): the critique should NOT see the answer key. It sees the question + claude's draft response and is asked to find errors / push back. Prompt template TBD; needs a thin pilot before the full run.
 
-**NL40 — agent-chat run + comparison:**
-- Run the full 198 through the agent-chat condition.
-- Aggregate accuracy + paired comparison (which problems each condition uniquely solved).
-- Score; report.
+**NL40 — agent-chat full run + 3-way comparison:**
+- Run all 198 through `run-agent-chat.ts`.
+- Build a `compare.ts` that JOINs codex.jsonl + claude.jsonl + agent-chat.jsonl by `id` and emits:
+  - Aggregate accuracy: codex %, claude %, agent-chat %.
+  - **Paired wins**: questions agent-chat got right that codex/claude alone missed; the reverse — questions where agent-chat lost ground vs. each baseline.
+  - Per-domain breakdown.
+  - **Diagnostic detail** for disagreement cases: the question text, all three responses side-by-side, who was right.
 
 **NL41+ — analysis + iteration:**
-- If agent-chat ≥ baselines: characterize where the gain came from. Which domains? Which prompt patterns? Did the peer review consistently catch a class of errors?
-- If agent-chat < baselines: characterize the failure mode. Is the peer review too critical? Did orion over-correct? Did the peer's prediction confuse orion's reasoning?
-- Iterate on the agent-chat condition's prompt/structure.
+- If agent-chat ≥ max(baselines) by >3%: characterize where the gain came from. Which domains? Which prompt patterns? Did the codex critique consistently catch a class of error claude-alone missed?
+- If agent-chat < max(baselines) by >3%: characterize the failure mode from the saved responses. Common patterns: critique misled orion to flip a correct answer; peer was overconfident in a wrong direction; orion over-weighted critique even when its own draft was right. Each failure mode suggests a specific redesign.
+- If within ±3%: design a follow-up experiment that increases substrate's role (e.g., reRankAnswers on multiple peer answers; LLM-as-judge replacing cosine grading from the autonomous-loop work).
 
 ## STOPPING CONDITIONS
 
@@ -79,6 +92,7 @@ This mission isn't naturally /loop-driven the same way the audit loop was — ea
 - **Heterogeneity is real and free for us.** lumeyon/keystone/carina = codex. orion = claude. The infrastructure to dispatch cross-model is already shipped (ephemeral-peer-review.ts, NL30 hardened).
 - **Investigate before fixing.** A surprising result might be a measurement artifact (NL33 K-imp-9 = metric misinterpretation). Reproduce the failure mode before redesigning.
 - **Validate at API boundaries.** `extractAnswer` is the load-bearing parser between the LLM's prose and the score. Unit-test it on edge cases (bold "**Answer: A**", "Answer is C.", "(B)", chain-of-thought saying "Answer: D would be wrong because... [final] Answer: A").
+- **Per-question data is the audit trail.** Every condition writes one JSONL line per question with the FULL prose response + parsed letter + correct flag + elapsed. Three conditions JOIN cleanly by `id`. Lossless. Comparison tooling is straightforward when agent-chat lands; don't pre-build the comparison report before we have all three datasets — use the partial baselines to validate the JOIN shape, build the report once.
 - **Cumulative ledger (post-NL36):** 30 original peer findings fixed + 3 schema migrations + 3 wiring steps for the autonomous-loop substrate (A1, A2, A4). Substrate is hardened and tested but not yet VALIDATED to produce useful signal — that validation is the current mission.
 
 ## NO speculative claims about agent-chat's lift before we measure. The point of running the baselines first is to know what we're measuring AGAINST.
