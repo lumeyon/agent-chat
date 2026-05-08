@@ -251,7 +251,18 @@ export function applyGradeToLift(
       delta: 0,
     };
   }
-  const signal = (grade.cosine - 0.5) * 2;
+  // C4 fix (NL32 / carina NL3 finding): clamp the signal to [-1, +1].
+  // Pre-fix `(cosine - 0.5) * 2` produced signal=-3 for cosine=-1 (since
+  // cosine similarity is in [-1, +1], not [0, 1]). delta = signal *
+  // learningRate then went 3x past the named magnitude on the negative
+  // side: with learningRate=0.1, cosine=-1.0 produced delta=-0.3 — three
+  // times what "learning rate" promises. Asymmetric with the positive
+  // side, which the formula naturally caps at +1*learningRate. The
+  // clamp restores symmetry: |delta| <= learningRate regardless of the
+  // sign of the input cosine. Drained as a design call from the
+  // boss-pre-approval queue (orion-authorized).
+  const rawSignal = (grade.cosine - 0.5) * 2;
+  const signal = Math.max(-1, Math.min(1, rawSignal));
   const delta = signal * learningRate;
   const newLift = Math.max(0, Math.min(1, a.predictive_lift + delta));
   store.setAnswerPredictiveLift(answer_id, newLift);

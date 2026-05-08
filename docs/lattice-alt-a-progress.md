@@ -2,9 +2,11 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T17:25Z
+## Current state — 2026-05-08T17:55Z
 
-**Phase: NL31 — drained K-imp-3 (importEdgeConvo cross-archive Q→A pair lost when archiving splits the conversation across leaves). Pre-fix: per-source loop called parseSections + pairSections separately on live CONVO + each archive's BODY.md; when a Q lived in arch_N and the matching A lived in arch_N+1 (or in live CONVO), per-source pairing dropped both halves silently. Post-fix: collect all sections into one ordered list (archives chronologically first, live last) and run pairSections ONCE on the combined list; per-section `source_context` is preserved through to `posed_in_context` so per-source debug breadcrumbs are kept. Cumulative: 30 REAL findings, 30 code fixes, 3 schema migrations.**
+**Phase: NL32 — drained C4 (study-turn applyGradeToLift negative-cosine asymmetric lift penalty exceeds named learningRate). Pre-fix: `(cosine - 0.5) * 2` mapped cosine [0, 1] symmetrically around 0.5 → signal [-1, +1], but cosine similarity is in [-1, +1], so for negative cosines the signal went BELOW -1 (cosine=-1 → signal=-3, delta=-3*learningRate). Asymmetric: positive side capped at +learningRate, negative side could swing 3x. Post-fix: clamp signal to [-1, +1] before applying learningRate; |delta| ≤ learningRate regardless of cosine sign. Drained from the boss-pre-approval queue (orion-authorized design call). Cumulative: 31 REAL fixes (30 original + 1 bonus = K-imp-9 still queued); 3 schema migrations.**
+
+**MILESTONE — original peer findings 100% drained:** The 6 peer-review modules (apprenticeship, sqlite-store, study-turn, ephemeral-peer-review, import-from-kg, lattice-context) generated 30 original REAL findings. All 30 are now FIXED. Plus 3 schema migrations from the boss-pre-approval queue. The K-imp-9 NL12 observation (post-review item) and any future fresh-peer-review findings are the only remaining substrate-level work.
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +19,132 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T17:55Z (NL32: queue-drain C4 — symmetric signal clamp for applyGradeToLift)
+
+**Loop:** stateful peer-driven via prompt.md. C4 was queued as a design call (negative-cosine asymmetric lift penalty); the boss-pre-approval queue authorizes orion to drain design-call findings. File-touch rule: NL31 touched import-from-kg.ts; this iter touches study-turn.ts (different file → eligible).
+
+**The bug (carina NL3 C4):**
+  applyGradeToLift's signal-from-cosine mapping at line 254:
+  ```typescript
+  const signal = (grade.cosine - 0.5) * 2;
+  const delta = signal * learningRate;
+  ```
+
+  This formula maps cosine [0, 1] symmetrically around 0.5 to signal
+  [-1, +1]. But cosine similarity is in [-1, +1], not [0, 1]. For
+  negative cosines:
+  - cosine = -1.0 → signal = (-1 - 0.5) * 2 = **-3.0**
+  - cosine = -0.5 → signal = -2.0
+  - cosine =  0.0 → signal = -1.0 (boundary; OK)
+  - cosine = +1.0 → signal = +1.0 (boundary; OK)
+
+  delta = signal * learningRate then exceeds the named "learning rate"
+  on the negative side:
+  - learningRate = 0.1, cosine = -1.0 → delta = **-0.3** (3x what's
+    promised by the name)
+  - learningRate = 0.1, cosine = -0.5 → delta = -0.2 (2x)
+
+  Asymmetric: positive side caps at +learningRate (cosine=1 →
+  signal=+1 → delta=+learningRate), but negative side can swing 3x.
+  Negative cosines are rare in practice (they require embedding
+  misalignment beyond random) but happen — and when they happen, they
+  swing predictive_lift down by more than the rate the substrate
+  promises. A predictor making a wildly-wrong prediction once gets
+  punished 3x more than a wildly-correct prediction is rewarded.
+
+**The fix (clamp signal to [-1, +1]):**
+  ```typescript
+  const rawSignal = (grade.cosine - 0.5) * 2;
+  const signal = Math.max(-1, Math.min(1, rawSignal));
+  const delta = signal * learningRate;
+  ```
+
+  Clamping the signal restores symmetry: |delta| ≤ learningRate
+  regardless of the input cosine's sign. The positive side is unchanged
+  (signal was already capped at +1 by the formula's natural ceiling at
+  cosine=+1). The negative side is now bounded at -1 → delta=-learningRate.
+
+  Why clamp the signal vs. clamp the delta: equivalent here, but
+  clamping at the signal level keeps the relationship between the
+  grade-quality measurement and the learning step explicit. Any future
+  refactor that reuses `signal` for other purposes (e.g., logging,
+  alternative aggregations) would also see the bounded value.
+
+**Test-first protocol:**
+  4 regression tests at study-turn.test.ts (new "applyGradeToLift —
+  C4 negative-cosine asymmetric penalty" describe block):
+    - **C4-a (failure case, cosine=-1.0):** assert |delta| ≤ learningRate
+      and new_lift = 0.4 (clamped). Pre-fix delta = -0.3.
+      **Verified FAILING pre-fix** (Received: 0.30000000000000004).
+    - **C4-b (failure case, cosine=-0.5):** assert |delta| ≤ learningRate.
+      Pre-fix delta = -0.2. **Verified FAILING pre-fix.**
+    - **C4-c (positive sanity, cosine=+1.0):** assert delta = +0.1
+      (positive side unchanged).
+    - **C4-d (boundary sanity, cosine=0.0):** assert delta = -0.1
+      (signal=-1 was already at the floor of the formula's natural
+      range; the clamp is a no-op here).
+
+**Why this matters:** the study turn is the substrate's selection-pressure
+mechanism — predictions are graded against actuals, and predictive_lift
+adjusts based on the grade. Asymmetric lift penalties bias the
+substrate's selection toward EXTREME caution: the negative side bites
+3x harder than the positive side rewards, so any noise in cosine grading
+pushes lift downward over time. Symmetric clamping makes the
+selection-pressure dynamics fair — equal magnitude of evidence (positive
+or negative) produces equal magnitude of lift change.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 3 (selection pressure) — predictive_lift updates are now
+    symmetric in magnitude. The substrate's selection mechanism doesn't
+    have a hidden negative bias from the asymmetric formula.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 168 → 172 (+4 C4); plugin 543 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/study-turn.ts (clamp signal to [-1, +1] in applyGradeToLift)
+  - scripts/lattice/study-turn.test.ts (new "C4 negative-cosine asymmetric penalty" describe block with 4 tests)
+  - docs/ephemeral-peer-reviews.md (C4 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL33 plan; cumulative ledger updated)
+
+**MILESTONE: 30/30 original peer findings drained at NL32.**
+
+  6 peer-reviewed modules → 30 original REAL findings raised → 30 fixed:
+    - apprenticeship.ts: 5/5 (lumeyon NL1)
+    - sqlite-store.ts: 3/3 (keystone iter-6)
+    - study-turn.ts: 5/5 (carina NL3)
+    - ephemeral-peer-review.ts: 7/7 (lumeyon NL4)
+    - import-from-kg.ts: 8/8 (keystone NL5)
+    - lattice-context.ts: 5/5 (carina NL12)
+
+  Plus 3 schema migrations from the boss-pre-approval queue (NL7 NOT
+  NULL, NL9 FK, NL11 CHECK).
+
+  All 6 peer-reviewed modules are now fully cleared. The only remaining
+  queued item is K-imp-9 (post-review NL12 observation: pairSections
+  may over-eagerly split bulleted peer-review responses into many Q/A
+  pairs).
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL33):** File-touch rule blocks study-turn.ts immediately again. Eligible:
+- K-imp-9 (import-from-kg.ts last touched NL31 — eligible at NL33)
+
+**Recommend NL33 → DRAIN K-imp-9** (pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs).
+
+Reasons:
+- Real correctness bug (post-review observation from NL12 carina dog-food). carina's NL12 review yielded 6 questions / 9 answers from a single peer-review pair, vs the typical 1Q/1A. Bulleted findings inside the response body got mis-pair-split.
+- import-from-kg.ts last touched NL31 (2 iters gap → eligible at NL33).
+- Self-contained-ish: pairSections's heuristic doesn't account for peer-review-response structure where the body has many bullets but is conceptually ONE answer.
+
+**Sequenced after NL33:**
+- NL34 → fresh peer review on stats.ts (carina by rotation, first fresh peer call since NL5 keystone). After K-imp-9 drains, the queue is empty and we should surface NEW findings from a previously-uncovered module.
+- NL35+ → drain whatever fresh-peer findings emerge.
+- Eventually: full review-pass complete summary commit if all queued + freshly-discovered findings drained AND no new peer-review surface remains.
 
 ### 2026-05-08T17:25Z (NL31: queue-drain K-imp-3 — cross-archive Q→A pair recognition; concatenate-then-pair refactor)
 

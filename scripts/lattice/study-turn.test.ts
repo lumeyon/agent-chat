@@ -619,3 +619,105 @@ describe("selectStudyQuestions — C5 SQL-limit-before-in-memory-filter", () => 
     expect(out[0].actual_answer.by_agent).toBe("lumeyon");
   });
 });
+
+// Regression for carina's NL3 C4 finding: applyGradeToLift's signal
+// computation is `(cosine - 0.5) * 2`, which maps cosine [0, 1]
+// symmetrically around 0.5 → signal [-1, +1]. But cosine similarity
+// is in [-1, +1], so for negative cosines the signal goes BELOW -1:
+//   - cosine = -1.0 → signal = (-1 - 0.5) * 2 = -3.0
+//   - cosine = -0.5 → signal = -2.0
+// delta = signal * learningRate then exceeds the named magnitude:
+//   - learningRate = 0.1, cosine = -1.0 → delta = -0.3 (3x what's
+//     promised by the "learning rate" name).
+//
+// Asymmetric: positive side caps at +learningRate (cosine=1 → +1*0.1
+// = +0.1), but negative side can go past -learningRate by 3x. C4 was
+// queued as a design call (boss-pre-approval queue authorizes orion
+// to make the call). NL32 fix: clamp the signal to [-1, +1] before
+// applying learningRate, restoring symmetry.
+describe("applyGradeToLift — C4 negative-cosine asymmetric penalty", () => {
+  test("C4: cosine=-1.0 produces |delta| <= learningRate (clamped, symmetric with cosine=+1.0)", () => {
+    const q = seedQuestion(store);
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "x",
+      by_agent: "orion",
+      explanation: "y",
+      predictive_lift: 0.5,
+      status: "accepted",
+    });
+
+    const learningRate = 0.1;
+    const update = applyGradeToLift(store, a.id, { cosine: -1.0, passed: false, threshold: 0.85 }, learningRate);
+
+    // Pre-fix: signal = (-1 - 0.5) * 2 = -3.0 → delta = -0.3 →
+    // newLift = max(0, 0.5 + (-0.3)) = 0.2 → reported delta = -0.3
+    // (3x the learning rate, asymmetric with the +learningRate cap on
+    // the positive side).
+    // Post-fix: signal clamped to -1.0 → delta = -0.1 → newLift = 0.4
+    // → reported delta = -0.1, symmetric with cosine=+1.0's +0.1.
+    const epsilon = 1e-9;
+    expect(Math.abs(update.delta)).toBeLessThanOrEqual(learningRate + epsilon);
+    expect(update.new_lift).toBeCloseTo(0.4, 5);  // 0.5 + (-0.1) = 0.4
+  });
+
+  test("C4: cosine=-0.5 produces |delta| <= learningRate (also clamped)", () => {
+    // cosine=-0.5 → raw signal = (-0.5 - 0.5) * 2 = -2.0 (still below -1).
+    // Pre-fix: delta = -0.2 (2x learningRate). Post-fix: -0.1 (clamped).
+    const q = seedQuestion(store);
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "x",
+      by_agent: "orion",
+      explanation: "y",
+      predictive_lift: 0.5,
+      status: "accepted",
+    });
+
+    const learningRate = 0.1;
+    const update = applyGradeToLift(store, a.id, { cosine: -0.5, passed: false, threshold: 0.85 }, learningRate);
+
+    expect(Math.abs(update.delta)).toBeLessThanOrEqual(learningRate + 1e-9);
+  });
+
+  test("C4: positive-cosine sanity — cosine=+1.0 still produces +learningRate (no behavior change)", () => {
+    // The fix's clamp is symmetric, but the positive side was already
+    // bounded by the formula's natural ceiling (cosine=1 → signal=+1).
+    // Verify no regression on the existing positive-side semantics.
+    const q = seedQuestion(store);
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "x",
+      by_agent: "orion",
+      explanation: "y",
+      predictive_lift: 0.5,
+      status: "accepted",
+    });
+
+    const learningRate = 0.1;
+    const update = applyGradeToLift(store, a.id, { cosine: 1.0, passed: true, threshold: 0.85 }, learningRate);
+
+    expect(update.delta).toBeCloseTo(0.1, 5);
+    expect(update.new_lift).toBeCloseTo(0.6, 5);
+  });
+
+  test("C4: cosine=0.0 sanity — same as before (signal = -1, delta = -learningRate)", () => {
+    // cosine=0.0 was already at the floor of the formula's natural
+    // range (signal = -1 exactly). The clamp is a no-op here.
+    const q = seedQuestion(store);
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "x",
+      by_agent: "orion",
+      explanation: "y",
+      predictive_lift: 0.5,
+      status: "accepted",
+    });
+
+    const learningRate = 0.1;
+    const update = applyGradeToLift(store, a.id, { cosine: 0.0, passed: false, threshold: 0.85 }, learningRate);
+
+    expect(update.delta).toBeCloseTo(-0.1, 5);
+    expect(update.new_lift).toBeCloseTo(0.4, 5);
+  });
+});
