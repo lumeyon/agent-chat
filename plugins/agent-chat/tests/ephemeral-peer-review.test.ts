@@ -63,6 +63,91 @@ describe("composeReviewPrompt", () => {
     expect(prompt).not.toContain("Your role as lumeyon");
     expect(prompt).toContain("You are lumeyon");
   });
+
+  // Regression for lumeyon's NL4 E7 finding: composeReviewPrompt's module-
+  // source truncation used JS .length (UTF-16 code units) and .slice (also
+  // UTF-16). For non-ASCII module content (CJK comments, emoji in test
+  // fixtures, accented Latin docs) this:
+  //   - under-counted: payloads with multi-byte UTF-8 chars slipped past
+  //     the byte budget unchanged (length < capBytes even when bytes >>
+  //     capBytes), so cap-bytes failed to enforce its named contract;
+  //   - mis-reported the elided-byte count when truncation did fire (it
+  //     reported `length - capBytes` UTF-16 units, not bytes);
+  //   - could split surrogate pairs mid-character.
+  //
+  // NL24 fix: same template as LC4 (NL23). Refactored to use a shared
+  // truncateToUtf8Bytes utility from utf8.ts that counts and slices in
+  // UTF-8 bytes, walking back to a non-continuation-byte boundary so
+  // multi-byte sequences are preserved.
+  test("E7: truncates by UTF-8 BYTES, not UTF-16 length (CJK content slips past pre-fix budget check)", () => {
+    // 20 CJK chars × 3 UTF-8 bytes each = 60 bytes; UTF-16 length = 20.
+    const cjkSource = "中".repeat(20);
+    expect(cjkSource.length).toBe(20);                              // UTF-16
+    expect(new TextEncoder().encode(cjkSource).length).toBe(60);    // UTF-8
+
+    // capBytes = 30. Pre-fix: moduleSource.length (20) > capBytes (30)
+    // is FALSE → no truncation; the full 60-byte CJK payload lands in
+    // the prompt unchanged, despite the byte budget. Post-fix: byte-aware
+    // comparison fires the truncation.
+    const prompt = composeReviewPrompt({
+      peer: "lumeyon",
+      peerRole: undefined,
+      modulePath: "/x.ts",
+      moduleSource: cjkSource,
+      task: "Review.",
+      capBytes: 30,
+    });
+
+    // Post-fix: prompt MUST contain the truncation marker (it didn't
+    // pre-fix because the budget check used UTF-16 units).
+    expect(prompt).toContain("[... truncated,");
+    // Post-fix: prompt MUST NOT contain the full 60-byte payload.
+    expect(prompt).not.toContain(cjkSource);
+  });
+
+  test("E7: surrogate-pair emoji content respects byte budget at character boundary", () => {
+    // Each emoji is 4 UTF-8 bytes / 2 UTF-16 code units. 15 emoji = 60
+    // bytes / 30 code units.
+    const emojiSource = "🎉".repeat(15);
+    expect(emojiSource.length).toBe(30);                            // UTF-16
+    expect(new TextEncoder().encode(emojiSource).length).toBe(60);  // UTF-8
+
+    // capBytes = 21 (deliberately ODD). Pre-fix: length (30) > capBytes
+    // (21) → slice(0, 21) takes 21 UTF-16 code units = 10 emoji + 1 lone
+    // high surrogate; the prompt contains 10 emoji visible to humans but
+    // an orphaned surrogate at position 21 — when the model re-encodes,
+    // it sees 10 valid emoji + a U+FFFD replacement. Post-fix: byte-
+    // aware truncation walks back to a UTF-8 character boundary, leaving
+    // exactly 5 emoji (20 bytes, fits in 21-byte budget).
+    const prompt = composeReviewPrompt({
+      peer: "lumeyon",
+      peerRole: undefined,
+      modulePath: "/x.ts",
+      moduleSource: emojiSource,
+      task: "Review.",
+      capBytes: 21,
+    });
+
+    // Pre-fix would put 10 emoji into the prompt's source block (plus
+    // an orphan); post-fix puts at most 5 (20 bytes, ≤ 21-byte cap).
+    expect(prompt).not.toContain("🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉");  // 10 emoji
+    // Truncation marker should be present.
+    expect(prompt).toContain("[... truncated,");
+  });
+
+  test("E7: ASCII content under cap unchanged (sanity / backwards compat)", () => {
+    const ascii = "A".repeat(40);
+    const prompt = composeReviewPrompt({
+      peer: "lumeyon",
+      peerRole: undefined,
+      modulePath: "/x.ts",
+      moduleSource: ascii,
+      task: "Review.",
+      capBytes: 100,  // bigger than length AND bytes → no truncation
+    });
+    expect(prompt).toContain(ascii);
+    expect(prompt).not.toContain("[... truncated");
+  });
 });
 
 // ─── 2. CLI integration — subprocess pattern ────────────────────────────────

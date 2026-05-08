@@ -36,6 +36,7 @@ import {
   SKILL_ROOT,
   CONVERSATIONS_DIR,
 } from "./lib.ts";
+import { truncateToUtf8Bytes, utf8ByteLength } from "./utf8.ts";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -84,8 +85,20 @@ export function composeReviewPrompt(args: {
   task: string;
   capBytes: number;
 }): string {
-  const truncated = args.moduleSource.length > args.capBytes
-    ? args.moduleSource.slice(0, args.capBytes) + `\n\n[... truncated, ${args.moduleSource.length - args.capBytes} bytes elided ...]`
+  // E7 fix (NL24 / lumeyon NL4 finding): truncate by UTF-8 BYTES, not
+  // UTF-16 .length. Pre-fix `args.moduleSource.length > args.capBytes`
+  // compared UTF-16 code units against a byte budget; for non-ASCII
+  // module content (CJK comments, emoji in test fixtures, accented
+  // Latin docs), payloads with bytes >> length silently slipped past the
+  // capBytes check. `slice(0, args.capBytes)` could also split a
+  // surrogate pair mid-character. Same shape as LC4 (NL23) — fixed via
+  // the shared utf8.ts utility (truncateToUtf8Bytes walks back to a
+  // non-continuation-byte boundary so multi-byte UTF-8 sequences are
+  // preserved). The elided-byte count is now correctly reported in
+  // BYTES, not UTF-16 code units.
+  const sourceBytes = utf8ByteLength(args.moduleSource);
+  const truncated = sourceBytes > args.capBytes
+    ? truncateToUtf8Bytes(args.moduleSource, args.capBytes) + `\n\n[... truncated, ${sourceBytes - args.capBytes} bytes elided ...]`
     : args.moduleSource;
   const roleBlock = args.peerRole
     ? `Your role as ${args.peer}:\n\n${args.peerRole}\n\n---\n\n`

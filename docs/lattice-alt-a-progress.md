@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T13:25Z
+## Current state — 2026-05-08T13:55Z
 
-**Phase: NL23 — drained LC4 (lattice-context.ts truncateForBudget UTF-16 length vs UTF-8 bytes mismatch + budget≤0 slice(0,-1) edge case). Pre-fix: `t.length <= budget` compared UTF-16 code units against the alleged byte budget (CJK chars: 1 code unit but 3 bytes; emoji: 2 code units but 4 bytes); `t.slice(0, budget - 1) + "…"` produced budget+2 bytes for ASCII because the ellipsis is 3 UTF-8 bytes; budget≤0 hit `slice(0, -1)` which dropped the last char and appended an ellipsis (opposite of intent). Post-fix: TextEncoder for byte counting, walk back to non-continuation-byte boundary so multi-byte sequences are preserved, reserve 3 bytes for "…", budget≤0 → "", budget < 3 → truncate without ellipsis. Cumulative: 30 REAL findings, 22 code fixes, 3 schema migrations.**
+**Phase: NL24 — drained E7 (ephemeral-peer-review composeReviewPrompt module-source truncation by JS .length / .slice instead of UTF-8 bytes — same shape as just-fixed LC4). Extracted shared `plugins/agent-chat/scripts/utf8.ts` with `truncateToUtf8Bytes` + `utf8ByteLength` and refactored BOTH LC4's `truncateForBudget` and E7's `composeReviewPrompt` to use it. The elided-byte count in the truncation marker is now correctly reported in BYTES instead of UTF-16 code units. Cumulative: 30 REAL findings, 23 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,138 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T13:55Z (NL24: queue-drain E7 — composeReviewPrompt UTF-16 length vs UTF-8 bytes mismatch; shared utf8.ts utility extracted)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains E7 — no fresh peer call. File-touch rule: NL23 touched lattice-context.ts; this iter primarily touches ephemeral-peer-review.ts (different file → eligible) plus a new shared `plugins/agent-chat/scripts/utf8.ts` utility module that both files (and future byte-budget callers) consume.
+
+**The bug (lumeyon NL4 E7):**
+  composeReviewPrompt's module-source truncation was the same shape as LC4 (just fixed at NL23), in a sibling file:
+  ```typescript
+  const truncated = args.moduleSource.length > args.capBytes
+    ? args.moduleSource.slice(0, args.capBytes) + `\n\n[... truncated, ${args.moduleSource.length - args.capBytes} bytes elided ...]`
+    : args.moduleSource;
+  ```
+
+  Three layered defects (parallel to LC4):
+  1. **UTF-16 vs UTF-8 mismatch.** `args.moduleSource.length` returns
+     UTF-16 code units, but `args.capBytes` is documented as bytes. For
+     non-ASCII module content (CJK comments, emoji in test fixtures,
+     accented Latin docs), payloads with bytes >> code units silently
+     slipped past the budget check unchanged — verified via the failing
+     test `cjkSource = "中".repeat(20)` (length=20, bytes=60) with
+     capBytes=30: pre-fix `length(20) > capBytes(30)` is false → no
+     truncation → full 60-byte payload landed in the prompt.
+  2. **Surrogate-pair splitting.** `slice(0, capBytes)` operates on
+     UTF-16 code units; for emoji content (each is a surrogate pair),
+     an odd capBytes lands mid-pair and produces an orphan surrogate
+     in the output. Verified via `🎉.repeat(15)` with capBytes=21:
+     pre-fix sliced at code-unit 21 = 10 emoji + orphan high surrogate
+     `\ud83c`.
+  3. **Mis-reported elision count.** When truncation DID fire, the
+     `${moduleSource.length - capBytes}` calculation reported elided
+     UTF-16 code units, not bytes, conflating the two unit systems
+     in a single string that claims "bytes elided".
+
+**The fix (extract shared utility, refactor both consumers):**
+
+  Created `plugins/agent-chat/scripts/utf8.ts` exposing two primitives:
+  - `utf8ByteLength(s)` — the UTF-8 byte length of a string.
+  - `truncateToUtf8Bytes(s, maxBytes)` — truncate at a UTF-8 character
+    boundary (walks back past continuation bytes 0x80..0xBF), returning
+    "" for budget ≤ 0.
+
+  Refactored both consumers to use the shared helper:
+  - `lattice-context.ts:truncateForBudget` — now composes
+    `truncateToUtf8Bytes` with the budget≤0 → "" rule and the 3-byte
+    ellipsis suffix logic. Behavior unchanged from NL23; same 7 LC4
+    tests pass.
+  - `ephemeral-peer-review.ts:composeReviewPrompt` — replaced the
+    UTF-16 `length`/`slice` pair with `utf8ByteLength` + `truncateToUtf8Bytes`.
+    The elided-byte count is now `sourceBytes - capBytes` (correctly
+    in bytes).
+
+**Test-first protocol:**
+  Added 13 tests across 2 files:
+    - **3 E7 regression tests** in `ephemeral-peer-review.test.ts`:
+      - **E7-a (CJK):** 20-CJK-char source (60 bytes, length 20) with
+        capBytes=30. Pre-fix: no truncation; full payload in prompt.
+        Post-fix: truncation marker present, full payload absent.
+        **Verified FAILING pre-fix.**
+      - **E7-b (emoji surrogate split):** 15-emoji source (60 bytes,
+        30 UTF-16 code units) with capBytes=21 (odd, splits a pair).
+        Pre-fix: `slice(0, 21)` produces 10 emoji + orphan high
+        surrogate `\ud83c`. Post-fix: byte-aware truncation walks back
+        to a clean character boundary. **Verified FAILING pre-fix**
+        (10 emoji + orphan visible in pre-fix output).
+      - **E7-c (ASCII sanity):** 40-char ASCII under capBytes — no
+        truncation; backwards compat.
+    - **10 direct unit tests** in new `tests/utf8.test.ts` covering
+      `utf8ByteLength` (ASCII, CJK, emoji) and `truncateToUtf8Bytes`
+      (under-budget passthrough, ASCII over-budget, CJK boundary
+      walk-back, emoji surrogate-pair safety, budget=0, negative budget,
+      empty input).
+
+**Why this matters:** ephemeral-peer-review is one of the load-bearing
+mechanisms by which orion drives self-improvement (peer reviews of
+modules → real findings). If the cap-bytes contract silently fails on
+non-ASCII module content, any module containing CJK comments / emoji
+test fixtures / accented Latin docs would ship its FULL source to the
+peer's LLM context regardless of capBytes, both blowing token budgets
+and confusing the peer's understanding of "the file you're reviewing"
+when files are large. Now that the substrate's review pipeline relies
+on this for every iter, correctness of the byte budget matters.
+
+**SHARED-HELPER BENEFIT:** future byte-truncation needs (e.g., E5's
+importer-path issue or any new prompt-building call site) can import
+`truncateToUtf8Bytes` directly. The systemic-pattern lesson learned at
+LC5 = K-imp-2 (trailing-marker /m regex copy-pasted) finally has its
+counter-example: when the second instance of the same bug shape shows
+up, EXTRACT the helper rather than re-applying the same fix in two
+places.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (training-data-shaped artifacts) — peer-review
+    transcripts now contain valid UTF-8 with correctly-reported elision
+    counts. The byte budget is honored even on multi-byte module content.
+  - ✅ Self-improvement infrastructure correctness — the very tool
+    orion uses for self-improvement is now byte-correct on non-ASCII
+    inputs.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 156 / 0 unchanged; plugin 525 → 538 (+13: 3 E7 + 10 utf8 unit)
+
+**Files touched (7):**
+  - plugins/agent-chat/scripts/utf8.ts (NEW: shared truncateToUtf8Bytes + utf8ByteLength)
+  - plugins/agent-chat/scripts/lattice-context.ts (truncateForBudget refactored to use shared helper)
+  - plugins/agent-chat/scripts/ephemeral-peer-review.ts (composeReviewPrompt module-source truncation refactored to use shared helper)
+  - plugins/agent-chat/tests/utf8.test.ts (NEW: 10 direct unit tests for the shared primitive)
+  - plugins/agent-chat/tests/ephemeral-peer-review.test.ts (3 E7 regression tests)
+  - docs/ephemeral-peer-reviews.md (E7 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL25 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL25):** File-touch rule blocks ephemeral-peer-review.ts and lattice-context.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — eligible)
+- LC3 (lattice-context.ts last touched NL24 — INELIGIBLE)
+- E4, E5 (ephemeral-peer-review.ts last touched NL24 — INELIGIBLE)
+- K-imp-1, 3, 7, 9 (import-from-kg.ts last touched NL22 — eligible)
+
+**Recommend NL25 → DRAIN K-imp-7** (importPairs:355 peer-review retro-upgrade scans only first 5 — same template as K-imp-6).
+
+Reasons:
+- Same SHAPE as K-imp-6 (just fixed at NL22): SQL `limit: 5` followed by in-memory `find()` to locate a specific answer. If the peer-review answer is at rank 6+ in the predictive_lift ordering, it's silently unreachable, and the retroactive upgrade (auto-imported tier-5 → peer-review tier-3 with authored explanation) doesn't fire.
+- import-from-kg.ts last touched NL22 (3 iters gap → eligible).
+- Self-contained fix: either raise the limit, push the disambiguator into queryAnswers (e.g., a `body` filter for exact-match), OR query by `answer_id` directly (the answer id is computable from question_id + body + by_agent at this point in the code).
+
+**Sequenced after NL25:**
+- NL26 → L5 (apprenticeship.ts pushContext k validation — eligible).
+- NL27+ → K-imp-1, K-imp-3, K-imp-9, E4, E5, LC3, C4 (design call).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ### 2026-05-08T13:25Z (NL23: queue-drain LC4 — UTF-16 length vs UTF-8 bytes mismatch + budget≤0 slice(0,-1) edge case)
 

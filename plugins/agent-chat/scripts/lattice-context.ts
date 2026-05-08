@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import { LatticeStore } from "../../../scripts/lattice/sqlite-store.ts";
 import { pushContext } from "../../../scripts/lattice/apprenticeship.ts";
 import type { QualityTier } from "../../../scripts/lattice/types.ts";
+import { truncateToUtf8Bytes, utf8ByteLength } from "./utf8.ts";
 
 export interface PushContextBlockOptions {
   /** The query string used to retrieve relevant priors. Typically the
@@ -130,48 +131,22 @@ export async function composePushedContextBlock(
 
 /** LC4 fix (NL23 / carina NL12 finding): truncate by UTF-8 BYTES, not by
  *  UTF-16 code units. The previous implementation used `t.length` and
- *  `t.slice(...)` — both of which operate on UTF-16 code units, so:
+ *  `t.slice(...)` — both of which operate on UTF-16 code units. See
+ *  utf8.ts for the underlying primitive and the full bug context.
  *
- *  - Multi-byte characters (CJK, accented Latin, emoji) under-counted
- *    against the byte budget. A 9-byte budget compared to `t.length` for
- *    "答案以中文表达" (length 7, bytes 21) wrongly let the full 21-byte
- *    payload through unchanged.
- *  - Surrogate-pair emoji could be sliced mid-pair, producing orphan
- *    surrogates and broken UTF-8 on output.
- *  - The budget≤0 path hit `t.slice(0, -1)` which (because slice treats
- *    negative indices as "from end") removed the LAST character and
- *    appended "…" — opposite of the intent and exceeded the alleged
- *    0-byte budget.
- *
- *  Post-fix: encode to UTF-8 bytes once, walk back to the last non-
- *  continuation byte at the budget boundary so we never split a
- *  multi-byte sequence, and reserve 3 bytes for the trailing "…" when
- *  there's room. budget≤0 returns ""; budget < 3 (smaller than the
- *  ellipsis itself) truncates without an ellipsis marker rather than
- *  exceeding the budget. */
+ *  This wrapper composes utf8.ts's `truncateToUtf8Bytes` with the
+ *  budget≤0 → "" rule and a 3-byte ellipsis suffix when the budget has
+ *  room for it (the ellipsis "…" / U+2026 is 3 UTF-8 bytes; budgets
+ *  below 3 truncate without a marker rather than overshooting). */
 export function truncateForBudget(s: string, budget: number): string {
   const t = s.replace(/\s+/g, " ").trim();
   if (budget <= 0) return "";
-  const enc = new TextEncoder();
-  const bytes = enc.encode(t);
-  if (bytes.length <= budget) return t;
+  if (utf8ByteLength(t) <= budget) return t;
   const ELLIPSIS_BYTES = 3;  // "…" (U+2026) = E2 80 A6 in UTF-8
   if (budget < ELLIPSIS_BYTES) {
-    // Too small to fit the ellipsis suffix; truncate at byte boundary
-    // without a marker rather than blowing the budget.
-    return decodeAtBoundary(bytes, budget);
+    return truncateToUtf8Bytes(t, budget);
   }
-  return decodeAtBoundary(bytes, budget - ELLIPSIS_BYTES).trimEnd() + "…";
-}
-
-/** Decode the prefix of `bytes` ending at or before `end`, walking back
- *  to a UTF-8 character boundary so we never return half a multi-byte
- *  sequence. UTF-8 continuation bytes are 0b10xxxxxx (0x80..0xBF); we
- *  walk back as long as the byte at `cut` is a continuation byte. */
-function decodeAtBoundary(bytes: Uint8Array, end: number): string {
-  let cut = Math.min(end, bytes.length);
-  while (cut > 0 && (bytes[cut] & 0xC0) === 0x80) cut--;
-  return new TextDecoder().decode(bytes.subarray(0, cut));
+  return truncateToUtf8Bytes(t, budget - ELLIPSIS_BYTES).trimEnd() + "…";
 }
 
 /** Extract the most recent peer (i.e., not-this-agent) section's body
