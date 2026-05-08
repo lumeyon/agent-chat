@@ -518,3 +518,139 @@ describe("LatticeStore — quality_tier semantics (dual-audience fusion)", () =>
     expect(fetched?.validator_id).toBe("human:alice");
   });
 });
+
+// Iter-3 deferred → NL7 executed: SQL-level enforcement of the dual-output
+// invariant (Answer.explanation NOT NULL). Pre-NL7 the runtime guards in
+// recordAnswer + putAnswer enforced this at the application layer; the
+// schema column itself was nullable. NL7 tightens at the SQL level too —
+// defense in depth. Migration handles existing databases.
+describe("schema migration: explanation NOT NULL (iter-3 / NL7)", () => {
+  test("fresh schema has explanation column declared NOT NULL", () => {
+    const fresh = new LatticeStore(":memory:");
+    try {
+      const colInfo = (fresh as any).db
+        .query(`PRAGMA table_info(answers)`)
+        .all() as Array<{ name: string; notnull: number }>;
+      const explanation = colInfo.find((c) => c.name === "explanation");
+      expect(explanation).toBeDefined();
+      expect(explanation!.notnull).toBe(1);
+    } finally {
+      fresh.close();
+    }
+  });
+
+  test("migration preserves existing data when tightening to NOT NULL", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const { Database } = require("bun:sqlite");
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lattice-migration-"));
+    const dbFile = path.join(tmp, "old.db");
+    try {
+      // Build the OLD-shape database directly (simulates a pre-NL7 lattice).
+      const oldDb = new Database(dbFile);
+      oldDb.exec(`
+        CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE questions (
+          id TEXT PRIMARY KEY,
+          framing TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('open','answered','closed','reopened')),
+          best_answer_id TEXT,
+          posed_at INTEGER NOT NULL,
+          posed_by TEXT NOT NULL,
+          posed_in_context TEXT,
+          depth INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE answers (
+          id TEXT PRIMARY KEY,
+          question_id TEXT NOT NULL,
+          body TEXT NOT NULL,
+          explanation TEXT,                    -- OLD: nullable
+          by_agent TEXT NOT NULL,
+          predictive_lift REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
+          quality_tier INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5),
+          created_at INTEGER NOT NULL,
+          validator_id TEXT,
+          FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE citations (
+          parent_answer_id TEXT NOT NULL,
+          child_answer_id TEXT NOT NULL,
+          PRIMARY KEY (parent_answer_id, child_answer_id),
+          FOREIGN KEY (parent_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_answer_id) REFERENCES answers(id) ON DELETE CASCADE
+        );
+        CREATE TABLE question_parents (
+          parent_question_id TEXT NOT NULL,
+          child_question_id TEXT NOT NULL,
+          PRIMARY KEY (parent_question_id, child_question_id),
+          FOREIGN KEY (parent_question_id) REFERENCES questions(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Seed old-format data (with non-null explanations — production
+      // already complies; iter-3's runtime guard ensured no NULLs landed).
+      oldDb.run(
+        `INSERT INTO questions (id, framing, status, posed_at, posed_by) VALUES (?, ?, ?, ?, ?)`,
+        ["v1:q1", "Test?", "open", 100, "boss"],
+      );
+      oldDb.run(
+        `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ["ans:r1", "v1:q1", "answer body", "real explanation", "orion", "accepted", 2, 200],
+      );
+      oldDb.close();
+
+      // Re-open via LatticeStore — should detect the old schema and migrate.
+      const migrated = new LatticeStore(dbFile);
+      try {
+        // After migration, column should be NOT NULL.
+        const colInfo = (migrated as any).db
+          .query(`PRAGMA table_info(answers)`)
+          .all() as Array<{ name: string; notnull: number }>;
+        const explanation = colInfo.find((c) => c.name === "explanation");
+        expect(explanation!.notnull).toBe(1);
+
+        // Data preserved.
+        const a = migrated.getAnswer("ans:r1");
+        expect(a).not.toBeNull();
+        expect(a!.body).toBe("answer body");
+        expect(a!.explanation).toBe("real explanation");
+        expect(a!.by_agent).toBe("orion");
+
+        // Schema version bumped to 2.
+        const ver = (migrated as any).db
+          .query(`SELECT value FROM schema_meta WHERE key = ?`)
+          .get("schema_version") as { value: string } | null;
+        expect(ver?.value).toBe("2");
+      } finally {
+        migrated.close();
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("schema-level NOT NULL rejects bypass-INSERT with NULL explanation", () => {
+    // Defense-in-depth: even if a future caller bypasses putAnswer's runtime
+    // guard and goes direct via raw SQL, the schema itself rejects NULL.
+    const fresh = new LatticeStore(":memory:");
+    try {
+      fresh.putQuestion({
+        id: "v1:q-bypass", framing: "x", status: "open", best_answer_id: null,
+        posed_at: 1, posed_by: "x", posed_in_context: null, depth: 0,
+      });
+      // Direct INSERT with NULL — should throw.
+      expect(() => {
+        (fresh as any).db.run(
+          `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          ["ans:bypass", "v1:q-bypass", "body", null, "orion", "accepted", 5, 1],
+        );
+      }).toThrow(/NOT NULL/i);
+    } finally {
+      fresh.close();
+    }
+  });
+});

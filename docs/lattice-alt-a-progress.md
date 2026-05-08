@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T04:15Z
+## Current state — 2026-05-08T04:35Z
 
-**Phase: NL6 — first queue-drain iter (no fresh peer call). L4 (apprenticeship.ts:227 reRankAnswers exact-margin IEEE float comparison) fixed. The queue-precedence rule worked: shipped a real fix for the cost of zero LLM calls. 19 REAL findings remain queued across 4 modules.**
+**Phase: NL7 — boss pre-approved the architectural-decision queue. First schema migration shipped: `Answer.explanation TEXT NOT NULL` (iter-3 finding finally closed end-to-end). Idempotent v1→v2 migration logic, 3 regression tests, production lattice migrated: 944 answers preserved, 0 NULL, schema_version=2. The substrate now enforces the dual-output invariant at SQL level (defense in depth) AND at the runtime (recordAnswer + putAnswer guards).**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,58 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T04:35Z (NL7: SQL migration v1→v2 — explanation TEXT NOT NULL; iter-3 finally closed end-to-end)
+
+**Loop:** stateful peer-driven via prompt.md. Boss edited prompt.md to rename "Boss-approval queue" → "Boss-pre-approval queue (architectural decisions can be made by you (orion))" — granting authority over the queued architectural items.
+
+**Pivot:** prompt.md's pre-edit NL7 hint was "DRAIN C3" (NaN cosine guard). Boss's edit unblocked the schema migrations, which had been queued since iter 3 (~6 hours of loop time blocked on what was actually trivial-once-authorized work). C3 stayed in the queue; this iter executed the highest-leverage newly-pre-approved item: the `explanation TEXT NOT NULL` migration.
+
+**Why this migration first:** simplest of the three queued schema migrations — single column, no FK changes, all 944 production rows already comply (audited iter NL7 pre-flight). Demonstrates the migration pattern; future iters can apply the same pattern to FK and CHECK migrations.
+
+**Test-first protocol:**
+  3 regression tests at sqlite-store.test.ts:
+    - Fresh schema has explanation column NOT NULL (verifies CREATE TABLE update)
+    - Migration on a pre-NL7-shape DB preserves data and tightens to NOT NULL (verifies the v1→v2 path)
+    - Schema-level NOT NULL rejects bypass-INSERT with NULL (defense in depth — even if a future caller bypasses putAnswer's runtime guard via raw SQL, the SQL constraint blocks it)
+  All 3 verified FAILING pre-fix.
+  Applied: bumped SCHEMA_VERSION to 2, changed `explanation TEXT` → `explanation TEXT NOT NULL` in CREATE TABLE, added migrateV1toV2 function (rebuild table via INSERT/DROP/RENAME pattern, wrapped in BEGIN IMMEDIATE for atomicity, idempotent — no-op on already-migrated DBs).
+  All 3 PASS post-fix.
+
+**Production migration result:**
+  - Pre-migration: 944 answers, 0 NULL explanations (audited).
+  - Backup created at `/data/lumeyon/agent-chat/conversations/lattice.db.bak-pre-NL7` (3.94 MB).
+  - Migration ran via opening LatticeStore (ensureSchema → migrateV1toV2 detected old schema, rebuilt table).
+  - Post-migration: 944 answers preserved, 0 NULL, schema_version=2, explanation column `notnull=1`.
+  - Sample row spot-checks: body and explanation lengths intact, by_agent preserved.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 1 (DUAL-OUTPUT) — now enforced at SQL schema level AND application runtime. Defense in depth.
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — schema invariant tightened; the dual-audience-fusion contract (per docs/inquiry-lattice.md) is more rigorously enforced.
+
+**The boss-edit pattern is significant:** boss authorized me by editing the markdown rather than messaging me to execute. The rule changed from "ask first, then act" to "act, since boss already approved this class of action via the rule edit." Encoded this as a new lesson in prompt.md.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 409 → 419 (+10 background record-turns)
+  - Answers: 895 → 944 (+49 background)
+  - Authored, citations, tier-3, etc.: unchanged this iter (no peer call, no fresh authoring).
+
+**Tests:** plugin 508/0/3 (no change). Lattice 127 → 130 (+3 NL7 migration regression tests).
+
+**Files touched (5):**
+  - scripts/lattice/sqlite-store.ts (schema bump + migrateV1toV2)
+  - scripts/lattice/sqlite-store.test.ts (3 regression tests)
+  - docs/ephemeral-peer-reviews.md (types.ts row updated: SQL NOT NULL shipped)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (boss-pre-approval queue updated; NL8 plan)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL8):** Per queue precedence (still 19 + 1 = 20 pre-approved minus this iter's = 19 queued findings + 4 architectural items). Per file-touch rule (NL7 just touched sqlite-store.ts). Two natural paths:
+- **Continue schema migration sweep:** ship K1 (best_answer_id FK constraint) — but that touches sqlite-store.ts again, violating file-touch rule. Defer to NL9.
+- **DRAIN C3** (study-turn.ts NaN cosine `Number.isFinite` guard) — eligible per file-touch rule, smallest queued data-corruption fix.
+
+**Recommend NL8 → DRAIN C3** (the original plan), then NL9 → schema migration K1 (best_answer_id FK), then NL10 → schema migration K2 (CHECK quality_tier IN). This sequences the substantial schema work into separate commits for clean blast-radius.
 
 ### 2026-05-08T04:15Z (NL6: queue-drain L4 — reRankAnswers epsilon-tolerant float comparison)
 

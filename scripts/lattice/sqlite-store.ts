@@ -29,7 +29,7 @@ import type {
   QuestionStatus,
 } from "./types.ts";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;  // v2 (NL7): explanation TEXT NOT NULL on answers
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS answers (
   id              TEXT PRIMARY KEY,
   question_id     TEXT NOT NULL,
   body            TEXT NOT NULL,
-  explanation     TEXT,
+  explanation     TEXT NOT NULL,
   by_agent        TEXT NOT NULL,
   predictive_lift REAL NOT NULL DEFAULT 0,
   status          TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
@@ -101,6 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_qp_child  ON question_parents(child_question_id);
 
 function ensureSchema(db: Database): void {
   db.exec(SCHEMA_SQL);
+  // Run any pending migrations on existing databases. New DBs get the
+  // current schema directly from CREATE TABLE; the migrations are no-ops.
+  migrateV1toV2(db);
   // Record schema version for future migrations.
   db.run(
     `INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)`,
@@ -108,6 +111,78 @@ function ensureSchema(db: Database): void {
   );
   // Foreign key enforcement is per-connection in sqlite.
   db.run("PRAGMA foreign_keys = ON");
+}
+
+/** Migration v1 → v2 (NL7): tighten answers.explanation to TEXT NOT NULL.
+ *  iter-3's runtime guard at putAnswer + recordAnswer ensures all writes
+ *  carry non-empty explanations; v2 enforces the same invariant at the
+ *  SQL level (defense in depth). Safe on production data because all
+ *  existing rows already comply (audited NL7).
+ *
+ *  SQLite doesn't support `ALTER COLUMN ... SET NOT NULL`, so the
+ *  migration uses the standard "create new table, copy, drop, rename"
+ *  pattern. Wrapped in BEGIN IMMEDIATE for atomicity. Idempotent: if
+ *  the column is already NOT NULL (fresh schema OR previously migrated),
+ *  this is a no-op. */
+function migrateV1toV2(db: Database): void {
+  // Detect if explanation column is currently nullable.
+  const colInfo = db
+    .query<{ name: string; notnull: number }, []>(`PRAGMA table_info(answers)`)
+    .all();
+  const explanation = colInfo.find((c) => c.name === "explanation");
+  if (!explanation || explanation.notnull === 1) {
+    // Already migrated, or table doesn't exist (fresh DB — handled by
+    // CREATE TABLE above). Nothing to do.
+    return;
+  }
+  // Safety check: refuse to migrate if any row has NULL explanation.
+  // iter-3's runtime guard should mean zero such rows in practice.
+  const nullCountRow = db
+    .query<{ c: number }, []>(`SELECT COUNT(*) as c FROM answers WHERE explanation IS NULL`)
+    .get();
+  const nullCount = (nullCountRow as { c: number }).c;
+  if (nullCount > 0) {
+    throw new Error(
+      `migrateV1toV2 aborted: ${nullCount} answer row(s) have NULL explanation. ` +
+      `Backfill those first (recordAnswer enforces non-empty at write time, ` +
+      `so this should be impossible — investigate the data source).`,
+    );
+  }
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(`
+      CREATE TABLE answers_new (
+        id              TEXT PRIMARY KEY,
+        question_id     TEXT NOT NULL,
+        body            TEXT NOT NULL,
+        explanation     TEXT NOT NULL,
+        by_agent        TEXT NOT NULL,
+        predictive_lift REAL NOT NULL DEFAULT 0,
+        status          TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
+        quality_tier    INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5),
+        created_at      INTEGER NOT NULL,
+        validator_id    TEXT,
+        FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO answers_new (id, question_id, body, explanation, by_agent, predictive_lift, status, quality_tier, created_at, validator_id)
+      SELECT id, question_id, body, explanation, by_agent, predictive_lift, status, quality_tier, created_at, validator_id FROM answers
+    `);
+    db.exec(`DROP TABLE answers`);
+    db.exec(`ALTER TABLE answers_new RENAME TO answers`);
+    // Recreate indexes that were attached to the old table.
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_question ON answers(question_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_by ON answers(by_agent)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_status ON answers(status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_quality ON answers(quality_tier)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_predictive_lift ON answers(predictive_lift DESC)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_created_at ON answers(created_at)`);
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    throw e;
+  }
 }
 
 /** Compute a deterministic answer id from its content fields. */
