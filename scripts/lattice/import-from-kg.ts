@@ -321,28 +321,39 @@ function importPairs(
     const questionId = canonicalIdOf(user.body);
     const posedAt = Math.floor(userMs / 1000);
 
-    // Insert Question (idempotent — skip if exists).
-    const existing = store.getQuestion(questionId);
-    if (existing) {
-      qDup++;
-    } else {
-      // Insert as "open" first, then promote to "answered" via
-      // setQuestionStatus after the answer is recorded. Pre-iter-5 this
-      // was status="answered"+best_answer_id=null, which transiently
-      // violated the joint-consistency invariant the iter-5 guard now
-      // enforces (sqlite-store.ts:enforceQuestionStatusInvariant).
-      const q: Question = {
-        id: questionId,
-        framing: user.body,
-        status: "open",
-        best_answer_id: null,
-        posed_at: posedAt,
-        posed_by: user.agent,
-        posed_in_context: context,
-        depth: 0,
-      };
-      store.putQuestion(q);
+    // K-imp-4 fix (NL18 keystone): race-safe atomic insert.
+    // Pre-fix this was getQuestion → if-null-putQuestion, which is the
+    // textbook check-then-act race. Two parallel importers reading at the
+    // same moment both saw null, both proceeded to putQuestion, and the
+    // second collided with "UNIQUE constraint failed: questions.id".
+    // Post-fix: tryPutQuestion uses INSERT OR IGNORE (atomic at the SQL
+    // level). On success the row is ours; on miss the row already exists
+    // and we re-read for the existing record (only when we actually need
+    // it for downstream lookups).
+    //
+    // Insert as "open" first, then promote to "answered" via
+    // setQuestionStatus after the answer is recorded. Pre-iter-5 this
+    // was status="answered"+best_answer_id=null, which transiently
+    // violated the joint-consistency invariant the iter-5 guard now
+    // enforces (sqlite-store.ts:enforceQuestionStatusInvariant).
+    const q: Question = {
+      id: questionId,
+      framing: user.body,
+      status: "open",
+      best_answer_id: null,
+      posed_at: posedAt,
+      posed_by: user.agent,
+      posed_in_context: context,
+      depth: 0,
+    };
+    const inserted = store.tryPutQuestion(q);
+    let existing: Question | null;
+    if (inserted) {
       qIns++;
+      existing = null;
+    } else {
+      qDup++;
+      existing = store.getQuestion(questionId);
     }
 
     // Detect ephemeral peer review responses (sections written by the

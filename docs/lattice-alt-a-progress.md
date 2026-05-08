@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T10:25Z
+## Current state — 2026-05-08T10:55Z
 
-**Phase: NL17 — drained L3 (apprenticeship single-answer reRankAnswers lifecycle gap). Pre-fix: single-answer promote() set the answer's status to "accepted" but never updated the question's status or best_answer_id; question stayed "open" despite having an accepted answer. Post-fix: setQuestionStatus call added after promote(). Cumulative: 30 REAL findings, 15 code fixes, 3 schema migrations.**
+**Phase: NL18 — drained K-imp-4 (importer question-idempotency read-then-insert race). Pre-fix: importPairs checked `getQuestion(id)` and conditionally called `putQuestion(q)` — classic check-then-act race; two parallel importers both saw null, both proceeded to insert, second crashed with "UNIQUE constraint failed: questions.id". Post-fix: added `LatticeStore.tryPutQuestion` using `INSERT OR IGNORE` (atomic at the SQL level); importPairs uses it + a conditional re-read. Cumulative: 30 REAL findings, 16 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,107 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T10:55Z (NL18: queue-drain K-imp-4 — importer question-idempotency read-then-insert race)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-4 — no fresh peer call. File-touch rule: NL17 touched apprenticeship.ts; this iter touches sqlite-store.ts + import-from-kg.ts (different files → eligible).
+
+**The bug (keystone NL5 K-imp-4):**
+  importPairs's question-side ingest is a textbook check-then-act race:
+  ```typescript
+  const existing = store.getQuestion(questionId);
+  if (existing) {
+    qDup++;
+  } else {
+    store.putQuestion(q);  // race window between getQuestion and here
+    qIns++;
+  }
+  ```
+  Two parallel importers (e.g., `--all` over multiple edges in concurrent
+  bun processes, or kg.ts auto-import racing with a manual run) both call
+  getQuestion at roughly the same moment, both see null, both proceed to
+  putQuestion, the second collides with `UNIQUE constraint failed: questions.id`
+  and the import dies — partway through, leaving the lattice in a partial
+  state that's hard to recover from.
+
+  Same SHAPE as iter-8 K3 (DAG cycle race), but the fix template is
+  different: K3 needed multi-row consistency under concurrent inserts so
+  it used `BEGIN IMMEDIATE` to serialize the full check+insert; K-imp-4
+  is a single-row idempotency operation, so SQL's native `INSERT OR IGNORE`
+  is sufficient (atomic, no transaction overhead).
+
+**The fix (two layers):**
+
+1. **`scripts/lattice/sqlite-store.ts`** — added `tryPutQuestion(q): boolean`
+   using a new prepared statement `tryInsertQuestion` with `INSERT OR IGNORE`.
+   Returns `true` if the row was inserted (`changes > 0`), `false` if the
+   row already existed. Still calls `enforceQuestionStatusInvariant` first
+   so the same write-time invariants apply.
+
+2. **`scripts/lattice/import-from-kg.ts`** — `importPairs` replaces the
+   getQuestion+putQuestion check-then-act with `tryPutQuestion(q)` + a
+   conditional `getQuestion` only when needed (i.e., on the qDup branch
+   where the downstream `existing.best_answer_id !== accepted[0].id`
+   check still depends on the existing record's data). Race window is
+   eliminated: `INSERT OR IGNORE` is atomic at the SQL level.
+
+**Test-first protocol:**
+  2 regression tests at import-from-kg.test.ts:
+    - **K-imp-4-a:** importEdgeConvo end-to-end with race injection.
+      Patches BOTH `getQuestion` (pre-fix code path) AND `tryPutQuestion`
+      (post-fix code path) so the test is robust across the fix transition.
+      The patch fires a peer-side `putQuestion` once, simulating a parallel
+      importer that wins the race. Pre-fix this triggers `UNIQUE constraint
+      failed: questions.id`; post-fix `INSERT OR IGNORE` returns `false`
+      and the question is correctly counted as a duplicate. **Verified
+      FAILING pre-fix** with the exact error: `UNIQUE constraint failed:
+      questions.id`.
+    - **K-imp-4-b:** `tryPutQuestion` cross-handle idempotency. Two
+      LatticeStore instances on the same DB file. First call returns
+      `true`, second returns `false`, no throw. Documents the atomic
+      primitive's contract. **Verified FAILING pre-fix** because the
+      method didn't exist (`a.tryPutQuestion is not a function`).
+
+**Why this matters:** the importer is the bridge from edge-level CONVO.md
+content into the global lattice. With Alt-A-1 production ramping (252→425
+questions and growing), parallel imports become more likely — multiple
+edges, kg.ts auto-import on every turn, manual `--all` reruns, and any
+future cross-process ingest paths. K-imp-4 was a latent crash waiting for
+load to expose it. Fixing it BEFORE the lattice is consulted by long-
+running services makes the substrate's ingest layer race-safe by
+construction.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (artifacts training-data-shaped) — the lattice's role as
+    the training-data substrate REQUIRES that ingest be deterministic and
+    crash-free even under concurrent load. K-imp-4 was a latent
+    correctness bug in that pipeline. Fixed.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 150 → 152 (+2 K-imp-4)
+
+**Files touched (5):**
+  - scripts/lattice/sqlite-store.ts (new `tryPutQuestion` method + prepared statement)
+  - scripts/lattice/import-from-kg.ts (importPairs uses tryPutQuestion + conditional re-read)
+  - scripts/lattice/import-from-kg.test.ts (2 K-imp-4 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-4 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL19 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL19):** File-touch rule blocks sqlite-store.ts AND import-from-kg.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL17 — INELIGIBLE yet)
+- C4, C5 (study-turn.ts, last touched NL16 — eligible after gap)
+- LC2, LC3, LC4 (lattice-context.ts, last touched NL15 — eligible)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — eligible)
+
+**Recommend NL19 → DRAIN LC2** (lattice-context.ts:65 over-fetch buffer too small). Reasons:
+- Real correctness issue: `lattice-context.ts` over-fetches only `k+5` candidates before applying the self-filter; if the buffer is exhausted, eligible peer hits are silently dropped from the prompt. The fix: bump the buffer or apply the filter in SQL.
+- lattice-context.ts last touched NL15 (3 iters gap → eligible).
+- Self-contained fix: change the over-fetch constant or refactor the filter to SQL-side.
 
 ### 2026-05-08T10:25Z (NL17: queue-drain L3 — single-answer reRankAnswers lifecycle update)
 

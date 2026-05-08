@@ -603,3 +603,116 @@ describe("importEdgeConvo — K-imp-5 try/catch discrimination", () => {
     expect(isPrimaryKeyConflict(new Error("some random error"))).toBe(false);
   });
 });
+
+// Regression for keystone's NL5 K-imp-4 finding: importPairs has a
+// classic check-then-act race on the question table. importPairs first
+// calls store.getQuestion(id); if null, it builds a new Question and
+// calls store.putQuestion(q). Between the read and the write, a peer
+// importer can win the race and insert the same question — primary's
+// putQuestion then collides with a UNIQUE constraint failure.
+//
+// NL18 fix: introduce LatticeStore.tryPutQuestion which uses
+// `INSERT OR IGNORE` (atomic at the SQL level) and returns whether the
+// row was actually inserted. importPairs uses this + a fallback re-read
+// when the row already exists.
+describe("importEdgeConvo — K-imp-4 question idempotency race", () => {
+  test("K-imp-4: importEdgeConvo survives a peer writer that inserts the same question between read and write", async () => {
+    // Use a file-backed DB so two LatticeStore handles can race on it.
+    // The default in-memory store from beforeEach can't be shared across
+    // two handles (each :memory: is its own DB).
+    const dbPath = path.join(edgeDir, "lattice.db");
+    const primary = new LatticeStore(dbPath);
+    const peer = new LatticeStore(dbPath);
+
+    // Author a CONVO.md that yields one Q/A pair.
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T10:00:00Z", "Race-targeted question."),
+      section("orion", "assistant response", "2026-05-07T10:00:00Z", "Race-targeted answer."),
+    );
+
+    // Inject the race. We need the patch to work for both code paths:
+    //   - Pre-fix: importPairs calls getQuestion → if-null-putQuestion.
+    //     We patch getQuestion to insert via peer when null is observed,
+    //     then primary's putQuestion races and throws UNIQUE.
+    //   - Post-fix: importPairs calls tryPutQuestion (INSERT OR IGNORE)
+    //     directly. We patch tryPutQuestion to insert via peer first,
+    //     then primary's INSERT OR IGNORE silently no-ops (changes=0)
+    //     → returns false → counted as duplicate.
+    // Either way: the race is simulated and the test asserts that
+    // importEdgeConvo does NOT throw.
+    let raceArmed = true;
+    const racePeerInsert = (id: string, framing: string) => {
+      if (!raceArmed) return;
+      raceArmed = false;
+      peer.putQuestion({
+        id,
+        framing,
+        status: "open",
+        best_answer_id: null,
+        posed_at: 1,
+        posed_by: "racer",
+        posed_in_context: "race-test",
+        depth: 0,
+      });
+    };
+    const origGet = primary.getQuestion.bind(primary);
+    (primary as any).getQuestion = (id: string) => {
+      const existing = origGet(id);
+      if (existing === null) racePeerInsert(id, "Race-targeted question.");
+      return existing;
+    };
+    const origTryPut = (primary as any).tryPutQuestion?.bind(primary);
+    if (origTryPut) {
+      (primary as any).tryPutQuestion = (q: any) => {
+        racePeerInsert(q.id, q.framing);
+        return origTryPut(q);
+      };
+    }
+
+    // Pre-fix: importEdgeConvo would throw "UNIQUE constraint failed:
+    // questions.id" because primary's putQuestion fires after peer's
+    // sneaky insert.
+    // Post-fix: tryPutQuestion (INSERT OR IGNORE) silently no-ops; the
+    // question is correctly counted as a duplicate, and the answer side
+    // proceeds normally.
+    let result;
+    expect(() => {
+      result = importEdgeConvo(primary, edgeDir);
+    }).not.toThrow();
+
+    // The peer wrote the question, so primary's import should see it as
+    // an already-existing question (qDup++). The answer should still
+    // insert because peer didn't write the answer side.
+    expect(result!.questions_inserted).toBe(0);
+    expect(result!.questions_already_existed).toBe(1);
+    expect(result!.answers_inserted).toBe(1);
+    expect(result!.pairs_found).toBe(1);
+
+    primary.close();
+    peer.close();
+  });
+
+  test("K-imp-4: tryPutQuestion is idempotent across handles — second insert returns false, no throw", () => {
+    const dbPath = path.join(edgeDir, "lattice.db");
+    const a = new LatticeStore(dbPath);
+    const b = new LatticeStore(dbPath);
+
+    const q = {
+      id: "v1:racy123",
+      framing: "Race candidate question.",
+      status: "open" as const,
+      best_answer_id: null,
+      posed_at: 1,
+      posed_by: "alice",
+      posed_in_context: "test",
+      depth: 0,
+    };
+
+    expect(a.tryPutQuestion(q)).toBe(true);
+    expect(() => b.tryPutQuestion(q)).not.toThrow();
+    expect(b.tryPutQuestion(q)).toBe(false);
+
+    a.close();
+    b.close();
+  });
+});

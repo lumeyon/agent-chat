@@ -515,6 +515,7 @@ export class LatticeStore {
   private db: Database;
   private stmts: {
     insertQuestion: Statement;
+    tryInsertQuestion: Statement;
     getQuestion: Statement;
     updateQuestionStatus: Statement;
     insertAnswer: Statement;
@@ -530,6 +531,17 @@ export class LatticeStore {
     this.stmts = {
       insertQuestion: this.db.prepare(`
         INSERT INTO questions (id, framing, status, best_answer_id, posed_at, posed_by, posed_in_context, depth)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `),
+      // K-imp-4 fix (NL18 keystone): atomic INSERT-or-skip. SQLite
+      // INSERT OR IGNORE is race-safe at the SQL level — concurrent
+      // writers can't both succeed; exactly one wins, the other silently
+      // no-ops. Used by importPairs (and any other ingest path) to drop
+      // the classic check-then-act getQuestion+putQuestion race that
+      // surfaced as "UNIQUE constraint failed: questions.id" under
+      // parallel imports.
+      tryInsertQuestion: this.db.prepare(`
+        INSERT OR IGNORE INTO questions (id, framing, status, best_answer_id, posed_at, posed_by, posed_in_context, depth)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `),
       getQuestion: this.db.prepare(`SELECT * FROM questions WHERE id = ?`),
@@ -568,6 +580,31 @@ export class LatticeStore {
       q.posed_in_context ?? null,
       q.depth,
     );
+  }
+
+  /** K-imp-4 fix (NL18 keystone): atomic, race-safe variant of putQuestion.
+   *  Returns true if the row was inserted, false if a row with the same id
+   *  already existed. Uses INSERT OR IGNORE — concurrent writers cannot
+   *  collide; exactly one wins. Use this for ingest paths that must be
+   *  idempotent under parallel callers (e.g. importPairs).
+   *
+   *  Note: when the row already exists this method does NOT update any
+   *  fields. If the caller needs to know what's actually stored, follow
+   *  up with getQuestion(id). The intent is "create-if-absent, otherwise
+   *  no-op," not "upsert." */
+  tryPutQuestion(q: Question): boolean {
+    enforceQuestionStatusInvariant(q.status, q.best_answer_id);
+    const result = this.stmts.tryInsertQuestion.run(
+      q.id,
+      q.framing,
+      q.status,
+      q.best_answer_id ?? null,
+      q.posed_at,
+      q.posed_by,
+      q.posed_in_context ?? null,
+      q.depth,
+    );
+    return result.changes > 0;
   }
 
   getQuestion(id: string): Question | null {

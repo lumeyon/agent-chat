@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL17 commit)
+## CURRENT STATE (as of NL18 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -48,7 +48,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **4 fixed: L1+L2+L4+L3**; L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **3 fixed: C1, C2, C3**; C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, **2 fixed: E6, E3**; E1, E2, E4, E5, E7 queued)
-- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **3 fixed: K-imp-2, K-imp-5, K-imp-8**; K-imp-1, 3, 4, 6, 7 queued; K-imp-9 added NL12 observation)
+- `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, **4 fixed: K-imp-2, K-imp-5, K-imp-8, K-imp-4**; K-imp-1, 3, 6, 7 queued; K-imp-9 added NL12 observation)
 
 ### Uncovered modules (priority for fresh peer reviews):
 1. `scripts/lattice/stats.ts` — lumeyon or keystone fit
@@ -58,7 +58,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 ### Covered (added NL12):
 - `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **2 fixed: LC1, LC5**; LC2, LC3, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 16 total):
+### Queued findings (drainable WITHOUT fresh peer call — 15 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
@@ -74,10 +74,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **E5** (line 143): importer path repo-layout-dependent.
 - **E7** (line 87): truncation by JS string length, not bytes.
 
-#### import-from-kg.ts (keystone NL5) — 6 queued (K-imp-5 drained NL13)
+#### import-from-kg.ts (keystone NL5) — 5 queued (K-imp-5 drained NL13, K-imp-4 drained NL18)
 - **K-imp-1** (parseSections:54): false sections from `## ` inside fenced transcripts.
 - **K-imp-3** (importEdgeConvo:231): cross-archive Q→A pair lost when archiving splits.
-- **K-imp-4** (importPairs:283): question idempotency read-then-insert race.
 - **K-imp-6** (importPairs:338): best_answer_id chosen via queryAnswers limit:1.
 - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only first 5.
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
@@ -99,26 +98,27 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL18 → DRAIN K-imp-4** (importPairs:283 question idempotency read-then-insert race).
+**NL19 → DRAIN LC2** (lattice-context.ts:65 over-fetch only k+5 — eligible peer hits dropped if buffer insufficient).
 
-**Why K-imp-4:**
-- Real concurrency bug; same shape as iter-8 K3 (DAG cycle race) which already taught us the fix template. The importer reads "does this question exist?" and then inserts — between the read and the insert, another writer can win the race, causing `UNIQUE` collision OR (worse) silent double-import depending on the surrounding logic.
-- import-from-kg.ts last touched NL13 (5 iters gap → file-touch rule satisfied).
-- File-touch rule: NL17 touched apprenticeship.ts; this picks a different file.
+**Why LC2:**
+- Real correctness bug. `lattice-context.ts` over-fetches `k+5` candidates from pushContext, then filters in-memory by `exclude_agent` (drop the caller's own authored answers). When an agent has authored MANY of the top-k+5 candidates, the filter exhausts the buffer and the prompt pushes FEWER than k peer hits — silently truncating peer signal in cross-domain push.
+- lattice-context.ts last touched NL15 (4 iters gap → file-touch rule satisfied; NL18 touched sqlite-store.ts + import-from-kg.ts → different file).
 
 **Fix approach options (pick during exec):**
-- **Option A — INSERT OR IGNORE:** simplest. Replace the read+conditional-insert with `INSERT OR IGNORE` for the question row, then re-read to get the canonical row. Atomic at the SQL level, no transaction needed.
-- **Option B — withImmediateWriter:** reuse the helper from sqlite-store.ts (iter-8 K3) to wrap the read+insert in `BEGIN IMMEDIATE`. Heavier but mirrors K3 exactly.
-- Pick A unless the surrounding code requires reading and acting on the result inside the transaction.
+- **Option A — bigger buffer:** raise k+5 → k+25 (or compute as `k * 5`). Simple but dumb; same bug shape with bigger constant.
+- **Option B — SQL-side filter:** push `exclude_agent` into pushContext's queryAnswers filter, so the buffer doesn't pre-pollute. Cleaner; matches the pattern LC1's NL15 fix used (push min_cosine into the API surface so filtering happens before slicing).
+- **Option C — adaptive buffer:** keep fetching until k peer hits found OR result-set exhausted. Most correct but most code change.
+- Recommend B as the primary fix; if pushContext doesn't already accept `exclude_agent`, route through the existing `posed_by` axis or extend the API.
 
 **Test approach (2 regression tests):**
-- Test 1: simulate two parallel importers via two `LatticeStore` instances on the same DB. Both call importPairs with the same question framing simultaneously. Pre-fix: one of them throws a UNIQUE-constraint error because the read missed and the insert collided. Post-fix: both succeed; only one row exists.
-- Test 2: idempotent re-run of importPairs on already-imported content — must remain a no-op for the question (not duplicate) and not throw.
+- Test 1: lattice with 20 questions where 15 have answers BY the calling agent and 5 have answers by a peer. With `k=5` and `exclude_agent=caller`, pre-fix returns ≤ (k+5)−15 = 0 peer hits (or some small number bounded by the buffer). Post-fix returns 5 peer hits.
+- Test 2: regression — when `exclude_agent` is unset, behavior unchanged.
 
-**Sequenced after NL18:**
-- NL19 → LC2/LC3/LC4 (lattice-context.ts NOT touched since NL15, eligible),
-- NL20 → E1+E2 (ephemeral race conditions, ephemeral-peer-review.ts last touched NL14),
-- NL21+ → C4/C5, K-imp-1/3/6/7/9, L5
+**Sequenced after NL19:**
+- NL20 → LC3 (null best_answer survives exclude_agent filter — header-only block; lattice-context.ts last touched NL19 → INELIGIBLE; pick C5 or LC4 instead)
+- NL20 alt → C5 (study-turn.ts SQL limit applied before in-memory authored filter — eligible since study-turn last touched NL16),
+- NL21 → E1+E2 (ephemeral race conditions, ephemeral-peer-review.ts last touched NL14),
+- NL22+ → C4, K-imp-1/3/6/7/9, L5, LC3, LC4
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
@@ -148,14 +148,16 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL17):**
+- **Cumulative ledger (post-NL18):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 15 fixed at code level (L1, L2, L3, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
+  - 16 fixed at code level (L1, L2, L3, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
   - 3 schema migrations shipped
-  - 16 queued findings remain
-  - Fix-rate: 50% (15/30 code) + all 3 schema migrations
+  - 15 queued findings remain
+  - Fix-rate: 53% (16/30 code) + all 3 schema migrations
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
   - **L3 lesson: invariants need to be enforced in BOTH branches of a conditional.** Iter-5's joint-consistency invariant (status="answered" → best_answer_id non-null) was correctly enforced in setQuestionStatus AND in the multi-answer reRankAnswers branch — but the single-answer branch silently bypassed by calling the lower-level `setAnswerStatus` directly. Whenever a guard is added at the data-access layer, audit ALL call sites that could write inconsistent state, not just the obvious one.
+  - **K-imp-4 lesson: race-safety belongs at the SQL primitive layer, not in app code.** Pre-fix, the importer did `getQuestion + putQuestion` and tried to be clever. Fix: introduce `tryPutQuestion` using `INSERT OR IGNORE`, and let SQL handle the atomicity. ANY ingest path that needs idempotent insert should use this primitive; never write check-then-act for uniqueness in app code. Audit other ingest paths (kg.ts, etc.) for the same anti-pattern.
+  - **Test design lesson: when refactoring a code path, regression tests should patch BOTH the pre-fix and post-fix call sites** so the test is robust across the transition. K-imp-4-a's monkey-patch handles both `getQuestion` (pre-fix path) and `tryPutQuestion` (post-fix path), enabling a single test that fails pre-fix and passes post-fix.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 
