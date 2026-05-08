@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL22 commit)
+## CURRENT STATE (as of NL23 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -56,9 +56,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 3. `scripts/lattice/validate-corpus.ts`
 
 ### Covered (added NL12):
-- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **3 fixed: LC1, LC5, LC2**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set, LC4 queued)
+- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **4 fixed: LC1, LC2, LC4, LC5**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set)
 
-### Queued findings (drainable WITHOUT fresh peer call — 10 total):
+### Queued findings (drainable WITHOUT fresh peer call — 9 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
@@ -77,9 +77,8 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only first 5. (Same shape as K-imp-6; same fix template.)
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
 
-#### lattice-context.ts (carina NL12) — 2 queued (LC1 drained NL15, LC2 drained NL19)
+#### lattice-context.ts (carina NL12) — 1 queued (LC1 drained NL15, LC2 drained NL19, LC4 drained NL23)
 - **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block. **NOTE:** partially-addressed by LC2 fix when exclude_agent is set (pushContext now skips null-best_answer hits in walk loop). Remaining concern: header line "top-K" lying when exclude_agent unset.
-- **LC4** (lattice-context.ts:109): body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1). Same UTF class as E7.
 
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
 - ~~iter-3 SQL `explanation TEXT NOT NULL`~~ — **SHIPPED NL7**
@@ -93,31 +92,32 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL23 → DRAIN LC4** (lattice-context.ts:109 body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1)).
+**NL24 → DRAIN E7** (ephemeral-peer-review.ts:87 truncation by JS string length not bytes — same UTF class as LC4, just-fixed at NL23).
 
-**Why LC4:**
-- Real correctness bug: `truncateForBudget` at lattice-context.ts:126 uses JS `.length` (UTF-16 code units) and `.slice` to enforce the byte budget. For ASCII content this approximates bytes, but for non-ASCII (emoji, CJK, accented Latin) it under-counts and lets bigger payloads slip through, OR over-counts and drops legitimate content.
-- Edge case: when budget≤0, the code does `t.slice(0, budget - 1)` which translates to `t.slice(0, -1)` — that REMOVES THE LAST CHARACTER, the opposite of "truncate to nothing". A budget of 0 should produce an empty string (or a sentinel).
-- lattice-context.ts last touched NL19 (3 iters gap → file-touch rule satisfied; NL22 touched import-from-kg.ts → different file).
+**Why E7:**
+- Same SHAPE as LC4 (just fixed): module-source truncation in ephemeral-peer-review uses JS `.length` (UTF-16 code units), not UTF-8 bytes. For non-ASCII module content (e.g., comments with CJK, emoji in test fixtures) this under-counts.
+- The fix template was just proven at NL23 — apply the SAME pattern (TextEncoder + boundary walk-back). Even better: lattice-context.ts now exports `truncateForBudget` which can be reused directly OR the helper can be extracted to a shared utility module.
+- ephemeral-peer-review.ts last touched NL21 (3 iters gap → file-touch rule satisfied; NL23 touched lattice-context.ts → different file).
 
-**Same UTF class as E7** (ephemeral-peer-review.ts line 87: truncation by JS string length, not bytes). The fix here can establish a shared helper that LC4 and E7 both use, OR fix each file in turn with the same pattern.
+**Read first:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` lines 70-100 (composeReviewPrompt's module-source truncation). Confirm the exact truncation logic and whether the `--review-cap-bytes` arg is documented as bytes (it should be — "Bytes" is in the name).
 
-**Fix approach:**
-- Compute byte length using TextEncoder: `new TextEncoder().encode(s).length`.
-- Truncate at byte boundaries (not code-unit boundaries) using a clamp loop or TextDecoder with a fatal flag.
-- Edge case for budget≤0: return "" (or "…").
-- Optional: extract `truncateToBudgetBytes()` into a shared utility module so E7 reuses it.
+**Fix approach options:**
+- **Option A (reuse):** import `truncateForBudget` from lattice-context.ts. Quick but creates an awkward cross-plugin import (lattice-context belongs to the substrate; ephemeral-peer-review is a different concern).
+- **Option B (extract):** create a small shared utility module (e.g., `scripts/utils/truncate-bytes.ts` or `plugins/agent-chat/scripts/utf8-truncate.ts`) that both modules import. Cleanest layering.
+- **Option C (inline):** copy the implementation. Fastest, but creates the same systemic-pattern risk we already saw with LC5/K-imp-2.
 
-**Read first:** `plugins/agent-chat/scripts/lattice-context.ts` lines 105-130 (truncateForBudget). Confirm whether composePushedContextBlock has any callers that would break on the budget-0 fix.
+Recommend **B** (extract to shared utility). Extraction is a one-time cost that benefits future iters (E7 alone, plus any other byte-truncation calls that show up).
 
-**Test approach (3 regression tests):**
-- Test 1 (UTF-8 byte budget): truncate a string with multi-byte characters (e.g., emoji/CJK) to a byte budget that splits a multi-byte character. Pre-fix: returns wrong byte count. Post-fix: respects the byte limit.
-- Test 2 (budget≤0): truncate with budget=0 or negative. Pre-fix: returns string with last char dropped. Post-fix: returns empty string.
-- Test 3 (sanity ASCII): existing ASCII truncation behavior unchanged.
+**Test approach (parallel to LC4-a/-c/-d/-f):**
+- Test 1: CJK module content over byte budget — truncated to ≤ budget bytes.
+- Test 2: budget=0 → empty truncation.
+- Test 3: sanity ASCII passthrough.
+(Or just import the existing LC4 test pattern wholesale.)
 
-**Sequenced after NL23:**
-- NL24 → K-imp-7 (peer-review retro-upgrade scans only first 5 — same template as K-imp-6) OR L5 (apprenticeship.ts pushContext k validation) OR LC3 (header-only block).
-- NL25+ → K-imp-1, K-imp-3, K-imp-9, E4, E5, E7 (could share LC4's UTF-8 helper), C4 (design call).
+**Sequenced after NL24:**
+- NL25 → L5 (apprenticeship.ts pushContext k validation) — apprenticeship.ts last touched NL19, eligible at NL24 (5-iter gap). Could pick this for NL24 if E7 isn't ready.
+- NL26 → K-imp-7 (peer-review retro-upgrade limit:5 — same template as K-imp-6).
+- NL27+ → K-imp-1, K-imp-3, K-imp-9, E4, E5, LC3, C4 (design call).
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ## STOPPING CONDITIONS
@@ -147,14 +147,16 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL22):**
+- **Cumulative ledger (post-NL23):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 21 fixed at code level (L1, L2, L3, L4, C1, C2, C3, C5, E1, E2, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-8, iter-3 #2, LC1, LC2, LC5)
+  - 22 fixed at code level (L1, L2, L3, L4, C1, C2, C3, C5, E1, E2, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-8, iter-3 #2, LC1, LC2, LC4, LC5)
   - 3 schema migrations shipped
-  - 10 queued findings remain
-  - Fix-rate: 70% (21/30 code) + all 3 schema migrations
+  - 9 queued findings remain
+  - Fix-rate: 73% (22/30 code) + all 3 schema migrations
   - **SYSTEMIC pattern (LC2 = C5 = K-imp-6) confirmed THIRD time:** SQL limit BEFORE selection logic → silent wrong-row pick. Fix template varies in surface (LC2/C5: push filter axis into queryAnswers; K-imp-6: capture the function's already-existing return value), but the root principle is the same: don't query for what you already have, or push the disambiguator into the SQL.
+  - **SYSTEMIC pattern (LC4 = E7):** UTF-16 `.length` / `.slice` used for what is documented as a byte budget. NL23 fix established the TextEncoder + decode-at-boundary template; NL24 should apply the same template to E7 (or extract a shared helper module so future byte-truncation needs reuse it).
   - **K-imp-6 lesson: when a function returns the data you need, USE the return value — don't re-query.** Pre-fix the importer dropped `recordAnswer`'s return and then re-queried for "which answer did I just insert?", introducing a tie-break dependency on SQLite's implementation-defined ordering. Post-fix uses the returned Answer directly. Audit other call sites that drop function returns and then re-query.
+  - **LC4 lesson: when a unit is documented (bytes vs code units, ms vs s, decimal vs hex), enforce it at the boundary.** Pre-fix `body_budget_bytes` accepted a number called "bytes" and compared it to JS string length (UTF-16 code units) — silent unit mismatch. The compiler can't catch this; only documentation discipline and explicit conversion (TextEncoder, here) can. Audit other `*_bytes` and `*_ms` parameters across the codebase.
   - **E1+E2 lesson: races involving "guarantee state X before doing operation Y" are best fixed by reordering — Y first, then validate X under Y's protection.** Pre-fix the resume-write satisfied the lock-invariant by writing turn=self before the lock attempt, but that pre-lock write was the very thing that other actors could observe and race on. By moving the floor-stealing refusal upstream of the resume-write, we eliminated the corruption window without needing additional locking primitives. Audit other "satisfy invariant before lock" patterns in the codebase for the same race shape.
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
   - **SYSTEMIC pattern (LC2 = C5):** SQL fetches a fixed limit, then in-memory filter drops candidates → silent truncation. Fix template (proven at NL19): push the missing filter axis into the data-layer query. Audit other queryAnswers callers for the same shape.

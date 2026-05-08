@@ -128,10 +128,50 @@ export async function composePushedContextBlock(
   }
 }
 
-function truncateForBudget(s: string, budget: number): string {
+/** LC4 fix (NL23 / carina NL12 finding): truncate by UTF-8 BYTES, not by
+ *  UTF-16 code units. The previous implementation used `t.length` and
+ *  `t.slice(...)` — both of which operate on UTF-16 code units, so:
+ *
+ *  - Multi-byte characters (CJK, accented Latin, emoji) under-counted
+ *    against the byte budget. A 9-byte budget compared to `t.length` for
+ *    "答案以中文表达" (length 7, bytes 21) wrongly let the full 21-byte
+ *    payload through unchanged.
+ *  - Surrogate-pair emoji could be sliced mid-pair, producing orphan
+ *    surrogates and broken UTF-8 on output.
+ *  - The budget≤0 path hit `t.slice(0, -1)` which (because slice treats
+ *    negative indices as "from end") removed the LAST character and
+ *    appended "…" — opposite of the intent and exceeded the alleged
+ *    0-byte budget.
+ *
+ *  Post-fix: encode to UTF-8 bytes once, walk back to the last non-
+ *  continuation byte at the budget boundary so we never split a
+ *  multi-byte sequence, and reserve 3 bytes for the trailing "…" when
+ *  there's room. budget≤0 returns ""; budget < 3 (smaller than the
+ *  ellipsis itself) truncates without an ellipsis marker rather than
+ *  exceeding the budget. */
+export function truncateForBudget(s: string, budget: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  if (t.length <= budget) return t;
-  return t.slice(0, budget - 1).trimEnd() + "…";
+  if (budget <= 0) return "";
+  const enc = new TextEncoder();
+  const bytes = enc.encode(t);
+  if (bytes.length <= budget) return t;
+  const ELLIPSIS_BYTES = 3;  // "…" (U+2026) = E2 80 A6 in UTF-8
+  if (budget < ELLIPSIS_BYTES) {
+    // Too small to fit the ellipsis suffix; truncate at byte boundary
+    // without a marker rather than blowing the budget.
+    return decodeAtBoundary(bytes, budget);
+  }
+  return decodeAtBoundary(bytes, budget - ELLIPSIS_BYTES).trimEnd() + "…";
+}
+
+/** Decode the prefix of `bytes` ending at or before `end`, walking back
+ *  to a UTF-8 character boundary so we never return half a multi-byte
+ *  sequence. UTF-8 continuation bytes are 0b10xxxxxx (0x80..0xBF); we
+ *  walk back as long as the byte at `cut` is a continuation byte. */
+function decodeAtBoundary(bytes: Uint8Array, end: number): string {
+  let cut = Math.min(end, bytes.length);
+  while (cut > 0 && (bytes[cut] & 0xC0) === 0x80) cut--;
+  return new TextDecoder().decode(bytes.subarray(0, cut));
 }
 
 /** Extract the most recent peer (i.e., not-this-agent) section's body

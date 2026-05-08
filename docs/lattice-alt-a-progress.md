@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T12:55Z
+## Current state — 2026-05-08T13:25Z
 
-**Phase: NL22 — drained K-imp-6 (importPairs best_answer_id chosen via queryAnswers limit:1 — nondeterministic tie-break). Pre-fix: importPairs called queryAnswers(limit:1, order_by=predictive_lift_desc) to choose best_answer_id for the question; with all imported answers carrying predictive_lift=0, SQLite's tie-break (typically ROWID/insertion order) meant the OLDEST answer was returned — not the just-inserted one the comment said we wanted. The conditional `existing.best_answer_id !== accepted[0].id` then refused to update on re-imports, leaving best_answer_id stale. Post-fix: capture recordAnswer's return value (which already exposes the inserted Answer) and use insertedAnswer.id directly. Eliminates the redundant query AND the nondeterminism. Cumulative: 30 REAL findings, 21 code fixes, 3 schema migrations.**
+**Phase: NL23 — drained LC4 (lattice-context.ts truncateForBudget UTF-16 length vs UTF-8 bytes mismatch + budget≤0 slice(0,-1) edge case). Pre-fix: `t.length <= budget` compared UTF-16 code units against the alleged byte budget (CJK chars: 1 code unit but 3 bytes; emoji: 2 code units but 4 bytes); `t.slice(0, budget - 1) + "…"` produced budget+2 bytes for ASCII because the ellipsis is 3 UTF-8 bytes; budget≤0 hit `slice(0, -1)` which dropped the last char and appended an ellipsis (opposite of intent). Post-fix: TextEncoder for byte counting, walk back to non-continuation-byte boundary so multi-byte sequences are preserved, reserve 3 bytes for "…", budget≤0 → "", budget < 3 → truncate without ellipsis. Cumulative: 30 REAL findings, 22 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,157 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T13:25Z (NL23: queue-drain LC4 — UTF-16 length vs UTF-8 bytes mismatch + budget≤0 slice(0,-1) edge case)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains LC4 — no fresh peer call. File-touch rule: NL22 touched import-from-kg.ts; this iter touches lattice-context.ts (different file → eligible).
+
+**The bug (carina NL12 LC4):**
+
+  `truncateForBudget` at lattice-context.ts:131 was 3 lines:
+  ```typescript
+  function truncateForBudget(s: string, budget: number): string {
+    const t = s.replace(/\s+/g, " ").trim();
+    if (t.length <= budget) return t;
+    return t.slice(0, budget - 1).trimEnd() + "…";
+  }
+  ```
+
+  Three layered bugs:
+
+  1. **UTF-16 vs UTF-8 mismatch.** `t.length` returns the number of
+     UTF-16 code units (JS internal string representation), but `budget`
+     is named/documented as a byte budget. For non-ASCII content the
+     two diverge:
+     - CJK char "中": length 1, UTF-8 = 3 bytes
+     - Emoji "🎉": length 2 (surrogate pair), UTF-8 = 4 bytes
+     - Body "答案以中文表达": length 7, UTF-8 = 21 bytes
+     A 9-byte budget compared to the 7-code-unit length under-counted by
+     2.3x and let the full 21-byte payload through unchanged.
+
+  2. **Surrogate-pair splitting.** `t.slice(0, n)` operates on UTF-16
+     code units. For emoji (each is a surrogate pair), this can cut
+     mid-pair, producing an orphan high or low surrogate. When that
+     orphaned string is later UTF-8 encoded, the result is broken.
+
+  3. **budget≤0 slice(0,-1) edge case.** When budget is 0 or negative,
+     `t.slice(0, budget - 1)` translates to `t.slice(0, negative)`, which
+     JS interprets as "from the end" — dropping the LAST character. Then
+     "…" is appended. Result: a budget of 0 produced `"hell…"` for
+     `truncateForBudget("hello", 0)`, both wrong-shaped AND exceeding the
+     alleged 0-byte budget.
+
+  Pre-fix even ASCII over-budget violated the budget: `slice(0, 19) + "…"`
+  for budget=20 produced 19 ASCII bytes + 3 ellipsis bytes = 22 bytes
+  total (the ellipsis "…" / U+2026 is 3 UTF-8 bytes).
+
+**The fix (TextEncoder-based UTF-8 truncation):**
+
+  ```typescript
+  export function truncateForBudget(s: string, budget: number): string {
+    const t = s.replace(/\s+/g, " ").trim();
+    if (budget <= 0) return "";
+    const enc = new TextEncoder();
+    const bytes = enc.encode(t);
+    if (bytes.length <= budget) return t;
+    const ELLIPSIS_BYTES = 3;  // "…" (U+2026) = E2 80 A6 in UTF-8
+    if (budget < ELLIPSIS_BYTES) {
+      return decodeAtBoundary(bytes, budget);
+    }
+    return decodeAtBoundary(bytes, budget - ELLIPSIS_BYTES).trimEnd() + "…";
+  }
+
+  function decodeAtBoundary(bytes: Uint8Array, end: number): string {
+    let cut = Math.min(end, bytes.length);
+    while (cut > 0 && (bytes[cut] & 0xC0) === 0x80) cut--;
+    return new TextDecoder().decode(bytes.subarray(0, cut));
+  }
+  ```
+
+  Key correctness moves:
+  - Encode to UTF-8 bytes once via TextEncoder.
+  - Walk back to a non-continuation byte boundary (UTF-8 continuation
+    bytes match `0b10xxxxxx`) so multi-byte sequences are never split.
+  - Reserve 3 bytes for the ellipsis when budget ≥ 3; truncate without
+    a marker when budget < 3 rather than overshooting.
+  - budget ≤ 0 → "" (degenerate but well-defined).
+
+**Test-first protocol:**
+  7 regression tests at lattice-context.test.ts:
+    - **LC4-a (CJK):** body "答案以中文表达" (7 UTF-16 chars, 21 bytes) with
+      budget=9. Pre-fix: returns full 21-byte body. Post-fix: returns ≤
+      9 bytes with "…".
+    - **LC4-b (emoji surrogate):** body of 4 emoji (16 bytes, 8 UTF-16
+      units) with budget=10. Post-fix: result is round-trippable through
+      UTF-8 encode/decode (no orphan surrogates).
+    - **LC4-c (budget=0):** returns "" (pre-fix returned "hell…").
+    - **LC4-d (negative budget):** returns "" (pre-fix returned content
+      with "from end" slice).
+    - **LC4-e (ASCII under budget):** unchanged passthrough (sanity).
+    - **LC4-f (ASCII over budget):** truncated result ≤ budget bytes.
+      Pre-fix `slice(0, 19) + "…"` produced 22 bytes for budget=20.
+    - **LC4-g (budget < ellipsis size):** budget=2, truncates without
+      ellipsis (the ellipsis itself is 3 bytes; would overshoot otherwise).
+  6 of these 7 tests **verified FAILING pre-fix**.
+
+**Why this matters:** Non-ASCII content is increasingly common in agent
+conversations (boss types accented characters, emoji, code blocks with
+Greek letters, etc.). Pre-fix the cross-domain push could either:
+  - Bloat the agent's prompt with multi-byte content much larger than
+    the documented byte budget (3x for CJK, 2x for emoji), pushing past
+    context-window or token budget assumptions.
+  - Produce broken UTF-8 with orphan surrogates if a paste landed at the
+    wrong boundary.
+
+The substrate's "every artifact training-data-shaped" forcing function
+(#5) requires that exported content be bytewise correct. LC4 was a silent
+correctness gap on that.
+
+**Same-class bug (E7 still queued):** ephemeral-peer-review.ts line 87
+has the same UTF-16-vs-UTF-8 mismatch in its module-source truncation.
+Now that LC4's fix is shipped and the `truncateForBudget` helper is
+exported, a future iter could either share the helper directly or
+extract a generic UTF-8 byte-truncation utility module that both files
+consume.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (CROSS-DOMAIN PUSH) — pushed prompt blocks now respect
+    the byte budget under all character classes (ASCII, CJK, emoji,
+    accented Latin), keeping the substrate's prompt-building accountable.
+  - ✅ Function 5 (training-data-shaped artifacts) — output is now
+    guaranteed valid UTF-8 with no orphan surrogates.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 156 / 0 unchanged; plugin 518 → 525 (+7 LC4)
+
+**Files touched (5):**
+  - plugins/agent-chat/scripts/lattice-context.ts (truncateForBudget rewritten with TextEncoder; exported; new decodeAtBoundary helper)
+  - plugins/agent-chat/tests/lattice-context.test.ts (truncateForBudget imported; 7 LC4 regression tests)
+  - docs/ephemeral-peer-reviews.md (LC4 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL24 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL24):** File-touch rule blocks lattice-context.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — eligible)
+- LC3 (lattice-context.ts last touched NL23 — INELIGIBLE)
+- E4, E5, E7 (ephemeral-peer-review.ts last touched NL21 — eligible)
+- K-imp-1, 3, 7, 9 (import-from-kg.ts last touched NL22 — INELIGIBLE)
+
+**Recommend NL24 → DRAIN E7** (ephemeral-peer-review.ts:87 truncation by JS string length not bytes — same UTF class as LC4). Reasons:
+- Direct application of the LC4 fix template — same bug shape, in a sibling file.
+- The exported truncateForBudget could be reused if the byte-count semantics fit, OR a small UTF-8-byte-truncate utility could be extracted into a shared module.
+- ephemeral-peer-review.ts last touched NL21 (3 iters gap → eligible).
+- Self-contained fix.
+
+**Sequenced after NL24:**
+- NL25 → L5 (apprenticeship.ts pushContext k validation) — eligible after NL19+5=NL24 gap → INELIGIBLE for NL24, eligible for NL25+ if not touched.
+- NL26 → K-imp-7 (peer-review retro-upgrade limit:5 — same template as K-imp-6).
+- NL27+ → K-imp-1, K-imp-3, K-imp-9, E4, E5, LC3, C4 (design call).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ### 2026-05-08T12:55Z (NL22: queue-drain K-imp-6 — best_answer_id pinned to nondeterministic queryAnswers result instead of just-inserted answer)
 

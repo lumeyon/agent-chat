@@ -10,6 +10,7 @@ import { recordAnswer } from "../../../scripts/lattice/apprenticeship.ts";
 import {
   composePushedContextBlock,
   extractMostRecentPeerBody,
+  truncateForBudget,
 } from "../scripts/lattice-context.ts";
 import type { Question } from "../../../scripts/lattice/types.ts";
 
@@ -459,4 +460,104 @@ describe("composePushedContextBlock", () => {
     // Backwards compat: the hit is included even with low cosine.
     expect(block).toContain("Random body");
   }, 30_000);
+});
+
+// Regression for carina's NL12 LC4 finding: truncateForBudget claims to
+// enforce a BYTE budget, but the implementation used JS `.length` (UTF-16
+// code units) and `.slice` (also UTF-16). For non-ASCII content (emoji,
+// CJK, accented Latin) this either:
+//   - under-counts: a CJK string of N chars has length N (UTF-16) but
+//     3N bytes (UTF-8); a budget of 9 bytes was compared against 8 chars
+//     and let the full 24-byte payload through.
+//   - splits surrogate pairs: emoji can be cut mid-pair, producing
+//     orphan high/low surrogates and broken UTF-8 on output.
+// And the budget≤0 edge case hit `t.slice(0, -1)` which removes the LAST
+// character (slice(0, -1) treats negative as "from end") and appends
+// "…" — opposite of "truncate to nothing."
+//
+// NL23 fix: count and truncate at UTF-8 byte boundaries via TextEncoder
+// + a small continuation-byte walk-back; treat budget≤0 as "" return.
+describe("truncateForBudget — LC4 UTF-8 byte budget", () => {
+  test("LC4: CJK content over byte budget truncates at byte boundary", () => {
+    const body = "答案以中文表达"; // 7 CJK chars × 3 UTF-8 bytes = 21 bytes; UTF-16 length = 7
+    expect(body.length).toBe(7);            // UTF-16 length
+    expect(new TextEncoder().encode(body).length).toBe(21);  // UTF-8 bytes
+
+    // Budget of 9 bytes. Pre-fix: t.length (7) <= budget (9) → returns
+    // full body (21 bytes — 2.3x the byte budget!). Post-fix: 21 > 9
+    // bytes, truncate at a CJK boundary (3 bytes per char) leaving room
+    // for "…" (3 bytes), so 6 bytes of body content + 3 of ellipsis = 9
+    // bytes total.
+    const result = truncateForBudget(body, 9);
+    const resultBytes = new TextEncoder().encode(result).length;
+    expect(resultBytes).toBeLessThanOrEqual(9);
+    // Should still contain at least SOME content + the ellipsis marker
+    // (not just empty).
+    expect(result.length).toBeGreaterThan(0);
+    expect(result).toContain("…");
+  });
+
+  test("LC4: emoji body truncates at byte boundary without orphan surrogate", () => {
+    // 4 emoji × 4 UTF-8 bytes = 16 bytes. UTF-16 length = 8 (each emoji is
+    // a surrogate pair, length 2).
+    const body = "🎉🎊🎈🎁";
+    expect(body.length).toBe(8);  // UTF-16 surrogate pairs
+    expect(new TextEncoder().encode(body).length).toBe(16);
+
+    // Budget = 10 bytes. Pre-fix would slice at code-unit 9 (which is
+    // mid-surrogate-pair) producing an orphan high surrogate. Post-fix
+    // truncates at byte boundary that respects UTF-8 character integrity.
+    const result = truncateForBudget(body, 10);
+    const resultBytes = new TextEncoder().encode(result).length;
+    expect(resultBytes).toBeLessThanOrEqual(10);
+    // Verify no orphan surrogates: round-trip through encode/decode
+    // produces the same string.
+    const roundtrip = new TextDecoder("utf-8", { fatal: true }).decode(
+      new TextEncoder().encode(result),
+    );
+    expect(roundtrip).toBe(result);
+  });
+
+  test("LC4: budget=0 returns empty string (not 'all-but-last + …')", () => {
+    // Pre-fix: budget=0 → t.length (5) > budget (0) → slice(0, -1) drops
+    // the last char + appends "…" → "hell…" (5 chars, 7 bytes). That's
+    // both wrong-shape AND exceeds the alleged 0-byte budget.
+    // Post-fix: budget=0 → "" (no content fits).
+    const result = truncateForBudget("hello", 0);
+    expect(result).toBe("");
+  });
+
+  test("LC4: negative budget returns empty string", () => {
+    // Pre-fix: budget=-1 → slice(0, -2) drops last 2 chars + "…".
+    // Post-fix: any budget ≤ 0 → "".
+    expect(truncateForBudget("hello world", -1)).toBe("");
+    expect(truncateForBudget("anything", -100)).toBe("");
+  });
+
+  test("LC4: ASCII content under budget passes through unchanged (sanity)", () => {
+    // Existing behavior preserved for the common ASCII path.
+    expect(truncateForBudget("hello", 100)).toBe("hello");
+    expect(truncateForBudget("a b c", 5)).toBe("a b c");
+  });
+
+  test("LC4: ASCII content over budget truncates with ellipsis (sanity)", () => {
+    // Pre-fix: returned 'a'.repeat(99) + "…". Post-fix: should still
+    // truncate to budget bytes total (with the 3-byte ellipsis baked in).
+    const big = "a".repeat(100);
+    const result = truncateForBudget(big, 20);
+    const resultBytes = new TextEncoder().encode(result).length;
+    expect(resultBytes).toBeLessThanOrEqual(20);
+    expect(result).toContain("…");
+  });
+
+  test("LC4: very small positive budget (smaller than ellipsis) returns content without ellipsis", () => {
+    // The ellipsis "…" is 3 UTF-8 bytes. If the budget is smaller than that,
+    // there's no room for the ellipsis suffix; truncate without marker.
+    // Pre-fix: would produce "a" + "…" (4 bytes total) for budget=2,
+    // exceeding the budget. Post-fix: returns content up to budget bytes
+    // with no ellipsis marker.
+    const result = truncateForBudget("aaaaaaaa", 2);
+    const resultBytes = new TextEncoder().encode(result).length;
+    expect(resultBytes).toBeLessThanOrEqual(2);
+  });
 });
