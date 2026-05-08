@@ -632,13 +632,15 @@ describe("schema migration: explanation NOT NULL (iter-3 / NL7)", () => {
         expect(a!.explanation).toBe("real explanation");
         expect(a!.by_agent).toBe("orion");
 
-        // Schema version is at the current head (3 after NL9). The v1→v2
-        // migration runs first and tightens explanation; v2→v3 runs next
-        // and adds the FK. The chain is intentional and idempotent.
+        // Schema version is at the current head (4 after NL11). The
+        // chain runs v1→v2 → v2→v3 → v3→v4 idempotently. This NL7-era
+        // test verifies the explanation column reaches NOT NULL after
+        // any of those migrations runs; the head version naturally
+        // tracks SCHEMA_VERSION.
         const ver = (migrated as any).db
           .query(`SELECT value FROM schema_meta WHERE key = ?`)
           .get("schema_version") as { value: string } | null;
-        expect(ver?.value).toBe("3");
+        expect(ver?.value).toBe("4");
       } finally {
         migrated.close();
       }
@@ -772,11 +774,13 @@ describe("schema migration v2→v3: best_answer_id FK (iter-6 K1 / NL9)", () => 
           fkList.some((fk) => fk.from === "best_answer_id" && fk.table === "answers"),
         ).toBe(true);
 
-        // Schema version bumped to 3.
+        // Schema version reaches the current head (4 after NL11). The v2→v3
+        // step adds the FK that this test verifies; later migrations don't
+        // remove it, so the FK assertion above continues to hold.
         const ver = (migrated as any).db
           .query(`SELECT value FROM schema_meta WHERE key = ?`)
           .get("schema_version") as { value: string } | null;
-        expect(ver?.value).toBe("3");
+        expect(ver?.value).toBe("4");
 
         // Data preserved.
         const q = migrated.getQuestion("v1:qchild");
@@ -808,6 +812,157 @@ describe("schema migration v2→v3: best_answer_id FK (iter-6 K1 / NL9)", () => 
       }).toThrow(/FOREIGN KEY/i);
     } finally {
       fresh.close();
+    }
+  });
+});
+
+// NL11: schema migration v3→v4 — answers.quality_tier CHECK tightened
+// from `BETWEEN 1 AND 5` to `IN (1,2,3,4,5)`. The BETWEEN form admits
+// fractional values like 2.5 (SQLite's dynamic typing accepts REAL even
+// for INTEGER columns); the IN form requires exact integer membership.
+// Closes keystone iter-6 K2.
+describe("schema migration v3→v4: answers.quality_tier CHECK IN (iter-6 K2 / NL11)", () => {
+  test("fresh schema rejects fractional quality_tier on direct INSERT", () => {
+    const fresh = new LatticeStore(":memory:");
+    try {
+      fresh.putQuestion(makeQuestion());
+      // Direct INSERT bypassing putAnswer's app-layer guard. The schema
+      // CHECK should reject 2.5 even though SQLite's typing would otherwise
+      // store it as REAL.
+      expect(() => {
+        (fresh as any).db.run(
+          `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          ["ans:frac", makeQuestion().id, "body", "expl", "orion", "accepted", 2.5, 100],
+        );
+      }).toThrow(/CHECK constraint failed/i);
+    } finally {
+      fresh.close();
+    }
+  });
+
+  test("fresh schema accepts integer 1..5 (positive sanity)", () => {
+    const fresh = new LatticeStore(":memory:");
+    try {
+      fresh.putQuestion(makeQuestion());
+      for (const tier of [1, 2, 3, 4, 5]) {
+        const id = `ans:tier-${tier}`;
+        (fresh as any).db.run(
+          `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, makeQuestion().id, `body${tier}`, `expl${tier}`, "orion", "accepted", tier, 100 + tier],
+        );
+        const a = fresh.getAnswer(id);
+        expect(a?.quality_tier).toBe(tier);
+      }
+    } finally {
+      fresh.close();
+    }
+  });
+
+  test("migration v3→v4 preserves data and tightens the CHECK", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const os = require("node:os");
+    const { Database } = require("bun:sqlite");
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lattice-v3v4-"));
+    const dbFile = path.join(tmp, "v3.db");
+    try {
+      // Build a v3-shape DB (post-NL9 FK + post-NL7 NOT NULL but pre-NL11
+      // with the loose BETWEEN check).
+      const oldDb = new Database(dbFile);
+      oldDb.exec(`
+        CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO schema_meta VALUES ('schema_version', '3');
+        CREATE TABLE answers (
+          id TEXT PRIMARY KEY,
+          question_id TEXT NOT NULL,
+          body TEXT NOT NULL,
+          explanation TEXT NOT NULL,
+          by_agent TEXT NOT NULL,
+          predictive_lift REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
+          quality_tier INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5),
+          created_at INTEGER NOT NULL,
+          validator_id TEXT,
+          FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE questions (
+          id TEXT PRIMARY KEY,
+          framing TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('open','answered','closed','reopened')),
+          best_answer_id TEXT REFERENCES answers(id) ON DELETE NO ACTION,
+          posed_at INTEGER NOT NULL,
+          posed_by TEXT NOT NULL,
+          posed_in_context TEXT,
+          depth INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE citations (
+          parent_answer_id TEXT NOT NULL,
+          child_answer_id TEXT NOT NULL,
+          PRIMARY KEY (parent_answer_id, child_answer_id),
+          FOREIGN KEY (parent_answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_answer_id) REFERENCES answers(id) ON DELETE CASCADE
+        );
+        CREATE TABLE question_parents (
+          parent_question_id TEXT NOT NULL,
+          child_question_id TEXT NOT NULL,
+          PRIMARY KEY (parent_question_id, child_question_id),
+          FOREIGN KEY (parent_question_id) REFERENCES questions(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_question_id) REFERENCES questions(id) ON DELETE CASCADE
+        );
+      `);
+      // Seed legitimate integer-tier rows + 1 citation to verify cross-table
+      // integrity through the rebuild.
+      oldDb.run(`INSERT INTO questions (id, framing, status, posed_at, posed_by) VALUES (?, ?, ?, ?, ?)`,
+        ["v1:q-test", "Test", "open", 100, "boss"]);
+      oldDb.run(
+        `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ["ans:v3-1", "v1:q-test", "body1", "expl1", "orion", "accepted", 2, 100],
+      );
+      oldDb.run(
+        `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ["ans:v3-2", "v1:q-test", "body2", "expl2", "orion", "accepted", 5, 200],
+      );
+      oldDb.run(`INSERT INTO citations VALUES (?, ?)`, ["ans:v3-1", "ans:v3-2"]);
+      oldDb.close();
+
+      // Open via LatticeStore — runs the migrations chain (v1→v2→v3→v4
+      // — the v3→v4 step is what's tested here).
+      const migrated = new LatticeStore(dbFile);
+      try {
+        // CHECK now uses IN; verify by inspecting sqlite_master.
+        const row = (migrated as any).db
+          .query(`SELECT sql FROM sqlite_master WHERE type='table' AND name='answers'`)
+          .get() as { sql: string };
+        expect(row.sql).toContain("IN (1,2,3,4,5)");
+        expect(row.sql).not.toContain("BETWEEN 1 AND 5");
+
+        // Schema version bumped to 4.
+        const ver = (migrated as any).db
+          .query(`SELECT value FROM schema_meta WHERE key = ?`)
+          .get("schema_version") as { value: string };
+        expect(ver.value).toBe("4");
+
+        // Data preserved (2 answers + 1 citation).
+        const a1 = migrated.getAnswer("ans:v3-1");
+        const a2 = migrated.getAnswer("ans:v3-2");
+        expect(a1?.quality_tier).toBe(2);
+        expect(a2?.quality_tier).toBe(5);
+        const cited = migrated.getCitedAnswers("ans:v3-1");
+        expect(cited.map((c) => c.child_answer_id)).toEqual(["ans:v3-2"]);
+
+        // Defense-in-depth: bypass-INSERT with fractional now rejected.
+        expect(() => {
+          (migrated as any).db.run(
+            `INSERT INTO answers (id, question_id, body, explanation, by_agent, status, quality_tier, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            ["ans:bypass", "v1:q-test", "body", "expl", "orion", "accepted", 3.7, 999],
+          );
+        }).toThrow(/CHECK constraint failed/i);
+      } finally {
+        migrated.close();
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

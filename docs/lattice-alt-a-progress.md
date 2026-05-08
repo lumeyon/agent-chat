@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T05:55Z
+## Current state — 2026-05-08T06:25Z
 
-**Phase: NL10 — drained K-imp-8 (Date.parse non-UTC validation). Added strict ISO-8601 UTC regex check before Date.parse in importPairs. Closes a real silent-data-drift bug: pre-NL10 strings like `2026-05-07T10:00:00+0500` (offset, not UTC) parsed successfully and shifted timestamps by 5 hours; missing-Z and space-separator variants similarly silently misinterpreted. Post-NL10: those formats are caught by parseStrictUtc and counted in skippedMalformedTimestamps.**
+**Phase: NL11 — third schema migration shipped. K2 CHECK `IN (1,2,3,4,5)` (was `BETWEEN 1 AND 5`) closes the last pre-approved schema migration. v3→v4 migration applied on production: 952 answers preserved, schema_version=4, fractional bypass-INSERT verified rejected at SQL layer. ALL THREE pre-approved schema migrations now shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK). Substrate's SQL-level integrity now fully matches its application-level integrity.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,85 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T06:25Z (NL11: SQL migration v3→v4 — answers.quality_tier CHECK IN (1,2,3,4,5); LAST pre-approved schema migration)
+
+**Loop:** stateful peer-driven via prompt.md. Per pre-approval queue: K2 schema migration. File-touch rule satisfied: NL10 touched import-from-kg.ts; sqlite-store.ts last touched NL9 (1-iter gap → eligible).
+
+**The bug (keystone iter-6 K2):**
+  Pre-NL11 schema: `quality_tier INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5)`. SQLite's BETWEEN is a numeric range that admits fractional values: `2.5 BETWEEN 1 AND 5` is true. Combined with SQLite's dynamic typing (an INTEGER column can store REAL), a fractional INSERT silently succeeds, breaking the discrete-set contract `1 | 2 | 3 | 4 | 5` documented in TypeScript.
+
+**The fix:** v3→v4 schema migration tightens CHECK to `IN (1,2,3,4,5)`. Discrete-set membership; SQLite rejects any non-matching value at INSERT time.
+
+**Migration (same v(N)→v(N+1) template as NL7+NL9):**
+  - SCHEMA_VERSION 3 → 4
+  - Updated CREATE TABLE answers: `CHECK(quality_tier IN (1,2,3,4,5))`
+  - Added `migrateV3toV4()` function:
+    - Idempotency: detects via `sqlite_master.sql LIKE '%IN (1,2,3,4,5)%'` (more robust than PRAGMA which doesn't expose CHECK clause text)
+    - Pre-flight audit: refuses if any row has `quality_tier NOT IN (1,2,3,4,5)`
+    - Standard rebuild: CREATE answers_new → INSERT SELECT → DROP → RENAME → recreate indexes
+    - Disables FK enforcement during rebuild (citations + questions.best_answer_id reference answers)
+
+**Test-first protocol:**
+  3 regression tests at sqlite-store.test.ts:
+    - Fresh schema rejects fractional `quality_tier: 2.5` direct INSERT (FAILS pre-fix; PASSES post-fix)
+    - Fresh schema accepts integer 1..5 (positive sanity; PASSES pre-fix and post-fix)
+    - Migration v3→v4 preserves data, tightens CHECK, keeps citations intact (FAILS pre-fix because v4 doesn't exist; PASSES post-fix). Also asserts that bypass-INSERT with fractional is rejected post-migration.
+  All verified.
+
+**Pre-existing test version assertions updated:**
+  NL7 + NL9 migration tests previously asserted `schema_version="2"` (NL7) and `schema_version="3"` (NL9). With the migration chain extended to v4, both now assert `"4"` (the head). The chain is intentional: opening any old DB runs all pending migrations idempotently.
+
+**Production migration result:**
+  - Pre-flight audit: 952 answers, 0 with non-integer quality_tier.
+  - Backup: `lattice.db.bak-pre-NL11` (6.75 MB)
+  - Migration ran cleanly via opening LatticeStore.
+  - Post-migration verification:
+    - sqlite_master.sql shows `CHECK(quality_tier IN (1,2,3,4,5))` ✓
+    - schema_version=4 ✓
+    - Bypass-INSERT with `quality_tier: 2.5` → rejected with `CHECK constraint failed: quality_tier IN (1,2,3,4,5)` ✓
+    - 419 questions, 952 answers, 8 citations, 4 question_parents preserved ✓
+
+**Pre-approval queue progress:**
+  - ✅ iter-3 SQL `explanation TEXT NOT NULL` (NL7)
+  - ✅ iter-6 K1 schema FK on `best_answer_id` (NL9)
+  - ✅ iter-6 K2 schema CHECK `quality_tier IN` (**NL11**)
+  - Petersen routing-table mismatch (config-level, different work class)
+  - 3 lattice depth=1 design questions (real design thinking, not pattern application)
+
+**The substrate's SQL-level integrity now fully matches its application-level integrity.** All three documented schema invariants are enforced both in code (recordAnswer, putAnswer, putQuestion, setQuestionStatus runtime guards from iter-3, iter-5, iter-7) AND in SQLite (NOT NULL, FK, CHECK constraints from NL7, NL9, NL11).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — quality_tier semantics now SQL-enforced. The discrete `1|2|3|4|5` type contract is no longer just documentation.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 419 → 419 (no peer call)
+  - Answers: 948 → 952 (+4 background between NL10 and NL11)
+  - schema_version: 3 → 4
+  - Pre-approval queue: 1 → 0 (last item shipped)
+
+**Tests:** plugin 508/0/3 (no change). Lattice 141 → 144 (+3 NL11 regression tests; NL7 + NL9 version assertions updated).
+
+**Files touched (5):**
+  - scripts/lattice/sqlite-store.ts (SCHEMA_VERSION 4, CHECK update, migrateV3toV4)
+  - scripts/lattice/sqlite-store.test.ts (3 NL11 tests + 2 prior version assertions bumped to "4")
+  - docs/ephemeral-peer-reviews.md (sqlite-store.ts row updated: K2 SHIPPED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL12 plan; K2 closed; cumulative ledger; pre-approval queue at 0 schema migrations)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL12):** Pre-approval schema queue is empty. 16 queued findings remain across 4 modules. Per file-touch rule (NL11 touched sqlite-store.ts), eligible:
+- L3, L5 (apprenticeship.ts, last touched NL6)
+- C2, C4, C5 (study-turn.ts, last touched NL8)
+- E1-E5, E7 (ephemeral-peer-review.ts, last touched NL4)
+- K-imp-1, 3-7 (import-from-kg.ts, last touched NL10)
+
+Per peer rotation (last fresh peer call: NL5 keystone, then queue-drains and migrations): next fresh peer would be carina (cycle position N+2 from NL5). Carina's specialty: embeddings, cosine math, grading thresholds. Best fit for `lattice-context.ts` (the cmdRun-pushContext bridge — UNCOVERED) or `study-turn.ts` (already covered NL3 by carina; revisit not allowed).
+
+**Recommend NL12 → fresh peer review on lattice-context.ts via carina** (next uncovered module + fits rotation + pushContext is carina's specialty domain). After 6 iters of queue-drains + migrations, getting fresh findings keeps the audit pass moving forward. Expected ~5 new REAL findings based on the pattern.
+
+After NL12 (lattice-context.ts reviewed), NL13+ can drain new findings or continue the existing queue.
 
 ### 2026-05-08T05:55Z (NL10: queue-drain K-imp-8 — strict ISO-8601 UTC validation in importPairs)
 

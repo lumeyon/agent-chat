@@ -40,11 +40,11 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL10 commit)
+## CURRENT STATE (as of NL11 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
-- `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 closed at code level**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 SQL-level migration is the one remaining pre-approval item)
+- `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, **all 3 fully shipped**: K1 runtime guard iter-7 + SQL FK NL9; K3 atomic DAG iter-8; K2 CHECK migration NL11)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, 3 fixed: L1+L2+L4; L3, L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **2 fixed: C1, C3**; C2, C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, E6 fixed; E1-E5 + E7 queued)
@@ -86,7 +86,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
 - ~~iter-3 SQL `explanation TEXT NOT NULL`~~ — **SHIPPED NL7**
 - ~~iter-6 K1 schema FK constraint on `best_answer_id`~~ — **SHIPPED NL9**
-- iter-6 K2 schema CHECK `quality_tier IN (1,2,3,4,5)` — pending NL11 (NL10 must skip sqlite-store.ts per file-touch rule); same migration pattern (v3→v4)
+- ~~iter-6 K2 schema CHECK `quality_tier IN (1,2,3,4,5)`~~ — **SHIPPED NL11**
 - iter-1 petersen routing-table mismatch (vanguard not direct neighbor — adjust agents.petersen.yaml or accept lumeyon-as-substitute pattern; consider mid-cycle)
 - 3 lattice depth=1 questions from iter-13:
   - Should putQuestion forbid status="answered"/"closed" entirely?
@@ -95,33 +95,25 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL11 → SQL migration v3→v4: K2 CHECK quality_tier IN (1,2,3,4,5)** (sqlite-store.ts) — LAST pre-approved schema migration.
+**NL12 → FRESH peer review on `plugins/agent-chat/scripts/lattice-context.ts` via carina (codex)**.
 
-**Why K2:**
-- Last pre-approved schema migration in the queue. After NL11, the substrate's SQL-level integrity fully matches its application-level integrity.
-- File-touch rule: NL10 touched import-from-kg.ts; sqlite-store.ts last touched NL9 (1-iter gap → eligible).
-- Same v(N)→v(N+1) template as NL7 + NL9 — pattern is well-proven now.
+**Why a fresh peer review now (not queue-drain):**
+- All 3 pre-approved schema migrations DONE (NL7 NOT NULL, NL9 FK, NL11 CHECK). No more migration-template work.
+- Last fresh peer call was NL5 keystone. Six iters since (3 queue-drains, 3 schema migrations). Time to refill the findings queue with fresh material.
+- File-touch rule satisfied: NL11 touched sqlite-store.ts; lattice-context.ts is a different file (and uncovered).
+- Per peer rotation: next is carina (cycle position N+2 from NL5). Carina's specialty (embeddings, cosine math, grading thresholds) is a precise fit — lattice-context.ts wraps `pushContext` and prepares cosine-graded retrieval results for cmdRun.
+- Expected ~5-7 new REAL findings based on the established pattern (NL1=5, NL3=5, NL4=7, NL5=8 — average 6.25 REAL findings per peer review).
 
-**Migration template:**
-1. Bump SCHEMA_VERSION 3 → 4.
-2. Update CREATE TABLE answers: `quality_tier INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier IN (1,2,3,4,5))` (was `BETWEEN 1 AND 5`).
-3. Add `migrateV3toV4()` function:
-   - Idempotency: detect old constraint via PRAGMA index_list / table_info → look at the CHECK clause text via SQL master, or attempt-and-rollback a fractional INSERT to detect.
-   - Pre-flight audit: any rows with non-integer quality_tier? Should be zero (the type is `1 | 2 | 3 | 4 | 5` in TypeScript).
-   - Standard rebuild: CREATE answers_new with new CHECK → INSERT SELECT → DROP → RENAME → recreate indexes.
-   - Disable foreign_keys for the rebuild (citations + questions.best_answer_id reference answers).
-4. Pre-flight production audit before applying.
-5. Backup production lattice (lattice.db.bak-pre-NL11).
+**Plan for NL12:**
+1. Tests-first.
+2. Spawn `agent-chat ephemeral-peer-review --peer carina --module plugins/agent-chat/scripts/lattice-context.ts --task "Audit for REAL issues only: cosine threshold logic, push-context retrieval correctness, formatting boundary edges (truncation, empty results, peer-vs-self exclusion logic), data leak via included content, performance of large-corpus retrieval. Be terse — bullet points only with file:line citations."`.
+3. Apply 1-retry resilience rule if codex flakes.
+4. Classify findings; if any REAL → ship one fix this iter (test-first), queue rest. If all dismissed → STOP per stopping condition 6.
+5. Update tracker + journal + prompt.md.
 
-**Test approach (3 regression tests):**
-- Fresh schema rejects `quality_tier: 2.5` direct INSERT (the bug pre-fix accepted fractional via BETWEEN 1 AND 5).
-- Migration v3→v4 preserves data and tightens constraint.
-- Defense-in-depth: schema CHECK rejects bypass-INSERT with fractional or out-of-set tier.
-
-**After NL11:**
-- 3 of 4 pre-approval items shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK).
-- Remaining: petersen routing-table (config change in agents.petersen.yaml — different file class) + 3 lattice depth=1 design questions (real design work).
-- NL12+ → continue draining queued findings (still 16 after NL11: L3, L5, C2, C4, C5, E1-E5, E7, K-imp-1, 3-7) OR fresh peer review on lattice-context.ts (cycle returns to carina).
+**Sequenced after NL12:**
+- NL13+ → drain queued findings (now augmented by NL12's). With 16-21 expected total, the queue can sustain many drain iters.
+- Eventually: fresh peer reviews on the 3 remaining uncovered modules (`stats.ts`, `synthesize-corpus.ts`, `validate-corpus.ts`).
 
 ## STOPPING CONDITIONS
 
@@ -150,12 +142,13 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL10):**
+- **Cumulative ledger (post-NL11):**
   - 25 REAL findings discovered across 5 peer reviews
   - 9 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, K-imp-8, iter-3 #2)
-  - 2 schema migrations shipped (NL7 NOT NULL, NL9 FK)
-  - 16 queued findings + 1 pre-approval queue item remaining (K2 schema)
-  - Fix-rate: 36% (9/25 code + 2 schema migrations). Trending up.
+  - **3 schema migrations shipped (NL7 NOT NULL, NL9 FK, NL11 CHECK) — all pre-approved migrations DONE**
+  - 16 queued findings + 0 pre-approval schema items remaining
+  - Fix-rate: 36% (9/25 code) + all 3 schema migrations from peer findings shipped end-to-end.
+  - Substrate's SQL-level integrity now fully matches its application-level integrity.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 

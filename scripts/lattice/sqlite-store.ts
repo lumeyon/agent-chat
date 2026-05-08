@@ -29,7 +29,7 @@ import type {
   QuestionStatus,
 } from "./types.ts";
 
-const SCHEMA_VERSION = 3;  // v3 (NL9): questions.best_answer_id REFERENCES answers(id) — FK constraint
+const SCHEMA_VERSION = 4;  // v4 (NL11): answers.quality_tier CHECK IN (1,2,3,4,5) — discrete-set, not BETWEEN
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS answers (
   by_agent        TEXT NOT NULL,
   predictive_lift REAL NOT NULL DEFAULT 0,
   status          TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
-  quality_tier    INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier BETWEEN 1 AND 5),
+  quality_tier    INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier IN (1,2,3,4,5)),
   created_at      INTEGER NOT NULL,
   validator_id    TEXT,
   FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
@@ -109,6 +109,7 @@ function ensureSchema(db: Database): void {
   // for paranoid safety.
   migrateV1toV2(db);
   migrateV2toV3(db);
+  migrateV3toV4(db);
   // Record schema version for future migrations.
   db.run(
     `INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)`,
@@ -267,6 +268,84 @@ function migrateV2toV3(db: Database): void {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_q_posed_at ON questions(posed_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_q_posed_by ON questions(posed_by)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_q_depth    ON questions(depth)`);
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch {}
+    if (fkWasOn) db.exec("PRAGMA foreign_keys = ON");
+    throw e;
+  }
+  if (fkWasOn) db.exec("PRAGMA foreign_keys = ON");
+}
+
+/** Migration v3 → v4 (NL11): tighten answers.quality_tier CHECK from
+ *  `BETWEEN 1 AND 5` to `IN (1,2,3,4,5)`. The BETWEEN form admits
+ *  fractional values (e.g. 2.5) due to SQLite's dynamic typing — the
+ *  IN form requires exact integer membership. Closes keystone iter-6 K2.
+ *
+ *  Idempotency: detect via sqlite_master.sql for the answers table —
+ *  if the CHECK clause text already contains "IN (1,2,3,4,5)", no-op.
+ *  This is more robust than re-checking PRAGMA which doesn't expose
+ *  the CHECK clause text.
+ *
+ *  Safety: pre-flight audit refuses if any row has quality_tier NOT IN
+ *  (1,2,3,4,5). Should be zero in practice (the type is `1|2|3|4|5`). */
+function migrateV3toV4(db: Database): void {
+  const masterRow = db
+    .query<{ sql: string }, []>(`SELECT sql FROM sqlite_master WHERE type='table' AND name='answers'`)
+    .get();
+  const masterSql = (masterRow as { sql: string } | null)?.sql ?? "";
+  if (masterSql.includes("IN (1,2,3,4,5)")) {
+    return;  // already migrated
+  }
+
+  // Safety check: refuse if any row has out-of-set quality_tier.
+  const badRow = db
+    .query<{ c: number }, []>(`SELECT COUNT(*) as c FROM answers WHERE quality_tier NOT IN (1,2,3,4,5)`)
+    .get();
+  const badCount = (badRow as { c: number }).c;
+  if (badCount > 0) {
+    throw new Error(
+      `migrateV3toV4 aborted: ${badCount} answer row(s) have quality_tier not in {1,2,3,4,5}. ` +
+      `These would be invalid under the new CHECK. Backfill or fix them first.`,
+    );
+  }
+
+  // Disable FK enforcement during the rebuild (citations + questions
+  // both reference answers; DROP TABLE answers would fail).
+  const fkOnRow = db.query<{ foreign_keys: number }, []>(`PRAGMA foreign_keys`).get();
+  const fkWasOn = (fkOnRow as { foreign_keys: number }).foreign_keys === 1;
+  if (fkWasOn) db.exec("PRAGMA foreign_keys = OFF");
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(`
+      CREATE TABLE answers_new (
+        id              TEXT PRIMARY KEY,
+        question_id     TEXT NOT NULL,
+        body            TEXT NOT NULL,
+        explanation     TEXT NOT NULL,
+        by_agent        TEXT NOT NULL,
+        predictive_lift REAL NOT NULL DEFAULT 0,
+        status          TEXT NOT NULL CHECK(status IN ('proposed','accepted','superseded','refuted')),
+        quality_tier    INTEGER NOT NULL DEFAULT 5 CHECK(quality_tier IN (1,2,3,4,5)),
+        created_at      INTEGER NOT NULL,
+        validator_id    TEXT,
+        FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO answers_new (id, question_id, body, explanation, by_agent, predictive_lift, status, quality_tier, created_at, validator_id)
+      SELECT id, question_id, body, explanation, by_agent, predictive_lift, status, quality_tier, created_at, validator_id FROM answers
+    `);
+    db.exec(`DROP TABLE answers`);
+    db.exec(`ALTER TABLE answers_new RENAME TO answers`);
+    // Recreate indexes that were attached to the old answers table.
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_question ON answers(question_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_by ON answers(by_agent)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_status ON answers(status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_quality ON answers(quality_tier)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_predictive_lift ON answers(predictive_lift DESC)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_a_created_at ON answers(created_at)`);
     db.exec("COMMIT");
   } catch (e) {
     try { db.exec("ROLLBACK"); } catch {}
