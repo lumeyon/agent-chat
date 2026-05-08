@@ -95,6 +95,16 @@ export async function composePushedContextBlock(
     if (opts.min_cosine !== undefined) {
       kept = kept.filter((h) => h.cosine >= opts.min_cosine!);
     }
+    // LC3 fix (NL27 / carina NL12 finding): drop hits whose best_answer
+    // is null BEFORE counting. pushContext can return null-best_answer
+    // hits in its default branch (no exclude_agent) when filters reject
+    // every accepted answer for a question — the for-loop below already
+    // skips those in OUTPUT, but the header line (`top-${kept.length}`)
+    // and the i+1 numbering would otherwise lie about the actual content
+    // emitted. NL19's LC2 fix already handles the exclude_agent-set
+    // branch in pushContext itself; LC3 covers the unset branch here at
+    // the consumer.
+    kept = kept.filter((h) => h.best_answer !== null);
     kept = kept.slice(0, k);
 
     if (kept.length === 0) {

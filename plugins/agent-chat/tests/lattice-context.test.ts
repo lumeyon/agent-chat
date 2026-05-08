@@ -460,6 +460,113 @@ describe("composePushedContextBlock", () => {
     // Backwards compat: the hit is included even with low cosine.
     expect(block).toContain("Random body");
   }, 30_000);
+
+  // Regression for carina's NL12 LC3 finding: when exclude_agent is UNSET,
+  // pushContext can return hits with `best_answer: null` (e.g., when the
+  // caller's quality_tier_min filter rejects all accepted answers for a
+  // question). composePushedContextBlock's for-loop at line 110 skips
+  // those null hits in the OUTPUT, but the header line ("top-${kept.length}
+  // most-similar prior Q/A") computes its count BEFORE the skip — so
+  // the prompt header lies about the body content. The numbering in the
+  // body also gets gaps because `i + 1` doesn't account for skipped
+  // entries. Result: prompt header says "top-2" but body has "1." and
+  // "3." (or "1." only) entries, with "2." missing. Visual mismatch.
+  //
+  // NL27 fix: filter null-best_answer hits BEFORE computing kept.length
+  // (and thus before the loop), so header count and body emission align.
+  test("LC3: header count matches body count when some hits have null best_answer", async () => {
+    const store = new LatticeStore(dbPath);
+    // Seed 2 answered questions with similar framings so both rank high
+    // in cosine for the query. Q1's accepted answer is tier 1 (passes
+    // quality_tier_min:1); Q2's is tier 3 (rejected by quality_tier_min:1).
+    // pushContext (default branch, no exclude_agent) returns 2 hits;
+    // resolveBestAnswer returns the tier-1 answer for Q1 but null for Q2
+    // (queryFallback also filters by tier).
+    const q1 = seedQuestion(store, {
+      id: "v1:q-tier1",
+      framing: "How do I deploy to production today?",
+    });
+    const a1 = recordAnswer(store, {
+      question_id: q1.id,
+      body: "Run bun deploy.",
+      by_agent: "lumeyon",
+      explanation: "Standard deploy.",
+      status: "accepted",
+      quality_tier: 1,
+    });
+    store.setQuestionStatus(q1.id, "answered", a1.id);
+
+    const q2 = seedQuestion(store, {
+      id: "v1:q-tier3",
+      framing: "How do I deploy to production now?",
+    });
+    const a2 = recordAnswer(store, {
+      question_id: q2.id,
+      body: "Use the script.",
+      by_agent: "lumeyon",
+      explanation: "Same story.",
+      status: "accepted",
+      quality_tier: 3,
+    });
+    store.setQuestionStatus(q2.id, "answered", a2.id);
+    store.close();
+
+    const block = await composePushedContextBlock({
+      query: "How do I deploy to production?",
+      latticeDbPath: dbPath,
+      k: 5,
+      quality_tier_min: 1,  // only gold-tier passes
+      // exclude_agent unset → default branch returns hits with null
+      // best_answer for Q2 (tier-3 fails the filter on both paths).
+    });
+
+    // Pre-fix: kept.length=2 (includes Q2's null-best_answer hit), header
+    // says "top-2", but the for-loop's `if (!h.best_answer) continue`
+    // skips Q2 in the body — so only "1." emits and "2." is missing.
+    // Post-fix: null-best_answer filter trims kept to 1, header says
+    // "top-1", body has exactly one numbered "1." entry.
+    const headerMatch = block.match(/top-(\d+) most-similar/);
+    expect(headerMatch).not.toBeNull();
+    const headerCount = parseInt(headerMatch![1], 10);
+    const bodyEntryCount = (block.match(/^\d+\. \*\*Q \(/gm) ?? []).length;
+    expect(bodyEntryCount).toBe(headerCount);
+  }, 60_000);
+
+  test("LC3: sanity — when all hits have valid best_answer, header count still matches body", async () => {
+    // Backwards compat: the LC3 fix shouldn't break the common case
+    // where every hit has a valid best_answer (header and body counts
+    // already agreed pre-fix).
+    const store = new LatticeStore(dbPath);
+    for (let i = 0; i < 3; i++) {
+      const q = seedQuestion(store, {
+        id: `v1:q-valid-${i}`,
+        framing: `How do I deploy ${i}?`,
+      });
+      const a = recordAnswer(store, {
+        question_id: q.id,
+        body: `Answer ${i}.`,
+        by_agent: "lumeyon",
+        explanation: `Real explanation ${i}.`,
+        status: "accepted",
+        quality_tier: 2,
+      });
+      store.setQuestionStatus(q.id, "answered", a.id);
+    }
+    store.close();
+
+    const block = await composePushedContextBlock({
+      query: "How do I deploy?",
+      latticeDbPath: dbPath,
+      k: 5,
+    });
+
+    const headerMatch = block.match(/top-(\d+) most-similar/);
+    expect(headerMatch).not.toBeNull();
+    const headerCount = parseInt(headerMatch![1], 10);
+    const bodyEntryCount = (block.match(/^\d+\. \*\*Q \(/gm) ?? []).length;
+    expect(bodyEntryCount).toBe(headerCount);
+    expect(bodyEntryCount).toBe(3);
+  }, 60_000);
 });
 
 // Regression for carina's NL12 LC4 finding: truncateForBudget claims to

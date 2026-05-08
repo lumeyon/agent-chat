@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL26 commit)
+## CURRENT STATE (as of NL27 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -56,9 +56,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 3. `scripts/lattice/validate-corpus.ts`
 
 ### Covered (added NL12):
-- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **4 fixed: LC1, LC2, LC4, LC5**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set)
+- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **all 5 fixed: LC1, LC2, LC3, LC4, LC5**) — module fully cleared
 
-### Queued findings (drainable WITHOUT fresh peer call — 6 total):
+### Queued findings (drainable WITHOUT fresh peer call — 5 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 0 queued (L3 drained NL17, L5 drained NL26 — module fully cleared)
 
@@ -74,8 +74,7 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **K-imp-3** (importEdgeConvo:231): cross-archive Q→A pair lost when archiving splits.
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
 
-#### lattice-context.ts (carina NL12) — 1 queued (LC1 drained NL15, LC2 drained NL19, LC4 drained NL23)
-- **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block. **NOTE:** partially-addressed by LC2 fix when exclude_agent is set (pushContext now skips null-best_answer hits in walk loop). Remaining concern: header line "top-K" lying when exclude_agent unset.
+#### lattice-context.ts (carina NL12) — 0 queued (LC1 drained NL15, LC2 drained NL19, LC4 drained NL23, LC3 drained NL27 — module fully cleared)
 
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
 - ~~iter-3 SQL `explanation TEXT NOT NULL`~~ — **SHIPPED NL7**
@@ -89,32 +88,29 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL27 → DRAIN LC3** (lattice-context.ts:71 null best_answer survives exclude_agent filter when exclude_agent is UNSET — header lies about top-K count).
+**NL28 → DRAIN E4** (ephemeral-peer-review.ts:220, 256 dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked` — protocol invariant gap).
 
-**Why LC3:**
-- Partial bug remains after LC2 (NL19): when `exclude_agent` is set, pushContext now skips null-best_answer hits in the walk loop. But when `exclude_agent` is UNSET, the default branch returns hits with `best_answer: null` for questions that have no eligible accepted answer. lattice-context.ts then:
-  - computes `kept.length` BEFORE the loop (line 99 header: "top-${kept.length}"),
-  - in the loop, `if (!h.best_answer) continue;` skips null hits in output.
-  - Result: header claims "top-3" but only 2 numbered hits actually emit. Visual count mismatch in the prompt.
-- lattice-context.ts last touched NL24 (3 iters gap at NL27 → file-touch rule satisfied; NL26 touched apprenticeship.ts → different file).
+**Why E4:**
+- Real protocol-correctness bug. The orion-request section (line 228) is appended to CONVO.md ending with `→ <peer>` BEFORE dispatch fires. If dispatch fails (line 237-240), the catch block parks the edge (`.turn=parked`, lock removed). But the request section's trailing `→ peer` arrow remains in CONVO.md — a Monitor or peer reading CONVO sees "the floor was just handed to peer" while `.turn` says parked. Protocol invariant violated.
+- ephemeral-peer-review.ts last touched NL24 (4 iters gap → eligible).
 
-**Read first:** `plugins/agent-chat/scripts/lattice-context.ts` lines 90-105 (the header line + the for-loop).
+**Read first:** `plugins/agent-chat/scripts/ephemeral-peer-review.ts` lines 220-260 (the try block + dispatch + catch). Confirm the exact failure mode.
 
 **Fix approach options:**
-- **Option A (filter null hits BEFORE counting):** add `kept = kept.filter(h => h.best_answer != null)` before computing kept.length. Simplest. Keeps both branches consistent.
-- **Option B (centralize in pushContext):** make pushContext skip null-best_answer hits in BOTH branches (currently only the exclude_agent-set branch does). Cleaner architecturally but a behavior change for any caller relying on the existing "null best_answer means cosine-only hit" semantics.
-- Recommend A. Surgical fix; doesn't change pushContext API.
+- **Option A (most consistent):** on dispatch failure inside the try block, append a peer-NOT-responded section ending with `→ parked` to CONVO.md BEFORE the catch's park call. The CONVO tail's arrow then matches `.turn=parked`.
+- **Option B:** rewrite the orion-request section's trailing arrow from `→ peer` to `→ parked`. Mutates an already-written section — violates the append-only protocol invariant. Reject.
+- Recommend A.
 
 **Test approach (2 regression tests):**
-- Test 1 (failure case): seed a question that has NO accepted answer (e.g., status="open", or only refuted answers). With exclude_agent UNSET, call composePushedContextBlock. Pre-fix: prompt header says "top-N" where N includes the null hit, but the body has fewer entries. Post-fix: header count matches body entry count.
-- Test 2 (sanity): all hits have valid best_answer → header count matches body count (pre-fix and post-fix).
+- Test 1 (failure case): mock dispatcher returning reason!=ok (or use AGENT_CHAT_MOCK_PEER_RESPONSE empty + seed a failure). Run ephemeral-peer-review. Assert post-fix: CONVO.md tail's arrow says `parked` (matches `.turn=parked`).
+- Test 2 (happy path sanity): existing happy-path test still passes; CONVO.md tail's arrow says `parked` after successful peer response (this case was already correct pre-fix).
 
-**Sequenced after NL27:**
-- NL28 → E4 or E5 (ephemeral-peer-review.ts last touched NL24, eligible at NL28).
-- NL29 → K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts eligible after NL25 + 4 = NL29).
-- NL30+ → C4 (design call — orion authorized via boss-pre-approval queue).
+**Sequenced after NL28:**
+- NL29 → K-imp-1, K-imp-3, K-imp-9 (import-from-kg.ts last touched NL25, eligible at NL29).
+- NL30 → E5 (ephemeral-peer-review.ts last touched NL28 → eligible at NL30 if E5 untouched in NL29).
+- NL31+ → C4 (design call — orion authorized via boss-pre-approval queue).
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
-- **Apprenticeship.ts module fully cleared (5/5 findings fixed at NL17 + NL26)** — no further drain needed for this module unless a fresh peer review surfaces new findings.
+- **Modules fully cleared:** apprenticeship.ts (5/5 at NL17+NL26), lattice-context.ts (5/5 at NL12+NL15+NL19+NL23+NL27).
 
 ## STOPPING CONDITIONS
 
@@ -143,14 +139,15 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL26):**
+- **Cumulative ledger (post-NL27):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 25 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC4, LC5)
+  - 26 fixed at code level (L1, L2, L3, L4, L5, C1, C2, C3, C5, E1, E2, E3, E6, E7, K-imp-2, K-imp-4, K-imp-5, K-imp-6, K-imp-7, K-imp-8, iter-3 #2, LC1, LC2, LC3, LC4, LC5)
   - 3 schema migrations shipped
-  - 6 queued findings remain (LC3, K-imp-1, K-imp-3, K-imp-9, E4, E5; plus C4 as design-call)
-  - Fix-rate: 83% (25/30 code) + all 3 schema migrations
-  - **MODULE CLEARED:** apprenticeship.ts (5/5 lumeyon NL1 findings fixed). First peer-reviewed module to fully drain.
+  - 5 queued findings remain (K-imp-1, K-imp-3, K-imp-9, E4, E5; plus C4 as design-call)
+  - Fix-rate: 87% (26/30 code) + all 3 schema migrations
+  - **MODULES CLEARED (2):** apprenticeship.ts (5/5 lumeyon NL1 findings fixed at NL17+NL26), lattice-context.ts (5/5 carina NL12 findings fixed at NL12+NL15+NL19+NL23+NL27).
   - **Input-validation pattern (E6 = LC4 = L5):** substrate APIs that take user/agent-supplied numbers should validate at the API boundary rather than trust slice/encode/comparison to fail gracefully. Three instances of this pattern have now been hardened (capBytes, body_budget_bytes, k). Audit other numeric API parameters for the same pattern.
+  - **Counting consistency (LC2 = LC3):** when filters drop hits, the counts (header lengths, top-K claims) and emission (loop body) must agree. LC2 (NL19) handled the exclude_agent-set branch in pushContext; LC3 (NL27) handled the exclude_agent-unset branch in lattice-context.ts. Together they close the count-vs-emission consistency story for cross-domain push.
   - **SYSTEMIC pattern (LC2 = C5 = K-imp-6 = K-imp-7) confirmed FOURTH time:** SQL limit BEFORE selection logic → silent wrong-row pick. Fix templates: (a) push the missing axis into queryAnswers (LC2, C5); (b) capture the function's already-existing return value (K-imp-6); (c) compute the identifier directly via a deterministic helper (K-imp-7 with `makeAnswerId`). All boil down to: **don't re-query for what you can derive or already have.** The pattern is now closed on the queryAnswers side; future audits should look at queryQuestions + in-memory filter sites (importAllEdges? statsTotals?) for the same shape.
   - **SYSTEMIC pattern (LC4 = E7) closed via shared helper extraction:** rather than copy-pasting the TextEncoder fix into a second file, NL24 extracted `plugins/agent-chat/scripts/utf8.ts` with `truncateToUtf8Bytes` + `utf8ByteLength` and refactored both LC4's truncateForBudget and E7's composeReviewPrompt to consume it. This is the COUNTER-PATTERN to LC5 = K-imp-2 (where the trailing-marker /m regex was copy-pasted across files): when the same bug shape shows up in a second file, EXTRACT the helper rather than re-applying the fix in two places.
   - **K-imp-6 lesson: when a function returns the data you need, USE the return value — don't re-query.** Pre-fix the importer dropped `recordAnswer`'s return and then re-queried for "which answer did I just insert?", introducing a tie-break dependency on SQLite's implementation-defined ordering. Post-fix uses the returned Answer directly. Audit other call sites that drop function returns and then re-query.

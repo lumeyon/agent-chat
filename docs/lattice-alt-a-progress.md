@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T14:55Z
+## Current state — 2026-05-08T15:25Z
 
-**Phase: NL26 — drained L5 (apprenticeship.ts pushContext k unvalidated; undefined behavior for negative or non-finite k). Pre-fix: `const k = options.k ?? 5;` accepted any number; in the default branch `ranked.slice(0, -1)` returned N-1 items (silent subsample); in the walk branch `out.length >= -1` was true on iter 1 → 0 hits, while `out.length >= NaN` was always false → returned ALL eligible candidates. Post-fix: validate k at the top of pushContext — default-on-invalid (NaN, ±Infinity, negative) → 5; floor non-integers; preserve explicit 0 as a meaningful "return nothing" request. Cumulative: 30 REAL findings, 25 code fixes, 3 schema migrations.**
+**Phase: NL27 — drained LC3 (lattice-context.ts:71 null best_answer survives exclude_agent filter — header-vs-body count mismatch when exclude_agent is unset). Pre-fix: pushContext's default branch can return hits with `best_answer: null` when caller filters (e.g., `quality_tier_min: 1`) reject all accepted answers; the for-loop's `if (!h.best_answer) continue;` skips them in OUTPUT, but the header line `top-${kept.length}` and the `${i + 1}` numbering both incorporate them — header lies, numbering has gaps. Post-fix: filter null-best_answer hits BEFORE computing kept.length so header and body counts always align. Cumulative: 30 REAL findings, 26 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,126 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T15:25Z (NL27: queue-drain LC3 — header-vs-body count mismatch when exclude_agent unset and best_answer is null)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains LC3 — no fresh peer call. File-touch rule: NL26 touched apprenticeship.ts; this iter touches lattice-context.ts (different file → eligible).
+
+**The bug (carina NL12 LC3):**
+  composePushedContextBlock has a count consistency bug at lines 105 vs 110:
+
+  ```typescript
+  const lines: string[] = [
+    `Relevant prior knowledge from the lattice (top-${kept.length} most-similar prior Q/A by embedding cosine):`,
+    "",
+  ];
+  for (let i = 0; i < kept.length; i++) {
+    const h = kept[i];
+    if (!h.best_answer) continue;          // ← skips null hits in OUTPUT
+    ...
+    lines.push(`${i + 1}. **Q (cosine ${h.cosine.toFixed(2)}, ...):** ${framing}`);
+    ...
+  }
+  ```
+
+  pushContext's default branch (no exclude_agent) returns hits with
+  `best_answer: null` when caller filters (e.g., `quality_tier_min: 1`)
+  reject all accepted answers for a question. The for-loop's
+  `if (!h.best_answer) continue;` skips those null hits in the OUTPUT,
+  but the header line had already computed kept.length INCLUDING them.
+
+  Two visual defects in the rendered prompt:
+  1. **Header lies:** "top-2" claimed, but body has only 1 numbered entry.
+  2. **Numbering gaps:** `${i + 1}` uses the loop index, so when index 0
+     is null-skipped and index 1 emits, the body shows "2." (no "1.").
+
+  NL19's LC2 fix already handles the exclude_agent-set branch in
+  pushContext itself (the walk loop skips null-best_answer hits before
+  returning). LC3 covers the symmetric case in the consumer when
+  exclude_agent is UNSET.
+
+**The fix (filter null hits BEFORE counting):**
+  ```typescript
+  kept = kept.filter((h) => h.best_answer !== null);
+  kept = kept.slice(0, k);
+  ```
+
+  Surgical: one filter line added between the existing min_cosine filter
+  and the top-K slice. After the filter, kept.length matches what the
+  body will emit, and the `${i + 1}` numbering proceeds without gaps.
+
+**Test-first protocol:**
+  2 regression tests at lattice-context.test.ts:
+    - **LC3-a (failure case):** seed 2 answered questions with similar
+      framings (both rank high in cosine); Q1 has tier-1 answer (passes
+      `quality_tier_min: 1`), Q2 has tier-3 answer (rejected by both
+      best_answer_id-resolution and queryFallback under tier_min:1).
+      Call composePushedContextBlock with `quality_tier_min: 1` and
+      no exclude_agent. Assert header count equals body entry count.
+      **Verified FAILING pre-fix** (Expected: 2, Received: 1 — header
+      claimed 2, body emitted 1).
+    - **LC3-b (sanity):** all 3 hits have valid best_answer →
+      header=body=3 (passes pre-fix and post-fix).
+
+**Why this matters:** the prompt block is what the agent sees. A header
+that says "top-N most-similar prior Q/A" followed by fewer than N body
+entries is a DIRECT correctness bug for the agent's situational
+awareness — the agent will plan/respond as if N priors were available
+when only M < N actually emit content. Numbering gaps ("body shows '2.'
+without '1.'") also disrupt the prompt's structured-list interpretation
+that downstream tools may rely on. Fixing this restores the prompt's
+self-consistency.
+
+**Coverage observation:** LC3 is a SIBLING bug to LC2. Both involved
+exclusion semantics + count discipline; LC2 (NL19) was about the
+`exclude_agent`-set walk path silently truncating; LC3 is about the
+`exclude_agent`-unset default path producing inconsistent counts.
+Together NL19 + NL27 close out the exclude/null filtering correctness
+story for cross-domain push.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (CROSS-DOMAIN PUSH) — pushed prompt block now
+    self-consistent: the header's claim about content count matches
+    the body's actual emission.
+  - ✅ Function 5 (training-data-shaped artifacts) — prompt blocks are
+    consumed downstream as training-data shape; count consistency
+    matters for any consumer parsing the structured prompt.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 162 / 0 unchanged; plugin 538 → 540 (+2 LC3)
+
+**Files touched (4):**
+  - plugins/agent-chat/scripts/lattice-context.ts (filter null-best_answer hits before counting)
+  - plugins/agent-chat/tests/lattice-context.test.ts (2 LC3 regression tests)
+  - docs/ephemeral-peer-reviews.md (LC3 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL28 plan; cumulative ledger updated)
+
+**MODULE CLEARED:** lattice-context.ts now has all 5 carina NL12
+findings fixed (LC1 NL15, LC2 NL19, LC3 NL27, LC4 NL23, LC5 NL12).
+Second peer-reviewed module to fully drain after apprenticeship.ts
+(NL26).
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL28):** File-touch rule blocks lattice-context.ts immediately again. Eligible:
+- E4, E5 (ephemeral-peer-review.ts last touched NL24 — eligible)
+- K-imp-1, 3, 9 (import-from-kg.ts last touched NL25 — eligible)
+
+**Recommend NL28 → DRAIN E4** (ephemeral-peer-review.ts:220, 256 dispatch failure leaves CONVO arrow `→ peer` while `.turn=parked` — protocol invariant gap).
+
+Reasons:
+- Real protocol invariant gap: when the dispatch step fails (line 237 `dispatchResult.reason !== "ok"`), the catch block parks the edge AND removes the lock, but the orion-request section (already appended at line 228) remains in CONVO.md ending with `→ <peer>` — when the next session reads CONVO.md, the trailing arrow points at the peer but `.turn=parked`. Subtly inconsistent.
+- ephemeral-peer-review.ts last touched NL24 (4 iters gap → eligible).
+- Self-contained fix: append a "dispatch failed → parked" replacement section to CONVO.md before parking the edge, OR rewrite the orion-request section's trailing arrow.
+
+**Sequenced after NL28:**
+- NL29 → E5 (ephemeral-peer-review.ts last touched NL28 → INELIGIBLE if E4 just touched it; pick K-imp-1/3/9 instead).
+- NL30 → K-imp-1, K-imp-3, or K-imp-9 (import-from-kg.ts eligible after NL25 + 4 = NL29).
+- NL31+ → C4 (design call — orion authorized via boss-pre-approval queue).
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit).
 
 ### 2026-05-08T14:55Z (NL26: queue-drain L5 — pushContext k unvalidated; default-on-invalid validation policy)
 
