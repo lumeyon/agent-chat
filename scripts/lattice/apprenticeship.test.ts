@@ -305,6 +305,38 @@ describe("reRankAnswers — selection pressure (forcing function 3)", () => {
     expect(result.demoted_to_superseded).toEqual([]);
   });
 
+  // Regression for keystone's NL5 / lumeyon's NL1 L4 finding: exact-margin
+  // wins fail under raw IEEE 754 float subtraction. The spec says
+  // "winner must beat next-best by margin OR MORE", so a delta of exactly
+  // `margin` should promote. But `0.30 - 0.25` evaluates to
+  // 0.04999999999999998, which is < 0.05; the condition `< margin`
+  // wrongly triggers "no promotion."
+  test("L4: exact-margin wins promote (epsilon-tolerant float comparison)", () => {
+    // Top - runner-up = exactly 0.05 in mathematical terms; in IEEE 754
+    // 0.30 - 0.25 = 0.04999999999999998. Pre-fix this fails to promote.
+    const a1 = recordAnswer(store, { question_id: "v1:q1", body: "lower", by_agent: "orion",  explanation: "x", predictive_lift: 0.25 });
+    const a2 = recordAnswer(store, { question_id: "v1:q1", body: "top",   by_agent: "lumeyon", explanation: "y", predictive_lift: 0.30 });
+    const result = reRankAnswers(store, "v1:q1", { margin: 0.05 });
+    expect(result.promoted_to_accepted).toBe(a2.id);
+  });
+
+  test("L4: another float-precision case — 0.45 vs 0.40 with margin 0.05", () => {
+    // 0.45 - 0.40 = 0.04999999999999998 (same representation issue).
+    const a1 = recordAnswer(store, { question_id: "v1:q1", body: "lower", by_agent: "orion",  explanation: "x", predictive_lift: 0.40 });
+    const a2 = recordAnswer(store, { question_id: "v1:q1", body: "top",   by_agent: "lumeyon", explanation: "y", predictive_lift: 0.45 });
+    const result = reRankAnswers(store, "v1:q1", { margin: 0.05 });
+    expect(result.promoted_to_accepted).toBe(a2.id);
+  });
+
+  test("L4: still respects margin — 0.50 vs 0.48 with margin 0.05 stays as no-promotion", () => {
+    // Real near-tie below margin (0.02 < 0.05). Should NOT promote.
+    // Verifies the epsilon fix doesn't regress the "below margin" case.
+    recordAnswer(store, { question_id: "v1:q1", body: "lower", by_agent: "orion",  explanation: "x", predictive_lift: 0.48 });
+    recordAnswer(store, { question_id: "v1:q1", body: "top",   by_agent: "lumeyon", explanation: "y", predictive_lift: 0.50 });
+    const result = reRankAnswers(store, "v1:q1", { margin: 0.05 });
+    expect(result.promoted_to_accepted).toBeNull();
+  });
+
   test("demotes prior 'accepted' when a clear winner emerges", () => {
     const a1 = recordAnswer(store, { question_id: "v1:q1", body: "old", by_agent: "orion",   explanation: "x", predictive_lift: 0.5, status: "accepted" });
     const a2 = recordAnswer(store, { question_id: "v1:q1", body: "new", by_agent: "lumeyon", explanation: "y", predictive_lift: 0.95 });

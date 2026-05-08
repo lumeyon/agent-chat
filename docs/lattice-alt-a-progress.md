@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T03:55Z
+## Current state — 2026-05-08T04:15Z
 
-**Phase: NL5 — keystone retry on import-from-kg.ts SUCCEEDED (NL2 had timed out; the retry rule worked as designed). 8 REAL findings — new high-water mark. K-imp-2 (regex /m flag corrupting body content with internal `---` or `→ name` lines) FIXED this iter; K-imp-1, 3-8 queued. Total cumulative findings: 25 REAL across 5 peer-reviewed modules.**
+**Phase: NL6 — first queue-drain iter (no fresh peer call). L4 (apprenticeship.ts:227 reRankAnswers exact-margin IEEE float comparison) fixed. The queue-precedence rule worked: shipped a real fix for the cost of zero LLM calls. 19 REAL findings remain queued across 4 modules.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,66 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T04:15Z (NL6: queue-drain L4 — reRankAnswers epsilon-tolerant float comparison)
+
+**Loop:** stateful peer-driven with prompt.md state file. Per prompt.md's queue-precedence rule (rule 2 alt path), this iter drains a queued finding instead of spawning a fresh peer call.
+
+**Target:** L4 from lumeyon's NL1 review of apprenticeship.ts — the exact-margin float comparison bug at apprenticeship.ts:227.
+
+**Peer used:** none (queue drain).
+
+**The bug:** `reRankAnswers` decides whether the top answer beats the runner-up by `margin OR more` via raw IEEE float subtraction:
+```typescript
+if (top.predictive_lift - runnerUp.predictive_lift < margin) {
+  // No promotion
+}
+```
+But `0.30 - 0.25` evaluates to `0.04999999999999998` in IEEE 754, which is `< 0.05`. Spec says "OR MORE" (i.e., ≥ margin) should promote. The raw subtraction produces a false negative on exact-margin wins.
+
+**The fix:** subtract a small epsilon when comparing:
+```typescript
+const FLOAT_EPSILON = 1e-9;
+if (top.predictive_lift - runnerUp.predictive_lift < margin - FLOAT_EPSILON) {
+  // No promotion
+}
+```
+Legitimate exact-margin wins now promote; genuine sub-margin near-ties (e.g., 0.02 below 0.05) still don't.
+
+**Test-first protocol:**
+  1. Wrote 3 regression tests at apprenticeship.test.ts:309-336:
+     - L4-a: `0.30 - 0.25 = 0.05` → expect promotion (FAILS pre-fix because raw float math evaluates to 0.04999999... < 0.05)
+     - L4-b: `0.45 - 0.40 = 0.05` → expect promotion (FAILS pre-fix, same float-precision issue)
+     - L4-c (regression-prevention): `0.50 - 0.48 = 0.02 < 0.05` → expect NO promotion (PASSES pre-fix; verifies fix doesn't relax the genuine-near-tie case)
+  2. Verified L4-a + L4-b FAIL pre-fix; L4-c passes (sanity).
+  3. Applied fix.
+  4. All 3 PASS post-fix; existing reRankAnswers tests still pass.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 3 (SELECTION PRESSURE) — the function this iter fixes IS the substrate's selection-pressure mechanism. Pre-fix, exact-margin wins silently failed to promote, weakening the substrate's quality signal. Post-fix, the rule "beats by margin OR MORE" actually fires correctly.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 409 → 409 (no change — no peer call this iter)
+  - Answers: 895 → 895
+  - Tests added: 3 (L4 regression suite)
+
+**Tests:** plugin 508/0/3 (no change). Lattice 124 → 127 (+3 L4 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/apprenticeship.ts (epsilon-tolerant comparison)
+  - scripts/lattice/apprenticeship.test.ts (3 L4 regression tests)
+  - docs/ephemeral-peer-reviews.md (apprenticeship.ts row updated: L4 FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL7 plan; queue updated; lessons learned extended)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL7):** Per queue precedence (still 19 findings queued) AND per file-touch rule (NL6 just touched apprenticeship.ts → L5 in apprenticeship.ts INELIGIBLE). Top eligible candidates:
+- **C3** (study-turn.ts:213 NaN cosine guard) — smallest data-corruption fix, single `Number.isFinite` check
+- **C2** (study-turn.ts:141 empty-body filter in selectStudyQuestions)
+- **K-imp-8** (import-from-kg.ts:274 Date.parse non-UTC) — small UTC validation
+
+**Recommend NL7 → DRAIN C3** (NaN cosine guard). Smallest, addresses data-corruption risk (NaN written to predictive_lift could propagate through retrieval). study-turn.ts last touched NL3 — plenty of gap.
 
 ### 2026-05-08T03:55Z (NL5: keystone retry on import-from-kg.ts succeeded → 8 REAL findings; K-imp-2 fixed)
 

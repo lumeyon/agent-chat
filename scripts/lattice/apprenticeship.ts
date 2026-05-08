@@ -242,9 +242,15 @@ export function reRankAnswers(
   }
 
   // Multiple live answers. Top one wins iff its lift exceeds runner-up by margin.
+  // L4 fix (NL6 / lumeyon NL1 finding): IEEE 754 makes raw `top - runner < margin`
+  // wrongly fire on exact-margin wins. e.g., `0.30 - 0.25 == 0.04999999999999998`,
+  // which is < 0.05 even though the spec says "beats by margin OR MORE" should
+  // promote. Subtract a small epsilon so legitimate exact-margin wins promote
+  // while genuine sub-margin near-ties (e.g., 0.02 below 0.05) still don't.
   const top = live[0];
   const runnerUp = live[1];
-  if (top.predictive_lift - runnerUp.predictive_lift < margin) {
+  const FLOAT_EPSILON = 1e-9;
+  if (top.predictive_lift - runnerUp.predictive_lift < margin - FLOAT_EPSILON) {
     // Tie or near-tie. No promotion; existing accepted (if any) stays.
     return { question_id, promoted_to_accepted: null, demoted_to_superseded: [] };
   }

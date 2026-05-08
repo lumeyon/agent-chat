@@ -29,7 +29,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 - **On timeout/non-zero/empty/garbled:** retry ONCE with 360s budget on same peer.
 - **On second failure:** STOP, journal as substrate-health finding.
 
-Single first-attempt failures are NOISE. Retry once. **NL5 confirmed:** keystone retried on import-from-kg.ts after NL2 timeout — succeeded first try, 8 REAL findings. The retry rule is load-bearing.
+NL5 confirmed the retry rule is load-bearing: keystone retried on import-from-kg.ts after NL2's timeout and succeeded first try with 8 REAL findings.
 
 ## PEER ROTATION (only counts when a fresh peer call HAPPENS)
 
@@ -40,35 +40,33 @@ Single first-attempt failures are NOISE. Retry once. **NL5 confirmed:** keystone
 | N+2 | carina | embeddings, cosine math, grading thresholds |
 | N+3 | cycle back to lumeyon |
 
-Queue-draining iters DO NOT count toward peer rotation.
+Queue-draining iters DO NOT count toward peer rotation. Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL5 commit)
+## CURRENT STATE (as of NL6 commit)
 
 ### Covered modules (with prior peer review entries):
-- `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 3 fixed at code level; SQL migration in boss-approval queue)
+- `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 3 fixed; SQL migration in boss-approval queue)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, 2 fixed; K2 in boss-approval queue)
-- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, L1+L2 fixed; L3-L5 queued)
+- `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, **3 fixed: L1+L2+L4**; L3, L5 queued)
 - `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, C1 fixed; C2-C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, E6 fixed; E1-E5 + E7 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, K-imp-2 fixed; K-imp-1, 3-8 queued)
 
 ### Uncovered modules (priority order for fresh peer reviews):
-1. `plugins/agent-chat/scripts/lattice-context.ts` — cmdRun-pushContext bridge; lumeyon fit
+1. `plugins/agent-chat/scripts/lattice-context.ts` — cmdRun-pushContext bridge; lumeyon or carina fit
 2. `scripts/lattice/stats.ts` — read-only inspector; lumeyon or keystone fit
 3. `scripts/lattice/synthesize-corpus.ts` — purpose unclear; needs lumeyon assessment
 4. `scripts/lattice/validate-corpus.ts` — same as above
-5. `plugins/agent-chat/scripts/lattice-stats.ts` — wait, stats.ts is the lattice script; check if there's a plugin variant
 
-### Queued findings (drainable WITHOUT fresh peer call — 20 total):
+### Queued findings (drainable WITHOUT fresh peer call — 19 total):
 
-#### apprenticeship.ts (lumeyon NL1) — 3 queued
+#### apprenticeship.ts (lumeyon NL1) — 2 queued (was 3; L4 drained NL6)
 - **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion sets answer to "accepted" then returns at :218, skipping question lifecycle update at :247. Leaves `question.status="open"` + `best_answer_id=null` after promotion.
-- **L4** (apprenticeship.ts:227): exact-margin wins fail due to IEEE float comparison. `0.30 - 0.25 < 0.05` evaluates true under raw subtraction. **Smallest queued fix — 1-line change with epsilon.**
-- **L5** (apprenticeship.ts:152): `pushContext k` is unvalidated. Negative `k` → `slice(0, k)` → truncated results instead of zero/error.
+- **L5** (apprenticeship.ts:152): `pushContext k` is unvalidated. Negative `k` → `slice(0, k)` → truncated results.
 
 #### study-turn.ts (carina NL3) — 4 queued
 - **C2** (study-turn.ts:141, 182): `selectStudyQuestions` can pick accepted answer with empty body → cosine=0 → spurious penalty.
-- **C3** (study-turn.ts:213, 215, 216): NaN cosine propagates to `predictive_lift` → NaN written to storage. Add `Number.isFinite` guard.
+- **C3** (study-turn.ts:213, 215, 216): NaN cosine propagates to `predictive_lift` → NaN written to storage. Add `Number.isFinite` guard. **Smallest queued fix.**
 - **C4** (study-turn.ts:213): negative cosine produces lift penalty exceeding `-learningRate` while positive caps at `+learningRate`. Asymmetry — design call.
 - **C5** (study-turn.ts:128, 141): SQL `limit: 5` applied before in-memory authored filter; eligible answer at rank ≥6 silently unreachable.
 
@@ -76,7 +74,7 @@ Queue-draining iters DO NOT count toward peer rotation.
 - **E1** (line 206): resume-write steals floor from any non-orion turn (race).
 - **E2** (line 206 + 213): `.turn` flipped before lock acquired (race; same fix area as E1).
 - **E3** (line 213): lock failure outside try → edge stuck on "orion" if lock fails. Fix: park-on-lock-failure.
-- **E4** (line 220, 256): dispatch failure parks but leaves CONVO arrow `→ peer` while `.turn=parked` (protocol drift).
+- **E4** (line 220, 256): dispatch failure parks but leaves CONVO arrow `→ peer` while `.turn=parked`.
 - **E5** (line 143): importer path repo-layout-dependent — silent null in packaged plugin layout.
 - **E7** (line 87): truncation by JS string length, not bytes — UTF-16/UTF-8 mismatch, niche.
 
@@ -98,22 +96,25 @@ Queue-draining iters DO NOT count toward peer rotation.
 
 ## NEXT ITER TARGET HINT
 
-**NL6 → DRAIN L4** (apprenticeship.ts:227 float margin).
+**NL7 → DRAIN C3** (study-turn.ts:213 NaN cosine `Number.isFinite` guard).
 
-**Why L4 over alternatives:**
-- Smallest queued fix (1-line epsilon change).
-- Apprenticeship.ts wasn't touched in NL5 (last touched NL1 — plenty of gap, satisfies file-touch rule).
-- Mature test scaffolding in apprenticeship.test.ts; regression test pattern is well-established.
-- LLM-cost-free (queue-drain, no fresh peer call).
+**Why C3:**
+- Smallest queued fix (single conditional check around the lift-update math).
+- Data-corruption risk: NaN propagates to predictive_lift → NaN written to SQLite → NaN reads back through pushContext / selection. Real harm potential.
+- study-turn.ts last touched NL3 (3 iters ago) — plenty of gap satisfies file-touch rule.
+- Apprenticeship.ts (last iter) ineligible per file-touch rule, so even L5 (smaller than C3) is forbidden.
+- LLM-cost-free (queue-drain).
 
-**Test approach for L4:**
-- Construct a scenario where `top.predictive_lift - second.predictive_lift` evaluates to e.g. `0.05000000000000004` or `0.04999999999999998` (raw float math).
-- Pre-fix: comparison `>= margin` may fail or pass spuriously.
-- Post-fix: use `>= margin - epsilon` (with epsilon like `Number.EPSILON * 100` or `1e-9`).
+**Test approach for C3:**
+- Construct a scenario where `gradePrediction` somehow returns NaN (e.g., zero-norm vector edge case in cosineSimilarity, or mock the function for the test).
+- Pre-fix: `applyGradeToLift` sees `cosine: NaN` → computes `(NaN - 0.5) * 2 * lr = NaN` → `Math.max(0, Math.min(1, prev + NaN)) = NaN` → `setAnswerPredictiveLift(id, NaN)` writes to storage.
+- Post-fix: `Number.isFinite(grade.cosine)` check; if NaN, treat as ungradable (no-op like NL3's empty-prediction fix).
 
-After NL6 (L4 drained), NL7 candidates per peer rotation + queue precedence:
-- If queue still non-empty: drain L5 (small) or C3 (NaN guard, also small).
-- If/when fresh peer call happens: NL7 would be carina cycle position → review lattice-context.ts (uncovered, fits carina via push-context retrieval).
+After NL7 (C3 drained), NL8 candidates per queue precedence:
+- L5 (apprenticeship.ts k validation) — but if NL7 touched study-turn.ts, NL8 can touch apprenticeship.ts again (rule 3 only forbids matching the IMMEDIATELY-previous iter).
+- K-imp-8 (Date.parse UTC) — small, in import-from-kg.ts (touched NL5; NL8 ineligible if NL7 was study-turn).
+
+NL9 candidate: pick up a fresh peer call on lattice-context.ts (carina or lumeyon fit; carina if rotation cycles back).
 
 ## STOPPING CONDITIONS (any one halts)
 
@@ -128,14 +129,15 @@ After NL6 (L4 drained), NL7 candidates per peer rotation + queue precedence:
 
 ## LESSONS LEARNED (cumulative — read first)
 
-- **Peer reviews yield 5-8 REAL findings per call** (NL1=5, NL3=5, NL4=7, NL5=8). Strongest yields come from largest substrate modules. Pattern is reproducible.
-- **Codex flakes once per ~5 calls but recovers** (NL2 timeout, NL3/4/5 succeeded). Single failures are noise; retry once before halting. NL5 SUCCESSFULLY retried after NL2's timeout — the retry rule is proven.
-- **Test-first catches the bug exactly** — and surface-level test scaffolding is sometimes too lenient. NL5's first K-imp-2 test attempt passed pre-fix because `toContain` was too loose; tightened to assert the exact internal substring survives. Always verify your test FAILS pre-fix. If it doesn't, re-think.
-- **Queue precedence saves LLM cost.** With 20 queued findings already identified, no need to spawn a fresh peer call to find more work.
-- **The strongest single peer review yet (NL5 keystone, 8 findings) was a RETRY** of a prior failed call. Don't give up after one flake.
-- **Peer-driven yields nontrivial bugs even in mature code** — K-imp-2 (regex /m flag) was data-corrupting but had been latent. K-imp-5 (try/catch swallowing all errors) is bug-masking. These aren't theoretical — peer review surfaces real production-risk gaps.
-- **Boss is asleep.** Architectural decisions (schema migrations, routing-table changes, predictor tuning) → boss-approval queue + lattice depth>0 questions. No autopilot decisions.
+- **Peer reviews yield 5-8 REAL findings per call** (NL1=5, NL3=5, NL4=7, NL5=8). Pattern reproducible.
+- **Codex flakes once per ~5 calls but recovers** (NL2 timeout, NL3/4/5 succeeded). Single failures are noise; retry once before halting.
+- **Queue-drain iters are LLM-cost-free** (NL6 shipped L4 with zero peer calls). With 19+ queued findings, prefer drain over fresh peer call.
+- **Test-first must verify FAILS pre-fix.** NL5's first K-imp-2 test attempt PASSED pre-fix (loose `toContain` matched even after the bug corrupted content); had to tighten to assert exact internal substring. Always confirm the test fails before the fix, or you don't have a regression test — you have a tautology.
+- **Float comparisons need epsilon.** L4 (NL6) was the first IEEE 754 bug we shipped a fix for. Future iters touching numeric thresholds should use `delta < margin - 1e-9` style.
+- **The strongest peer review yet (8 findings) was a RETRY.** Don't give up after one flake.
+- **Boss is asleep.** Architectural decisions go to boss-approval queue. No autopilot decisions.
 - **prompt.md as state file works.** Each iter reads it, executes, updates it. State survives between conversations.
+- **Cumulative ledger: 25 REAL findings discovered, 6 fixed (L1, L2, L4, C1, E6, K-imp-2), 19 queued.** Average yield: ~5 findings per peer call. Ratio of fixed/found: 24%. Most findings are still in flight.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 
