@@ -218,6 +218,20 @@ export function applyGradeToLift(
   if (!a) {
     return { answer_id, old_lift: 0, new_lift: 0, delta: 0 };
   }
+  // C3 fix (NL8 / carina NL3 finding): non-finite cosine (NaN, ±Infinity)
+  // must NOT propagate to predictive_lift. Pre-fix path: NaN cosine →
+  // (NaN - 0.5) * 2 = NaN → delta NaN → newLift NaN → SQLite REAL bind
+  // crashes on NaN (or stores Infinity as a 1.0-clamped poison value).
+  // Treat non-finite cosine as ungradable: no-op, no storage write.
+  // Mirrors NL3's empty-prediction ungradable pattern (function 1).
+  if (!Number.isFinite(grade.cosine)) {
+    return {
+      answer_id,
+      old_lift: a.predictive_lift,
+      new_lift: a.predictive_lift,
+      delta: 0,
+    };
+  }
   const signal = (grade.cosine - 0.5) * 2;
   const delta = signal * learningRate;
   const newLift = Math.max(0, Math.min(1, a.predictive_lift + delta));

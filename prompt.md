@@ -40,13 +40,13 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL7 commit)
+## CURRENT STATE (as of NL8 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
 - `scripts/lattice/sqlite-store.ts` — keystone iter-6 (3 findings, 2 fixed; K2 in pre-approval queue)
 - `scripts/lattice/apprenticeship.ts` — lumeyon NL1 (5 findings, 3 fixed: L1+L2+L4; L3, L5 queued)
-- `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, C1 fixed; C2-C5 queued)
+- `scripts/lattice/study-turn.ts` — carina NL3 (5 findings, **2 fixed: C1, C3**; C2, C4, C5 queued)
 - `plugins/agent-chat/scripts/ephemeral-peer-review.ts` — lumeyon NL4 (7 findings, E6 fixed; E1-E5 + E7 queued)
 - `scripts/lattice/import-from-kg.ts` — keystone NL5 (8 findings, K-imp-2 fixed; K-imp-1, 3-8 queued)
 
@@ -62,9 +62,8 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **L3** (apprenticeship.ts:216): single-answer `reRankAnswers` promotion skips question lifecycle update.
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
 
-#### study-turn.ts (carina NL3) — 4 queued
+#### study-turn.ts (carina NL3) — 3 queued (was 4; C3 drained NL8)
 - **C2** (study-turn.ts:141, 182): selectStudyQuestions can pick empty-body answer → spurious penalty.
-- **C3** (study-turn.ts:213, 215, 216): NaN cosine propagates to predictive_lift. Add `Number.isFinite` guard. **Smallest queued fix.**
 - **C4** (study-turn.ts:213): negative cosine asymmetric lift penalty exceeds `-learningRate`. Design call.
 - **C5** (study-turn.ts:128, 141): SQL limit applied before in-memory authored filter.
 
@@ -97,23 +96,32 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL8 → DRAIN C3** (study-turn.ts:213 NaN cosine `Number.isFinite` guard).
+**NL9 → SQL migration v2→v3: K1 best_answer_id FK constraint** (sqlite-store.ts).
 
-**Why C3 (returning to the pre-NL7 plan):**
-- NL7 just touched sqlite-store.ts → file-touch rule forbids the next schema migration this iter (K1 FK).
-- C3 is the smallest queued data-corruption fix.
-- study-turn.ts last touched NL3 — plenty of gap.
-- LLM-cost-free.
+**Why K1 next:**
+- Boss pre-approved (high priority).
+- File-touch rule satisfied: NL8 touched study-turn.ts; sqlite-store.ts last touched NL7 (2 iters gap).
+- Same v(N)→v(N+1) migration pattern proven at NL7. Template:
+  1. Bump SCHEMA_VERSION 2 → 3.
+  2. Update CREATE TABLE: `best_answer_id TEXT REFERENCES answers(id) ON DELETE SET NULL` (or simply add the FK).
+  3. Add migrateV2toV3() function with idempotency check (PRAGMA foreign_key_list).
+  4. Pre-flight production audit: any answers.best_answer_id NOT in answers(id)?
+     ```
+     SELECT COUNT(*) FROM questions WHERE best_answer_id IS NOT NULL
+       AND best_answer_id NOT IN (SELECT id FROM answers);
+     ```
+     Iter-7's runtime guard means new writes are clean; old data may have orphans.
+  5. Backup production lattice (lattice.db.bak-pre-NL9).
+  6. Apply migration.
 
-**Test approach:**
-- Construct a scenario where `gradePrediction` returns NaN (mock the function for the test, OR construct a zero-norm vector edge case).
-- Pre-fix: applyGradeToLift sees cosine=NaN → computes NaN → writes NaN to SQLite.
-- Post-fix: gradePrediction sets `gradable: false` AND `cosine: 0` if the embedding produces NaN. Apply the same NL3 ungradable pattern.
+**Test approach (3 regression tests):**
+- Fresh schema has FK declared on best_answer_id (PRAGMA foreign_key_list returns the constraint).
+- Migration converts v2-shape DB → v3 shape, preserves data, cleans orphans (set to NULL OR refuse migration if orphans exist — design call).
+- Schema-level FK rejects bypass-INSERT with non-existent best_answer_id (defense in depth).
 
-**Sequenced after NL8:**
-- NL9: schema migration K1 (best_answer_id FK constraint) — same v2→v3 migration pattern as NL7's v1→v2.
-- NL10: schema migration K2 (CHECK quality_tier IN (1,2,3,4,5)) — same pattern.
-- NL11+: continue draining queued findings; or fresh peer review on lattice-context.ts (cycle returns to carina).
+**Sequenced after NL9:**
+- NL10: K2 schema migration (CHECK quality_tier IN (1,2,3,4,5)) — same pattern, v3→v4.
+- NL11+: continue draining queued findings (E*, K-imp-*, L3, L5, C2, C5) OR fresh peer review on lattice-context.ts (cycle returns to carina).
 
 ## STOPPING CONDITIONS
 
@@ -143,11 +151,11 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
 - **Cumulative ledger:**
-  - 25 REAL findings discovered across 5 peer reviews (NL1, NL3, NL4, NL5, plus iter-1 lumeyon)
-  - 7 fixed at code level (L1, L2, L4, C1, E6, K-imp-2, plus iter-3 #2 closed end-to-end NL7)
-  - 1 schema migration shipped (NL7: v1→v2)
-  - 19 queued findings + 4 pre-approval queue items remain
-  - boss-approved: 1 of 4 architectural decisions executed (NL7 iter-3 NOT NULL); 3 remain
+  - 25 REAL findings discovered across 5 peer reviews
+  - 8 fixed at code level (L1, L2, L4, C1, C3, E6, K-imp-2, iter-3 #2 closed end-to-end NL7)
+  - 1 schema migration shipped (NL7: v1→v2 explanation NOT NULL)
+  - 18 queued findings + 3 pre-approval queue items remain (was 19+4 pre-NL8)
+  - Fix-rate: 32% (8/25). Trending up as queue-drain iters continue.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.
 

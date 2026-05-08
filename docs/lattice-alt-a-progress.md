@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T04:35Z
+## Current state — 2026-05-08T04:55Z
 
-**Phase: NL7 — boss pre-approved the architectural-decision queue. First schema migration shipped: `Answer.explanation TEXT NOT NULL` (iter-3 finding finally closed end-to-end). Idempotent v1→v2 migration logic, 3 regression tests, production lattice migrated: 944 answers preserved, 0 NULL, schema_version=2. The substrate now enforces the dual-output invariant at SQL level (defense in depth) AND at the runtime (recordAnswer + putAnswer guards).**
+**Phase: NL8 — drained C3 (study-turn.ts NaN cosine guard). applyGradeToLift now treats non-finite cosines (NaN, ±Infinity) as ungradable — no lift update, no SQLite write. Closes a real data-corruption pathway where a malformed cosine could have crashed the bind or written a clamped 1.0 poison value to predictive_lift. Pre-NL8 testing demonstrated both crash and Infinity-clamp paths; both eliminated.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,63 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T04:55Z (NL8: queue-drain C3 — applyGradeToLift Number.isFinite guard for non-finite cosines)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule (rule 2 alt path), this iter drains C3 — no fresh peer call. File-touch rule forbids sqlite-store.ts (just touched NL7), so K1 FK migration deferred to NL9.
+
+**Target:** C3 from carina's NL3 review of study-turn.ts — NaN cosine propagation through `applyGradeToLift` to `predictive_lift`.
+
+**The bug:**
+  - `gradePrediction` calls `cosineSimilarity` which CAN return NaN if input vectors contain NaN entries (corrupted embeddings, OOM, model errors) — the existing `denom === 0 → 0` guard catches zero-norm cases but not NaN-in-vector cases.
+  - `applyGradeToLift` computes `(cosine - 0.5) * 2 * lr`, which is NaN when cosine is NaN.
+  - `Math.max(0, Math.min(1, prev + NaN))` is NaN.
+  - `setAnswerPredictiveLift(id, NaN)` → SQLite REAL bind crashes on NaN.
+  - For Infinity cosine: `(Infinity - 0.5) * 2 * 0.1 = Infinity`; `Math.min(1, Infinity)` = 1; lift gets clamped to 1.0 — silent corruption (false signal of "perfect prediction").
+
+**The fix:**
+  In `applyGradeToLift`, check `Number.isFinite(grade.cosine)` before computing the signal. If non-finite, treat as ungradable: return a no-op LiftUpdate (delta=0, new_lift=old_lift), no storage write. Mirrors NL3's empty-prediction `gradable` pattern.
+
+**Test-first protocol:**
+  3 regression tests at study-turn.test.ts:
+    - C3-a: NaN cosine via `applyGradeToLift` directly with hand-constructed grade. Pre-fix: SQLite bind CRASH. Post-fix: lift unchanged at 0.5.
+    - C3-b: Infinity cosine. Pre-fix: lift clamped to 1.0 (delta = 0.4). Post-fix: lift unchanged at 0.6.
+    - C3-c: gradePrediction with normal inputs returns gradable=true + finite cosine (sanity check).
+  C3-a + C3-b verified FAILING pre-fix (one with crash, one with delta=0.4). C3-c passes (sanity). All 3 PASS post-fix.
+
+**Defense in depth:** the guard is at `applyGradeToLift` (the choke-point that writes to storage), not at gradePrediction. Reason: applyGradeToLift is the ONLY function that calls setAnswerPredictiveLift — putting the guard there protects against ANY source of bad cosine, including future callers with hand-constructed GradeResults. cosineSimilarity itself remains as-is (the existing zero-norm guard handles its primary edge case).
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 3 (SELECTION PRESSURE) — the function this iter protects IS the substrate's selection-pressure mechanism. NaN-poisoning predictive_lift would have silently corrupted ranking in pushContext, queryAnswers ordering by predictive_lift_desc, and study-turn candidate selection. Closing the corruption channel preserves selection integrity.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 419 → 419 (no change — no peer call this iter)
+  - Answers: 944 → 944
+  - Tests added: 3 (C3 regression suite)
+
+**Tests:** plugin 508/0/3 (no change). Lattice 130 → 133 (+3 C3 regression tests).
+
+**Files touched (4):**
+  - scripts/lattice/study-turn.ts (Number.isFinite guard at applyGradeToLift)
+  - scripts/lattice/study-turn.test.ts (3 C3 regression tests)
+  - docs/ephemeral-peer-reviews.md (study-turn.ts row updated: C3 FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL9 plan; queue updated; lessons learned extended)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL9):** Per queue precedence + file-touch rule (NL8 just touched study-turn.ts), eligible candidates:
+- **K1 schema FK migration on best_answer_id** (sqlite-store.ts — last touched NL7, 2 iters gap → eligible)
+- L3 (apprenticeship.ts — last touched NL6, 3 iters gap → eligible)
+- L5 (apprenticeship.ts — same as L3, eligible)
+- E1+E2+E3 / E4 / E5 / E7 (ephemeral-peer-review.ts — last touched NL4, eligible)
+- K-imp-1, K-imp-3 through K-imp-8 (import-from-kg.ts — last touched NL5, eligible)
+
+**Recommend NL9 → K1 FK schema migration** (best_answer_id REFERENCES answers(id)). Reasons:
+  - Boss pre-approved (highest priority).
+  - Same v(N)→v(N+1) migration pattern proven NL7.
+  - SCHEMA_VERSION goes 2 → 3.
+  - Production audit needed first: any answers.best_answer_id pointing at non-existent rows? Iter-7's runtime guard prevents NEW writes from hitting this, but historical pre-iter-7 data may have orphans.
 
 ### 2026-05-08T04:35Z (NL7: SQL migration v1→v2 — explanation TEXT NOT NULL; iter-3 finally closed end-to-end)
 
