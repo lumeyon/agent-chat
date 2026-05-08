@@ -69,17 +69,22 @@ export async function composePushedContextBlock(
 
   const store = new LatticeStore(opts.latticeDbPath);
   try {
+    // LC2 fix (NL19 / carina NL12 finding): pass exclude_agent into
+    // pushContext directly. Pre-fix this module over-fetched k+5
+    // candidates and applied the exclude_agent filter in memory; that
+    // buffer exhausted and dropped eligible peer hits when the calling
+    // agent dominated the top of the cosine ranking. Now pushContext
+    // walks the ranked list, skipping ineligible hits, and returns up
+    // to k eligible peer hits regardless of how many of the top-K
+    // candidates are by the calling agent.
     const hits = await pushContext(store, opts.query, {
-      k: k + (opts.exclude_agent ? 5 : 0),  // over-fetch when filtering
+      k,
       answered_only: true,
       quality_tier_min: opts.quality_tier_min,
+      exclude_agent: opts.exclude_agent,
     });
 
-    // Filter out hits whose best_answer is by the excluded agent.
     let kept = hits;
-    if (opts.exclude_agent) {
-      kept = hits.filter((h) => h.best_answer && h.best_answer.by_agent !== opts.exclude_agent);
-    }
     // LC1 fix (NL15 / carina NL12 finding): apply min_cosine floor
     // BEFORE the top-K slice. pushContext returns top-K hits regardless
     // of cosine — without a floor, sparse-corpus content (cosines 0.2-0.3)

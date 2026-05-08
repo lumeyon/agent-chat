@@ -338,6 +338,101 @@ describe("composePushedContextBlock", () => {
     expect(block).toBe("");  // paraphrase filtered out
   }, 30_000);
 
+  // Regression for carina's NL12 LC2 finding: composePushedContextBlock
+  // pre-fetched only `k + 5` candidates from pushContext and then filtered
+  // by exclude_agent in memory. When the calling agent authored many of
+  // the top cosine candidates, the buffer was exhausted and eligible peer
+  // hits were silently dropped — the agent saw a SHORTER prompt block (or
+  // an empty one) instead of the k peer-authored priors it should have
+  // received. NL19 fix: push exclude_agent into pushContext so the filter
+  // is applied at retrieval time (the lattice walks the cosine-ranked
+  // list, skipping ineligible answers, until k hits are accumulated).
+  test("LC2: peer hits not dropped when calling agent dominates top cosines", async () => {
+    const store = new LatticeStore(dbPath);
+    // Seed 10 questions whose framing matches the query verbatim, all
+    // answered by the calling agent (orion). These dominate the top of
+    // the cosine ranking and would exhaust the pre-fix `k+5` buffer.
+    for (let i = 0; i < 10; i++) {
+      const q = seedQuestion(store, {
+        id: `v1:q-orion-${i}`,
+        framing: "How do I deploy to production?",
+      });
+      const a = recordAnswer(store, {
+        question_id: q.id,
+        body: `Self-authored deploy answer ${i}.`,
+        by_agent: "orion",
+        explanation: `Self entry ${i}.`,
+        status: "accepted",
+        quality_tier: 3,
+      });
+      store.setQuestionStatus(q.id, "answered", a.id);
+    }
+    // Seed 3 questions answered by a peer. Framings still match the
+    // query but with extra qualifying text, so they rank below orion's
+    // verbatim-framing questions in cosine. Pre-fix these get pushed
+    // out of the k+5 buffer; post-fix they're surfaced because pushContext
+    // now skips ineligible answers while iterating.
+    for (let i = 0; i < 3; i++) {
+      const q = seedQuestion(store, {
+        id: `v1:q-peer-${i}`,
+        framing: `How do I deploy the app to production environment ${i}?`,
+      });
+      const a = recordAnswer(store, {
+        question_id: q.id,
+        body: `Peer-authored deploy answer ${i}.`,
+        by_agent: "lumeyon",
+        explanation: `Peer entry ${i}.`,
+        status: "accepted",
+        quality_tier: 3,
+      });
+      store.setQuestionStatus(q.id, "answered", a.id);
+    }
+    store.close();
+
+    const block = await composePushedContextBlock({
+      query: "How do I deploy to production?",
+      latticeDbPath: dbPath,
+      k: 2,
+      exclude_agent: "orion",
+    });
+
+    // Pre-fix: pushContext is asked for k+5=7 hits; all 7 likely orion-
+    // authored (verbatim framings dominate cosine). The in-memory
+    // exclude_agent filter drops all 7 → block === "".
+    // Post-fix: exclude_agent is passed into pushContext, which walks the
+    // ranked candidates and surfaces 2 lumeyon-authored hits (skipping
+    // the orion-authored top-of-ranking ones).
+    expect(block).toContain("Peer-authored deploy answer");
+    expect(block).not.toContain("Self-authored");
+    expect(block).toContain("by lumeyon");
+  }, 60_000);
+
+  test("LC2: omitting exclude_agent preserves prior behavior (no buffer-exhaustion concern)", async () => {
+    const store = new LatticeStore(dbPath);
+    const q = seedQuestion(store, { framing: "How do I deploy to production?" });
+    const a = recordAnswer(store, {
+      question_id: q.id,
+      body: "Run `bun deploy.ts`.",
+      by_agent: "orion",
+      explanation: "Standard deploy.",
+      status: "accepted",
+      quality_tier: 2,
+    });
+    store.setQuestionStatus(q.id, "answered", a.id);
+    store.close();
+
+    // Without exclude_agent, the orion-authored answer should be returned
+    // (no exclusion). Backwards-compat sanity check.
+    const block = await composePushedContextBlock({
+      query: "How do I deploy to production?",
+      latticeDbPath: dbPath,
+      k: 3,
+      // exclude_agent omitted
+    });
+    expect(block).toContain("bun deploy.ts");
+    expect(block).toContain("by orion");
+  }, 30_000);
+
   test("LC1: omitting min_cosine preserves prior behavior (no filter)", async () => {
     const store = new LatticeStore(dbPath);
     const q = seedQuestion(store, { framing: "Random topic." });

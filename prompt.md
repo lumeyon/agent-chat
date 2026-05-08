@@ -40,7 +40,7 @@ The substrate is built; this loop's job is to find real bugs and ship narrow fix
 
 Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
-## CURRENT STATE (as of NL18 commit)
+## CURRENT STATE (as of NL19 commit)
 
 ### Covered modules:
 - `scripts/lattice/types.ts` — lumeyon iter-1 (9 findings, 4 fixed: #1, #2 fully end-to-end, #3 fully — NL7 closed #2 at SQL level)
@@ -56,9 +56,9 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 3. `scripts/lattice/validate-corpus.ts`
 
 ### Covered (added NL12):
-- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **2 fixed: LC1, LC5**; LC2, LC3, LC4 queued)
+- `plugins/agent-chat/scripts/lattice-context.ts` — carina NL12 (5 findings, **3 fixed: LC1, LC5, LC2**; LC3 partially-addressed-by-LC2-fix-when-exclude_agent-set, LC4 queued)
 
-### Queued findings (drainable WITHOUT fresh peer call — 15 total):
+### Queued findings (drainable WITHOUT fresh peer call — 14 total):
 
 #### apprenticeship.ts (lumeyon NL1) — 1 queued (L3 drained NL17)
 - **L5** (apprenticeship.ts:152): `pushContext k` unvalidated; negative k returns truncated results.
@@ -81,9 +81,8 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 - **K-imp-7** (importPairs:355): peer-review retro-upgrade scans only first 5.
 - **K-imp-9** (NL12 observation): pairSections may over-eagerly split bulleted peer-review responses into many Q/A pairs. carina's NL12 review yielded 6Q/9A vs typical 1Q/1A. Investigate.
 
-#### lattice-context.ts (carina NL12) — 3 queued (LC1 drained NL15)
-- **LC2** (lattice-context.ts:65): over-fetches only k+5 — eligible peer hits dropped if buffer insufficient.
-- **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block.
+#### lattice-context.ts (carina NL12) — 2 queued (LC1 drained NL15, LC2 drained NL19)
+- **LC3** (lattice-context.ts:71): null best_answer survives exclude_agent filter — header-only block. **NOTE:** partially-addressed by LC2 fix when exclude_agent is set (pushContext now skips null-best_answer hits in walk loop). Remaining concern: header line "top-K" lying when exclude_agent unset.
 - **LC4** (lattice-context.ts:109): body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1). Same UTF class as E7.
 
 #### Boss-pre-approval queue (architectural decisions can be made by you (orion)):
@@ -98,27 +97,23 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
 
 ## NEXT ITER TARGET HINT
 
-**NL19 → DRAIN LC2** (lattice-context.ts:65 over-fetch only k+5 — eligible peer hits dropped if buffer insufficient).
+**NL20 → DRAIN C5** (study-turn.ts:128, 141 SQL limit applied before in-memory authored filter — eligible answer rank≥6 silently unreachable).
 
-**Why LC2:**
-- Real correctness bug. `lattice-context.ts` over-fetches `k+5` candidates from pushContext, then filters in-memory by `exclude_agent` (drop the caller's own authored answers). When an agent has authored MANY of the top-k+5 candidates, the filter exhausts the buffer and the prompt pushes FEWER than k peer hits — silently truncating peer signal in cross-domain push.
-- lattice-context.ts last touched NL15 (4 iters gap → file-touch rule satisfied; NL18 touched sqlite-store.ts + import-from-kg.ts → different file).
+**Why C5:**
+- Same SHAPE bug as LC2: SQL fetches a fixed limit before applying an in-memory filter; eligible candidates beyond the limit are silently lost. Now that LC2's fix template exists ("push the missing filter axis into the data layer"), C5 has a well-proven fix template.
+- study-turn.ts last touched NL16 (3 iters gap → file-touch rule satisfied; NL19 touched lattice-context.ts/apprenticeship.ts/types.ts/sqlite-store.ts → study-turn.ts is a different file).
+- Self-contained fix: `selectStudyQuestions` in study-turn.ts queries answers with a fixed limit and then filters by author/eligibility in memory. The fix is to extend AnswerFilter (or queryAnswers) with the missing axis and push the filter into SQL.
 
-**Fix approach options (pick during exec):**
-- **Option A — bigger buffer:** raise k+5 → k+25 (or compute as `k * 5`). Simple but dumb; same bug shape with bigger constant.
-- **Option B — SQL-side filter:** push `exclude_agent` into pushContext's queryAnswers filter, so the buffer doesn't pre-pollute. Cleaner; matches the pattern LC1's NL15 fix used (push min_cosine into the API surface so filtering happens before slicing).
-- **Option C — adaptive buffer:** keep fetching until k peer hits found OR result-set exhausted. Most correct but most code change.
-- Recommend B as the primary fix; if pushContext doesn't already accept `exclude_agent`, route through the existing `posed_by` axis or extend the API.
+**Read first:** `scripts/lattice/study-turn.ts` lines 128 and 141 (the two filter touchpoints carina flagged in NL3). Confirm the precise filter shape before designing the fix.
 
 **Test approach (2 regression tests):**
-- Test 1: lattice with 20 questions where 15 have answers BY the calling agent and 5 have answers by a peer. With `k=5` and `exclude_agent=caller`, pre-fix returns ≤ (k+5)−15 = 0 peer hits (or some small number bounded by the buffer). Post-fix returns 5 peer hits.
-- Test 2: regression — when `exclude_agent` is unset, behavior unchanged.
+- Test 1: seed >limit answers where the first `limit` are NOT eligible (e.g. authored by an excluded agent or wrong tier) and the (limit+1)th IS eligible. Pre-fix: `selectStudyQuestions` returns 0 candidates. Post-fix: returns the eligible candidate.
+- Test 2: regression — pre-existing study-turn behaviors unchanged on the simple case.
 
-**Sequenced after NL19:**
-- NL20 → LC3 (null best_answer survives exclude_agent filter — header-only block; lattice-context.ts last touched NL19 → INELIGIBLE; pick C5 or LC4 instead)
-- NL20 alt → C5 (study-turn.ts SQL limit applied before in-memory authored filter — eligible since study-turn last touched NL16),
-- NL21 → E1+E2 (ephemeral race conditions, ephemeral-peer-review.ts last touched NL14),
-- NL22+ → C4, K-imp-1/3/6/7/9, L5, LC3, LC4
+**Sequenced after NL20:**
+- NL21 → C4 (study-turn.ts last touched NL20 → INELIGIBLE; pick E1+E2 — ephemeral-peer-review.ts last touched NL14, eligible)
+- NL22 → LC3 or LC4 (lattice-context.ts last touched NL19; gap satisfied for NL22)
+- NL23+ → K-imp-1/3/6/7/9, L5
 - Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit)
 
 ## STOPPING CONDITIONS
@@ -148,15 +143,17 @@ Last fresh-peer-call: NL5 (keystone). Next fresh peer would be carina.
   - safety check: refuse migration if pre-conditions don't hold (e.g., NULL rows for NOT NULL migration)
   - back up production before applying. NL7 backed up to `lattice.db.bak-pre-NL7`.
 - **Boss can grant authority via prompt.md edit, not just message.** NL7's pivot from "DRAIN C3" to "ship the schema migration" came from boss editing "Boss-approval queue" → "Boss-pre-approval queue (decisions can be made by you)." Watch for this pattern; the file is the channel.
-- **Cumulative ledger (post-NL18):**
+- **Cumulative ledger (post-NL19):**
   - 30 REAL findings discovered across 6 peer reviews
-  - 16 fixed at code level (L1, L2, L3, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-8, iter-3 #2, LC1, LC5)
+  - 17 fixed at code level (L1, L2, L3, L4, C1, C2, C3, E3, E6, K-imp-2, K-imp-4, K-imp-5, K-imp-8, iter-3 #2, LC1, LC2, LC5)
   - 3 schema migrations shipped
-  - 15 queued findings remain
-  - Fix-rate: 53% (16/30 code) + all 3 schema migrations
+  - 14 queued findings remain
+  - Fix-rate: 57% (17/30 code) + all 3 schema migrations
   - SYSTEMIC bug pattern (LC5 = K-imp-2): trailing-marker /m regex copy-pasted; should be a shared helper in a refactor iter.
+  - **SYSTEMIC pattern (LC2 = C5):** SQL fetches a fixed limit, then in-memory filter drops candidates → silent truncation. Fix template (proven at NL19): push the missing filter axis into the data-layer query. Audit other queryAnswers callers for the same shape.
   - **L3 lesson: invariants need to be enforced in BOTH branches of a conditional.** Iter-5's joint-consistency invariant (status="answered" → best_answer_id non-null) was correctly enforced in setQuestionStatus AND in the multi-answer reRankAnswers branch — but the single-answer branch silently bypassed by calling the lower-level `setAnswerStatus` directly. Whenever a guard is added at the data-access layer, audit ALL call sites that could write inconsistent state, not just the obvious one.
   - **K-imp-4 lesson: race-safety belongs at the SQL primitive layer, not in app code.** Pre-fix, the importer did `getQuestion + putQuestion` and tried to be clever. Fix: introduce `tryPutQuestion` using `INSERT OR IGNORE`, and let SQL handle the atomicity. ANY ingest path that needs idempotent insert should use this primitive; never write check-then-act for uniqueness in app code. Audit other ingest paths (kg.ts, etc.) for the same anti-pattern.
+  - **LC2 lesson: filtering AFTER a top-K slice is a silent-truncation antipattern.** Whenever a fixed-size buffer is followed by an in-memory filter, the filter can exhaust the buffer when the data distribution skews toward filtered-out items. Either (1) push the filter into the data layer, or (2) iterate-with-walk until enough eligible items are accumulated. Prefer (1) for SQL-friendly axes; (2) only when the filter logic doesn't fit SQL.
   - **Test design lesson: when refactoring a code path, regression tests should patch BOTH the pre-fix and post-fix call sites** so the test is robust across the transition. K-imp-4-a's monkey-patch handles both `getQuestion` (pre-fix path) and `tryPutQuestion` (post-fix path), enabling a single test that fails pre-fix and passes post-fix.
 
 ## NO synthetic work. NO inventing citations. NO authoring explanations of iteration N.

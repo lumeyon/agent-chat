@@ -106,6 +106,14 @@ export interface QuestionFilter {
 export interface AnswerFilter {
   question_id?: string;
   by_agent?: string;
+  /** EXCLUDE answers authored by this agent. Used by pushContext to
+   *  drop the calling agent's own answers from cross-domain push so the
+   *  agent doesn't see its own past words pushed back as "prior knowledge."
+   *  LC2 fix (NL19): pushed into AnswerFilter (replacing the in-memory
+   *  filter in lattice-context.ts) so the SQL-side filter is applied at
+   *  retrieval, not after slicing — eligible peer hits no longer get
+   *  dropped when the calling agent dominates the top of the cosine ranking. */
+  by_agent_not?: string;
   status?: AnswerStatus | AnswerStatus[];
   quality_tier_min?: QualityTier;
   predictive_lift_min?: number;

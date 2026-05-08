@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T10:55Z
+## Current state — 2026-05-08T11:25Z
 
-**Phase: NL18 — drained K-imp-4 (importer question-idempotency read-then-insert race). Pre-fix: importPairs checked `getQuestion(id)` and conditionally called `putQuestion(q)` — classic check-then-act race; two parallel importers both saw null, both proceeded to insert, second crashed with "UNIQUE constraint failed: questions.id". Post-fix: added `LatticeStore.tryPutQuestion` using `INSERT OR IGNORE` (atomic at the SQL level); importPairs uses it + a conditional re-read. Cumulative: 30 REAL findings, 16 code fixes, 3 schema migrations.**
+**Phase: NL19 — drained LC2 (lattice-context.ts pushContext over-fetch buffer exhaustion). Pre-fix: lattice-context.ts pre-fetched k+5 candidates from pushContext and filtered by `exclude_agent` in memory — when the calling agent dominated the top of the cosine ranking, the buffer exhausted and eligible peer hits were silently dropped from the prompt block. Post-fix: pushed `exclude_agent` into PushContextOptions and AnswerFilter (new `by_agent_not` axis); pushContext walks the cosine-ranked list, skipping ineligible hits, and accumulates up to k eligible answers. lattice-context.ts drops both the buffer and the in-memory filter. Cumulative: 30 REAL findings, 17 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,126 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T11:25Z (NL19: queue-drain LC2 — pushContext over-fetch buffer exhaustion)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains LC2 — no fresh peer call. File-touch rule: NL18 touched sqlite-store.ts + import-from-kg.ts; this iter touches lattice-context.ts (primary), apprenticeship.ts, types.ts, sqlite-store.ts (secondary; types-axis additions). Different primary file → eligible.
+
+**The bug (carina NL12 LC2):**
+  `composePushedContextBlock` called `pushContext` with `k = userK + 5`
+  to pre-fetch a buffer that would absorb the in-memory `exclude_agent`
+  filter dropping the calling agent's own answers. The +5 is a fixed
+  constant — when the calling agent (e.g., orion) authored MANY of the
+  top-by-cosine candidates (e.g., 7+ of the top 8), the buffer exhausted
+  and the in-memory filter dropped all of them, leaving fewer than k (or
+  zero) peer hits in the prompt block. The agent saw a TRUNCATED prompt
+  block and didn't know to look further — sustained data loss in
+  cross-domain push under the very condition the substrate was designed
+  for (heavy local authoring + sparse cross-author mixing).
+
+  Failure mode is silent: the prompt is just shorter (or empty) than it
+  should be. No error log, no telemetry. Worst kind of bug for a
+  forcing-function substrate that's supposed to push reliably.
+
+**The fix (push the filter into the lattice API):**
+
+1. **`scripts/lattice/types.ts`** — added `by_agent_not?: string` to
+   `AnswerFilter`. Symmetric to the existing `by_agent` axis but
+   negative.
+
+2. **`scripts/lattice/sqlite-store.ts`** — `queryAnswers` honors the
+   new axis with a `by_agent != ?` SQL condition.
+
+3. **`scripts/lattice/apprenticeship.ts`** — added `exclude_agent?:
+   string` to `PushContextOptions`. When set, pushContext:
+   - resolves best_answer for each ranked candidate using the new
+     filter (both via the best_answer_id pointer check AND the
+     queryAnswers fallback);
+   - WALKS the cosine-ranked list rather than slicing top-K up front;
+   - accumulates hits whose best_answer is non-null (i.e., passes all
+     filters including exclude_agent) until k are collected or the
+     candidate list is exhausted.
+
+   When `exclude_agent` is undefined, behavior is unchanged: top-K
+   slice + best_answer attached (possibly null). Backwards compatible.
+
+4. **`plugins/agent-chat/scripts/lattice-context.ts`** —
+   composePushedContextBlock now passes `exclude_agent` directly to
+   pushContext. Drops the `+5` over-fetch buffer (no longer needed) AND
+   the in-memory exclude_agent filter (pushContext does it). Net code
+   reduction.
+
+**Test-first protocol:**
+  2 regression tests at lattice-context.test.ts:
+    - **LC2-a (failure case):** seed 10 orion-authored questions with
+      verbatim framing matching the query (these dominate the top of
+      cosine) + 3 lumeyon-authored questions with elaborated framings
+      (rank below orion's). Call composePushedContextBlock with
+      `exclude_agent: "orion"`, `k: 2`. Pre-fix: top-(k+5)=7 candidates
+      all orion-authored → in-memory filter drops them → block === "".
+      Post-fix: pushContext walks past the 10 orion-authored candidates
+      and surfaces 2 lumeyon-authored hits. Block contains
+      "Peer-authored deploy answer" + "by lumeyon". **Verified FAILING
+      pre-fix** with `Expected to contain: "Peer-authored deploy
+      answer", Received: ""`.
+    - **LC2-b (backwards-compat sanity):** without exclude_agent, the
+      prior behavior is preserved — own-authored hits ARE included
+      because exclusion is no longer assumed.
+
+**Why this matters:** The Apprenticeship Substrate's forcing function 4
+(cross-domain push) is the mechanism by which agents are AUTOMATICALLY
+exposed to relevant peer knowledge. If the push silently drops peer
+hits when the agent has heavy local authorship, the substrate fails the
+very condition it was designed to address — agents stay in their own
+information bubble. Fixing LC2 restores the cross-domain forcing
+function under realistic load.
+
+**Related findings status:**
+- LC3 ("null best_answer survives exclude_agent filter — header-only
+  block") is partially addressed by this fix when exclude_agent is set
+  (pushContext now skips null-best_answer hits in the walk loop). The
+  remaining concern — header line "top-K" lying when exclude_agent is
+  unset — stays queued.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (CROSS-DOMAIN PUSH) — peer hits no longer dropped under
+    heavy local authorship. The substrate's automatic context push is
+    now resilient to the realistic case where the calling agent has
+    authored many of the top cosine candidates.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 152 (unchanged — apprenticeship.test.ts pushContext
+    tests still pass with refactored internal logic);
+    plugin 514 → 516 (+2 LC2 tests)
+
+**Files touched (6):**
+  - scripts/lattice/types.ts (AnswerFilter `by_agent_not`)
+  - scripts/lattice/sqlite-store.ts (queryAnswers SQL condition)
+  - scripts/lattice/apprenticeship.ts (PushContextOptions `exclude_agent`;
+    refactored pushContext with iterate-top-K when exclude_agent set)
+  - plugins/agent-chat/scripts/lattice-context.ts (drop over-fetch +
+    in-memory filter; pass exclude_agent through)
+  - plugins/agent-chat/tests/lattice-context.test.ts (2 LC2 regression
+    tests)
+  - docs/ephemeral-peer-reviews.md (LC2 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL20 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL20):** File-touch rule blocks lattice-context.ts AND apprenticeship.ts AND sqlite-store.ts AND types.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — INELIGIBLE yet)
+- C4, C5 (study-turn.ts, last touched NL16 — eligible)
+- LC3, LC4 (lattice-context.ts last touched NL19 — INELIGIBLE yet)
+- E1, E2, E4, E5, E7 (ephemeral-peer-review.ts, last touched NL14 — eligible)
+- K-imp-1, 3, 6, 7, 9 (import-from-kg.ts last touched NL18 — INELIGIBLE yet)
+
+**Recommend NL20 → DRAIN C5** (study-turn.ts:128, 141 SQL limit applied before in-memory authored filter). Reasons:
+- Same SHAPE bug as LC2: SQL fetches a limit before applying an in-memory filter, which can silently drop eligible candidates. Now that LC2's fix template exists ("push the filter into the data layer"), C5 has the same fix template.
+- study-turn.ts last touched NL16 (3 iters gap → eligible).
+- Self-contained fix: extend AnswerFilter or queryAnswers with the missing axis (or restructure the study-turn candidate selection to push the authored-by filter into SQL).
 
 ### 2026-05-08T10:55Z (NL18: queue-drain K-imp-4 — importer question-idempotency read-then-insert race)
 

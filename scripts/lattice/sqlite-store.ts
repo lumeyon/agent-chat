@@ -750,6 +750,10 @@ export class LatticeStore {
       conds.push("by_agent = ?");
       params.push(filter.by_agent);
     }
+    if (filter.by_agent_not) {
+      conds.push("by_agent != ?");
+      params.push(filter.by_agent_not);
+    }
     if (filter.status) {
       const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
       const placeholders = statuses.map(() => "?").join(",");

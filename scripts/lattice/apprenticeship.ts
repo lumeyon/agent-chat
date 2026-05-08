@@ -90,6 +90,19 @@ export interface PushContextOptions {
   predictive_lift_min?: number;
   /** Optionally restrict by who posed the question. */
   posed_by?: string;
+  /** EXCLUDE answers authored by this agent. When set, pushContext walks
+   *  the cosine-ranked candidates and only includes hits whose
+   *  best_answer is NOT by this agent. Skipped hits don't consume a
+   *  top-K slot — the iterator keeps walking until k eligible hits are
+   *  accumulated or the candidate list is exhausted.
+   *
+   *  LC2 fix (NL19 / carina NL12 finding): pre-fix, callers (e.g.
+   *  lattice-context.ts) over-fetched a fixed `k+5` candidates and
+   *  filtered in memory, which silently truncated the prompt block
+   *  when the calling agent dominated the top of the cosine ranking.
+   *  Pushing the filter into pushContext makes retrieval correct
+   *  regardless of how many of the top hits are by the calling agent. */
+  exclude_agent?: string;
   /** Optional embedding cache (precomputed) keyed by question.id, to skip
    *  re-embedding every question on every call. Useful when many pushes
    *  in a session reuse the same question pool. */
@@ -147,9 +160,10 @@ export async function pushContext(
     ranked.push({ question: q, cosine: sim });
   }
 
-  // Sort DESC by cosine and take top-K.
+  // Sort DESC by cosine. Slicing happens AFTER best_answer resolution
+  // when exclude_agent is set, so we can skip ineligible hits and walk
+  // the ranked list until we have k eligible ones (LC2 fix, NL19).
   ranked.sort((a, b) => b.cosine - a.cosine);
-  const topK = ranked.slice(0, k);
 
   // Attach the best answer for each. Iter-14 (lumeyon L1+L2 fix): the
   // best_answer_id pointer is treated as a hint, not an oracle. When
@@ -162,34 +176,60 @@ export async function pushContext(
   // (e.g. status="superseded") were returned silently.
   const tierMin = options.quality_tier_min;
   const liftMin = options.predictive_lift_min;
+  const excludeAgent = options.exclude_agent;
   const queryFallback = (qid: string): Answer | null => {
     const accepted = store.queryAnswers({
       question_id: qid,
       status: "accepted",
       quality_tier_min: tierMin,
       predictive_lift_min: liftMin,
+      by_agent_not: excludeAgent,
       order_by: "predictive_lift_desc",
       limit: 1,
     });
     return accepted[0] ?? null;
   };
-  return topK.map((hit) => {
-    let best_answer: Answer | null = null;
-    if (hit.question.best_answer_id) {
-      const candidate = store.getAnswer(hit.question.best_answer_id);
+  const resolveBestAnswer = (q: Question): Answer | null => {
+    if (q.best_answer_id) {
+      const candidate = store.getAnswer(q.best_answer_id);
       const passesTier = tierMin === undefined || (candidate !== null && candidate.quality_tier <= tierMin);
       const passesLift = liftMin === undefined || (candidate !== null && candidate.predictive_lift >= liftMin);
-      if (candidate !== null && candidate.status === "accepted" && passesTier && passesLift) {
-        best_answer = candidate;
-      } else {
-        // Pointer is stale, missing, or fails the filter — fall back.
-        best_answer = queryFallback(hit.question.id);
+      const passesAgent = excludeAgent === undefined || (candidate !== null && candidate.by_agent !== excludeAgent);
+      if (candidate !== null && candidate.status === "accepted" && passesTier && passesLift && passesAgent) {
+        return candidate;
       }
-    } else {
-      best_answer = queryFallback(hit.question.id);
     }
-    return { question: hit.question, best_answer, cosine: hit.cosine };
-  });
+    return queryFallback(q.id);
+  };
+
+  if (excludeAgent !== undefined) {
+    // LC2 fix (NL19 carina NL12 finding): walk the cosine-ranked list,
+    // resolving best_answer with all filters applied (including
+    // exclude_agent), and accumulate up to k hits with eligible answers.
+    // Hits whose only candidate is by exclude_agent are skipped (they
+    // don't consume a top-K slot). Pre-fix this filter ran in
+    // lattice-context.ts AFTER pushContext sliced top-(k+5) — when the
+    // calling agent dominated the top, the buffer exhausted and peer
+    // hits were silently dropped from the prompt.
+    const out: PushContextHit[] = [];
+    for (const hit of ranked) {
+      if (out.length >= k) break;
+      const best_answer = resolveBestAnswer(hit.question);
+      if (best_answer === null) continue;  // no eligible answer; skip
+      out.push({ question: hit.question, best_answer, cosine: hit.cosine });
+    }
+    return out;
+  }
+
+  // Default path (exclude_agent unset): preserve existing behavior —
+  // top-K slice by cosine, best_answer attached but possibly null when
+  // no eligible answer exists. Backwards compatible.
+  const topK = ranked.slice(0, k);
+  return topK.map((hit) => ({
+    question: hit.question,
+    best_answer: resolveBestAnswer(hit.question),
+    cosine: hit.cosine,
+  }));
 }
 
 // ─── Forcing function #3 — selection pressure / re-ranking ─────────────────
