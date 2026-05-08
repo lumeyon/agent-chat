@@ -372,7 +372,18 @@ function importPairs(
     const qualityTier: QualityTier = isPeerReviewResponse ? 3 : 5;
 
     try {
-      recordAnswer(store, {
+      // K-imp-6 fix (NL22 / keystone NL5 finding): capture the inserted
+      // Answer's id and use it directly to pin best_answer_id. Pre-fix
+      // the code called queryAnswers(limit:1) with default
+      // order_by=predictive_lift_desc; with imported answers all carrying
+      // predictive_lift=0, SQLite's tie-break (typically ROWID/insertion
+      // order) decided which row was "top" — usually the OLDEST, not the
+      // just-inserted one. The condition then often refused to update
+      // because the existing best_answer_id matched the queried-top.
+      // Net effect: re-importing a Q/A pair with a new agent's response
+      // didn't repoint best_answer_id at the new answer (the comment's
+      // stated intent). Now: deterministic pin via recordAnswer's return.
+      const insertedAnswer = recordAnswer(store, {
         question_id: questionId,
         body: assistant.body,
         by_agent: assistant.agent,
@@ -384,14 +395,8 @@ function importPairs(
         created_at: Math.floor(assistantMs / 1000),
       });
       aIns++;
-      // Update question.best_answer_id to point at this answer.
-      // Recompute id since recordAnswer doesn't return it via this path
-      // for the dup case; we look it up by querying.
-      const accepted = store.queryAnswers({
-        question_id: questionId, status: "accepted", limit: 1,
-      });
-      if (accepted.length > 0 && (!existing || existing.best_answer_id !== accepted[0].id)) {
-        store.setQuestionStatus(questionId, "answered", accepted[0].id);
+      if (!existing || existing.best_answer_id !== insertedAnswer.id) {
+        store.setQuestionStatus(questionId, "answered", insertedAnswer.id);
       }
     } catch (e) {
       // K-imp-5 fix (NL13): discriminate PK conflicts from other errors.

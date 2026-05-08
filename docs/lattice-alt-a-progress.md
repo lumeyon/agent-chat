@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T12:25Z
+## Current state — 2026-05-08T12:55Z
 
-**Phase: NL21 — drained E1+E2 (ephemeral-peer-review resume-write floor-stealing race + concurrent-orion-resume race, bundled). Pre-fix: the resume-write step at line 206 unconditionally flipped `.turn` to orion BEFORE the lock attempt; this stole the floor from any peer mid-flow (E1) and enabled a concurrent-orion race where the loser's E3 revert (NL14) could corrupt the winner's state (E2). Post-fix: refuse upfront if another agent holds the floor (curTurn is some agent name other than self/parked/null); resume-write now ONLY fires for the legitimate "parked → orion" or "uninitialized → orion" cases, eliminating both races structurally. Cumulative: 30 REAL findings, 20 code fixes, 3 schema migrations.**
+**Phase: NL22 — drained K-imp-6 (importPairs best_answer_id chosen via queryAnswers limit:1 — nondeterministic tie-break). Pre-fix: importPairs called queryAnswers(limit:1, order_by=predictive_lift_desc) to choose best_answer_id for the question; with all imported answers carrying predictive_lift=0, SQLite's tie-break (typically ROWID/insertion order) meant the OLDEST answer was returned — not the just-inserted one the comment said we wanted. The conditional `existing.best_answer_id !== accepted[0].id` then refused to update on re-imports, leaving best_answer_id stale. Post-fix: capture recordAnswer's return value (which already exposes the inserted Answer) and use insertedAnswer.id directly. Eliminates the redundant query AND the nondeterminism. Cumulative: 30 REAL findings, 21 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,126 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T12:55Z (NL22: queue-drain K-imp-6 — best_answer_id pinned to nondeterministic queryAnswers result instead of just-inserted answer)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-6 — no fresh peer call. File-touch rule: NL21 touched ephemeral-peer-review.ts; this iter touches import-from-kg.ts (different file → eligible).
+
+**The bug (keystone NL5 K-imp-6):**
+  importPairs at line 388-394 (post-NL18 line numbers) had this pattern:
+  ```typescript
+  recordAnswer(store, {...});  // return value DROPPED
+  aIns++;
+  // Update question.best_answer_id to point at this answer.   ← stated intent
+  const accepted = store.queryAnswers({
+    question_id: questionId, status: "accepted", limit: 1,
+  });
+  if (accepted.length > 0 && (!existing || existing.best_answer_id !== accepted[0].id)) {
+    store.setQuestionStatus(questionId, "answered", accepted[0].id);
+  }
+  ```
+
+  Two bugs in one block:
+  1. The comment says "to point at this answer" — referring to the just-
+     recordAnswer'd answer. But the implementation grabs `accepted[0]` from
+     a queryAnswers, which might NOT be the just-inserted answer.
+  2. queryAnswers default order_by is `predictive_lift_desc`, and ALL
+     imported answers carry `predictive_lift: 0`. With ties, SQLite's
+     tie-break is implementation-defined (typically ROWID/insertion order
+     ASC), so accepted[0] is usually the OLDEST answer for that question
+     — not the new one.
+
+  Concrete failure mode: import two CONVO sections sharing the same user
+  question framing (canonical_id) but different assistant responses
+  (orion → "Friday 5pm", lumeyon → "Confirmed: Friday 5pm"). After both
+  imports, best_answer_id remained pinned to orion's answer (the older
+  one) because:
+  - Pair 1 import: A_orion inserted, queryAnswers limit:1 returns A_orion,
+    setQuestionStatus(answered, A_orion). best_answer_id = A_orion. OK.
+  - Pair 2 import: A_lumeyon inserted, queryAnswers limit:1 returns
+    A_orion (older, ties on predictive_lift), condition
+    `existing.best_answer_id (A_orion) !== accepted[0].id (A_orion)` is
+    false → no update. best_answer_id stays A_orion despite the comment's
+    stated intent of pointing at the newly-inserted answer.
+
+**The fix (capture recordAnswer's return value):**
+
+  recordAnswer already returns the inserted Answer. importPairs was just
+  ignoring it. Change:
+  ```typescript
+  const insertedAnswer = recordAnswer(store, {...});
+  aIns++;
+  if (!existing || existing.best_answer_id !== insertedAnswer.id) {
+    store.setQuestionStatus(questionId, "answered", insertedAnswer.id);
+  }
+  ```
+
+  Eliminates the nondeterminism (no queryAnswers tie-break dependency)
+  AND removes a redundant SQL call. Matches the stated intent of the
+  comment.
+
+**Test-first protocol:**
+  2 regression tests at import-from-kg.test.ts:
+    - **K-imp-6-a (failure case):** import 2 CONVO sections sharing the
+      same user question framing but different assistant responses
+      (orion at 10:00, lumeyon at 11:00). After both imports, the
+      question's best_answer_id should point at lumeyon's answer (the
+      most-recently-inserted one). **Verified FAILING pre-fix** with
+      `Expected: "lumeyon", Received: "orion"` (pre-fix kept the older
+      orion pointer because queryAnswers tie-broke to it).
+    - **K-imp-6-b (sanity):** single Q/A pair imports correctly on the
+      simple case — best_answer_id points at the only answer.
+
+**Why this matters:** best_answer_id is the lattice's "this is the canonical
+answer for this question" pointer that pushContext relies on for
+cross-domain push. If the importer leaves stale pointers (pointing at the
+oldest answer instead of the most-recent), pushed context shows old
+content even when more recent peer-authored answers exist. Indirectly
+this caps the freshness of the substrate's cross-domain push.
+
+**Same-shape pattern (third confirmation of LC2/C5):** SQL limit-1 with
+default order BEFORE selection logic → silent wrong-row pick when ties
+exist. Fix template: USE THE RIGHT API. recordAnswer already returns
+what we need; the queryAnswers(limit:1) was a redundant indirection that
+introduced the nondeterminism.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 4 (CROSS-DOMAIN PUSH) — best_answer_id correctness underpins
+    pushContext's accuracy. Stale pointers degrade the substrate's
+    cross-domain push silently.
+  - ✅ Function 5 (training-data-shaped artifacts) — best_answer_id is
+    part of the question record's exported state; correctness here
+    matters for downstream consumers.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 154 → 156 (+2 K-imp-6); plugin 518 / 0 unchanged
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (importPairs captures recordAnswer's return; uses insertedAnswer.id directly)
+  - scripts/lattice/import-from-kg.test.ts (2 K-imp-6 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-6 row marked FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL23 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL23):** File-touch rule blocks import-from-kg.ts immediately again. Eligible:
+- L5 (apprenticeship.ts last touched NL19 — eligible)
+- LC3, LC4 (lattice-context.ts last touched NL19 — eligible)
+- E4, E5, E7 (ephemeral-peer-review.ts last touched NL21 — INELIGIBLE)
+- K-imp-1, 3, 7, 9 (import-from-kg.ts last touched NL22 — INELIGIBLE)
+
+**Recommend NL23 → DRAIN LC4** (lattice-context.ts:109 body_budget_bytes uses string length not bytes; budget≤0 leaks via slice(0,-1)). Reasons:
+- Real correctness bug: the byte-budget truncation is implemented via JS string slice, which counts UTF-16 code units, not UTF-8 bytes. For non-ASCII content (e.g. emoji, CJK), this under-counts and lets bigger payloads slip through OR over-counts and drops legitimate content. Same UTF class as E7.
+- Edge case: budget≤0 hits `slice(0, -1)` which removes the LAST character — the opposite of what's intended.
+- lattice-context.ts last touched NL19 (3 iters gap → eligible).
+
+**Sequenced after NL23:**
+- NL24 → L5 (apprenticeship.ts pushContext k validation), LC3 (header-only block when exclude_agent unset), or K-imp-7 (peer-review retro-upgrade limit:5 — same template as K-imp-6).
+- NL25+ → K-imp-1, K-imp-3, K-imp-9, E4, E5, E7, C4 (design call)
+- Eventually: fresh peer review on stats.ts (next-cycle peer = carina by rotation; lumeyon or keystone fit)
 
 ### 2026-05-08T12:25Z (NL21: queue-drain E1+E2 — resume-write floor-stealing + concurrent-orion-resume races, bundled)
 

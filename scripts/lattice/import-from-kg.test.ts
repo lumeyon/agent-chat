@@ -692,6 +692,74 @@ describe("importEdgeConvo — K-imp-4 question idempotency race", () => {
     peer.close();
   });
 
+  test("K-imp-6: best_answer_id pins to the JUST-INSERTED answer, not whichever queryAnswers limit:1 returns", () => {
+    // Pre-fix: importPairs at line 390-394 used queryAnswers limit:1 with
+    // default order_by=predictive_lift_desc to pick best_answer_id. Among
+    // imported answers with the same predictive_lift (always 0), SQLite's
+    // tie-breaking is implementation-defined (typically ROWID/insertion
+    // order). When a question has MULTIPLE accepted answers, the queried
+    // "top" may NOT be the just-inserted answer the comment claimed to
+    // pin. Result: re-importing a Q/A pair for an existing question
+    // didn't update best_answer_id to the new answer; the pointer stayed
+    // on whichever earlier answer SQLite happened to return first.
+    //
+    // NL22 fix: capture recordAnswer's return value (it already returns
+    // the inserted Answer) and use its id directly — matches the
+    // comment's stated intent, eliminates the nondeterminism, and removes
+    // a redundant queryAnswers call.
+
+    // Two CONVO sections sharing the same user-question framing but with
+    // two different assistant-agent responses. After both imports, the
+    // question's best_answer_id should point at the LATEST import's
+    // answer (the most-recently-inserted one).
+    writeConvo(
+      section("boss",    "user turn",          "2026-05-08T10:00:00Z", "What is the deadline?"),
+      section("orion",   "assistant response", "2026-05-08T10:00:00Z", "Friday at 5pm.", "boss"),
+      section("boss",    "user turn",          "2026-05-08T11:00:00Z", "What is the deadline?"),
+      section("lumeyon", "assistant response", "2026-05-08T11:00:00Z", "Confirmed: Friday at 5pm.", "boss"),
+    );
+    const r = importEdgeConvo(store, edgeDir);
+    expect(r.questions_inserted).toBe(1);
+    expect(r.answers_inserted).toBe(2);
+
+    // Find the canonical question and inspect its best_answer.
+    const allQs = store.queryQuestions({ limit: 10 });
+    expect(allQs.length).toBe(1);
+    const q = allQs[0];
+    expect(q.status).toBe("answered");
+    const bestId = q.best_answer_id;
+    expect(bestId).not.toBeNull();
+    const best = store.getAnswer(bestId!);
+    expect(best).not.toBeNull();
+
+    // Pre-fix: best_answer_id ends up pointing at orion's answer (the
+    // FIRST inserted, oldest by ROWID; queryAnswers limit:1 with default
+    // predictive_lift_desc and tied lifts of 0 returns it first; the
+    // condition `existing.best_answer_id !== accepted[0].id` is false on
+    // the second import, so no update happens).
+    // Post-fix: best_answer_id points at lumeyon's answer (the LAST
+    // inserted; importPairs uses recordAnswer's return value directly).
+    expect(best!.by_agent).toBe("lumeyon");
+    expect(best!.body).toBe("Confirmed: Friday at 5pm.");
+  });
+
+  test("K-imp-6: single-answer case unchanged (sanity / backwards compat)", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-08T10:00:00Z", "Q text"),
+      section("orion", "assistant response", "2026-05-08T10:00:00Z", "A text"),
+    );
+    const r = importEdgeConvo(store, edgeDir);
+    expect(r.answers_inserted).toBe(1);
+
+    const allQs = store.queryQuestions({ limit: 10 });
+    expect(allQs.length).toBe(1);
+    const q = allQs[0];
+    expect(q.status).toBe("answered");
+    const best = store.getAnswer(q.best_answer_id!);
+    expect(best!.by_agent).toBe("orion");
+    expect(best!.body).toBe("A text");
+  });
+
   test("K-imp-4: tryPutQuestion is idempotent across handles — second insert returns false, no throw", () => {
     const dbPath = path.join(edgeDir, "lattice.db");
     const a = new LatticeStore(dbPath);
