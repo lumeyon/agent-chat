@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T02:30Z
+## Current state — 2026-05-08T02:43Z
 
-**Phase: New /loop iter 1 (NL1) — peer-driven audit pass. Lumeyon reviewed apprenticeship.ts and returned 5 REAL findings (no nitpicks). L1+L2 (related; pushContext trusting best_answer_id without filter validation) fixed this iter. L3-L5 queued for subsequent iters.**
+**Phase: New /loop iter 2 (NL2) — HALTED on substrate-health stopping condition. keystone (codex) review of `scripts/lattice/import-from-kg.ts` timed out at 240s. CLI's iter-1 park-on-failure protocol worked correctly: edge state clean, no leftover lock, .turn parked. Per the new loop's rule 2, peer call failure halts the loop — surfacing the codex flakiness as the finding.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,61 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T02:43Z (NEW /loop iter 2 — HALTED: keystone (codex) review of import-from-kg.ts timed out)
+
+**Loop:** new prompt — strictly peer-driven, halt-on-peer-failure.
+
+**Wakeup triggered by:** queued OLD-loop wakeup from iter 13 fired with the obsolete prompt at boss's session re-fire. Honored boss's explicit switch to new-loop pattern; treated this as NL2.
+
+**Target:** `scripts/lattice/import-from-kg.ts` (the importer logic, modified iter-11 for ephemeral peer review detection — but iter-11 was 4 iters ago in old-loop count, so within rule 2's "different file from previous 2 iters" of NEW loop count). No prior review entry. Module size: 17774 bytes (well within the 24KB review cap).
+
+**Peer used:** keystone (codex) per peer rotation rule (iter NL+1 → keystone).
+
+**What happened:**
+  1. Tests-first: 502/0/3 plugin, 119/0 lattice — green ✓
+  2. Spawned `agent-chat ephemeral-peer-review --peer keystone --module .../import-from-kg.ts`
+  3. orion's request section appended to keystone-orion/CONVO.md ✓
+  4. .turn flipped to keystone, lock acquired ✓
+  5. codex exec dispatched
+  6. **codex exec timed out at 240s** — no response received
+  7. CLI's iter-1 park-on-failure path triggered: turn.ts park executed, edge atomically returned to "parked", lock removed
+  8. Stderr: `[ephemeral-peer-review] dispatch failed: reason=timeout code=null stderr=codex exec timed out after 240000ms`
+
+**Substrate-health finding (the deliverable):**
+  - Codex CLI is not reliably responsive on a 17KB review request. Iter-NL1 (lumeyon on apprenticeship.ts, 8.6KB) succeeded in ~3min wall clock. Iter-NL2 (keystone on import-from-kg.ts, 17.7KB) timed out at 4min. The 2x size delta might explain it, but past iter-6 (keystone on sqlite-store.ts, 24KB capped review) succeeded at ~3min.
+  - Possible root causes (not investigated this iter, per stop rule):
+    - Codex API backend latency variance
+    - Module content tricky to reason about
+    - Codex agent ran into a tool loop and exhausted budget
+  - The signal IS the finding. Future iters can retry; the protocol's halt-on-fail is correct behavior.
+
+**Edge cleanup verified:**
+  - `cat keystone-orion/CONVO.md.turn` → "parked" ✓
+  - No `CONVO.md.turn.lock` file ✓
+  - Orphaned orion request section left in CONVO.md as historical record of the failed attempt (per iter-1 design decision)
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 405 → 406 (+1: orion's review request question; no paired answer because keystone never responded — orphan in lattice import logic, will be a question with no accepted answer)
+  - Answers: 892 → 892 (no new — keystone produced no response)
+
+**Tests:** 502/0/3 plugin, 119/0 lattice (no change — no code modification this iter).
+
+**Files touched (2):**
+  - docs/ephemeral-peer-reviews.md (TIMEOUT row for import-from-kg.ts)
+  - docs/lattice-alt-a-progress.md (this entry)
+
+**Commit:** (this turn).
+
+**LOOP HALTED.** Per the new loop's stopping condition 2: "Peer call fails (any reason) → STOP, journal as substrate-health finding." NO ScheduleWakeup this turn.
+
+**To resume the loop, boss can either:**
+  - Re-fire `/loop` with the new prompt (codex may simply work on retry)
+  - Investigate codex flakiness (perhaps a system-level issue affecting the codex backend)
+  - Switch peer specialties: route iter NL2 retry to a CLAUDE-runtime peer if available
+  - Accept that periodic codex failures are part of substrate health and use the stopping condition as a circuit breaker, with manual re-fires when boss is around
+
+The 3 queued L-findings from iter NL1 (L3 lifecycle, L4 float margin, L5 k validation) remain in the queue; iter NL3 can pick those up in apprenticeship.ts when the loop resumes — they don't need a fresh peer review since lumeyon already identified them.
 
 ### 2026-05-08T02:30Z (NEW /loop iter 1: lumeyon peer-review of apprenticeship.ts → 5 REAL findings; L1+L2 fixed)
 
