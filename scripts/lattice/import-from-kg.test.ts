@@ -560,3 +560,46 @@ describe("importEdgeConvo — K-imp-8 strict UTC validation", () => {
     expect(result.answers_inserted).toBe(1);
   });
 });
+
+// Regression for keystone's NL5 K-imp-5 finding: importPairs's try/catch
+// previously treated EVERY error from recordAnswer as a PRIMARY KEY
+// conflict (silently aDup++). Real PK conflicts come from SQLite as
+// "UNIQUE constraint failed: answers.id"; non-PK errors (FK violations,
+// dual-output enforcement, CHECK constraints) were silently miscounted.
+// NL13 fix discriminates: PK-conflict → aDup; everything else → propagate.
+describe("importEdgeConvo — K-imp-5 try/catch discrimination", () => {
+  test("K-imp-5: re-importing same content increments aDup (PK-conflict path still works)", () => {
+    writeConvo(
+      section("boss",  "user turn",          "2026-05-07T10:00:00Z", "Q text"),
+      section("orion", "assistant response", "2026-05-07T10:00:00Z", "A text"),
+    );
+    importEdgeConvo(store, edgeDir);
+    const r2 = importEdgeConvo(store, edgeDir);
+    // Both Q and A are duplicates on the second import.
+    expect(r2.questions_already_existed).toBe(1);
+    expect(r2.answers_already_existed).toBe(1);
+    expect(r2.questions_inserted).toBe(0);
+    expect(r2.answers_inserted).toBe(0);
+  });
+
+  test("K-imp-5: non-PK errors propagate (do not silently increment aDup)", async () => {
+    // Construct an importer-like scenario where recordAnswer throws a
+    // non-PK error. Strategy: pre-populate the questions table such that
+    // the answer's question_id FK is satisfied, but DELETE the question
+    // BEFORE recordAnswer fires (simulating concurrent deletion or schema
+    // corruption). This is fiddly to orchestrate via the real importer,
+    // so we exercise the new discriminator directly: given a thrown
+    // error whose message is NOT a PK conflict, the catch must not eat
+    // it. We test this via the importer-internal helper isPrimaryKeyConflict
+    // (NL13 introduces it).
+    const { isPrimaryKeyConflict } = await import("./import-from-kg.ts");
+    expect(isPrimaryKeyConflict(new Error("UNIQUE constraint failed: answers.id"))).toBe(true);
+    expect(isPrimaryKeyConflict(new Error("UNIQUE constraint failed: questions.id"))).toBe(true);
+    // Non-PK errors must NOT be classified as duplicates.
+    expect(isPrimaryKeyConflict(new Error("FOREIGN KEY constraint failed"))).toBe(false);
+    expect(isPrimaryKeyConflict(new Error("CHECK constraint failed: quality_tier IN (1,2,3,4,5)"))).toBe(false);
+    expect(isPrimaryKeyConflict(new Error("explanation must be a non-empty string"))).toBe(false);
+    expect(isPrimaryKeyConflict(new Error("NOT NULL constraint failed: answers.explanation"))).toBe(false);
+    expect(isPrimaryKeyConflict(new Error("some random error"))).toBe(false);
+  });
+});

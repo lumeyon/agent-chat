@@ -161,6 +161,24 @@ export function pairSections(sections: ParsedSection[]): QAPair[] {
   return pairs;
 }
 
+/** K-imp-5 fix (NL13 keystone): discriminate PRIMARY KEY conflicts from
+ *  other recordAnswer errors. Pre-fix, importPairs's catch block treated
+ *  EVERY thrown error as "already imported" → aDup++. That silently
+ *  miscounted non-PK errors (FK violations, CHECK constraints, dual-
+ *  output enforcement) as duplicates, hiding real failures.
+ *
+ *  Returns true if the error is a PK / UNIQUE constraint conflict
+ *  (genuine "already imported" case). False for all other error
+ *  classes — the caller should propagate or log them, not silently
+ *  swallow them as duplicates. */
+export function isPrimaryKeyConflict(err: unknown): boolean {
+  const msg = String((err as Error)?.message ?? err ?? "").toLowerCase();
+  // SQLite emits "UNIQUE constraint failed: <table>.<column>" for
+  // PK / UNIQUE collisions. Match conservatively: must mention
+  // "unique constraint" specifically, not other constraint types.
+  return /unique constraint failed/.test(msg);
+}
+
 /** K-imp-8 fix (NL10 keystone): strict ISO-8601 UTC parser. The protocol
  *  specifies `UTC YYYY-MM-DDTHH:MM:SSZ` (with optional fractional seconds).
  *  Date.parse is too permissive — it accepts offsets like `+0500`, missing
@@ -365,7 +383,16 @@ function importPairs(
         store.setQuestionStatus(questionId, "answered", accepted[0].id);
       }
     } catch (e) {
-      // Likely PRIMARY KEY conflict (already imported). Count as dup.
+      // K-imp-5 fix (NL13): discriminate PK conflicts from other errors.
+      // Pre-fix this catch ate ALL errors as aDup++, silently masking
+      // FK violations, CHECK failures, dual-output enforcement throws,
+      // etc. Now: PK conflict → aDup++; everything else → propagate.
+      if (!isPrimaryKeyConflict(e)) {
+        // Non-PK error — surface it. Re-throw so the import fails loudly
+        // rather than silently miscounting.
+        throw e;
+      }
+      // PRIMARY KEY conflict (already imported). Count as dup.
       // For ephemeral peer review responses, RETROACTIVELY upgrade an
       // existing auto-imported placeholder to the authored explanation
       // and tier — happens when a peer review was imported BEFORE this

@@ -2,9 +2,9 @@
 
 > Status file maintained by the autonomous `/loop` driver. Captures Alt A deliverable progress, decision points, and verification results.
 
-## Current state — 2026-05-08T07:55Z
+## Current state — 2026-05-08T08:25Z
 
-**Phase: NL12 — fresh peer review on lattice-context.ts via carina (codex). 5 REAL findings (no nitpicks) — same yield-pattern as prior peer reviews. LC5 (regex /m flag — same bug class as K-imp-2 in import-from-kg.ts) FIXED this iter, demonstrating a SYSTEMIC copy-paste bug pattern across 2 modules. LC1-LC4 queued. Total cumulative: 30 REAL findings, 10 code fixes, 3 schema migrations.**
+**Phase: NL13 — drained K-imp-5 (importPairs try/catch bug-masking). Added `isPrimaryKeyConflict` discriminator: only true UNIQUE constraint failures count as duplicates; everything else (FK violations, CHECK failures, dual-output enforcement throws, etc.) now propagates instead of being silently miscounted. Closes a real silent-failure pathway in the importer. Cumulative: 30 REAL findings, 11 code fixes, 3 schema migrations.**
 
 **Substrate-readiness finding (iter NL1, rule 3 trigger):** push-context query "what should be reviewed next?" against the production lattice returned all hits with cosine ≤ 0.367 — corpus too sparse to drive its own discovery. Manual selection still works (apprenticeship.ts was the obvious next high-leverage module), but the substrate isn't yet self-driving for review prioritization. Documented; not blocking.
 
@@ -17,6 +17,55 @@
 | ALT-A-3 | Study turn loop with LLM integration | **COMPLETE** — `study-turn.ts` + `agent-chat study-turn` CLI; 16 unit tests pass; real-LLM end-to-end run completed (3 claude calls, dry-run, results table) |
 
 ## Iteration log
+
+### 2026-05-08T08:25Z (NL13: queue-drain K-imp-5 — importPairs catch discriminates PK conflicts vs other errors)
+
+**Loop:** stateful peer-driven via prompt.md. Per queue-precedence rule, drains K-imp-5 — no fresh peer call. File-touch rule satisfied: NL12 touched lattice-context.ts; import-from-kg.ts last touched NL10 (3 iters gap → eligible).
+
+**The bug:** importPairs at import-from-kg.ts:367 had `} catch (e) { aDup++; ... }` — every error from recordAnswer was treated as "already imported" (PK conflict). In practice, only PK conflicts fire today (the importer's own validation is loose), but this is forward-looking bug-masking: future tightenings (e.g., new CHECK constraints, FK additions like NL9, dual-output enforcement) would fire and get silently miscounted as duplicates instead of surfacing as real failures.
+
+**The fix:** new exported helper `isPrimaryKeyConflict(err)` checks if the error message contains "unique constraint failed" (case-insensitive). The catch block now:
+  - PK/UNIQUE conflict → aDup++ (genuine "already imported" path; retro-upgrade for peer-review responses still runs)
+  - Anything else → re-throw (FK violations, CHECK failures, dual-output enforcement, schema NOT NULL, anything new in the future) — surfaces real failures instead of swallowing them
+
+**Test-first protocol:**
+  2 regression tests at import-from-kg.test.ts:
+    - K-imp-5-a: re-importing same content increments aDup (PK-conflict path still works post-fix; existing behavior preserved)
+    - K-imp-5-b: `isPrimaryKeyConflict` discriminator unit test — verifies UNIQUE constraint messages → true; FOREIGN KEY / CHECK / explanation / NOT NULL / random errors → false
+  K-imp-5-a passed pre-fix (existing behavior). K-imp-5-b FAILED pre-fix (function didn't exist). Both PASS post-fix.
+
+**Why no integration test for non-PK error propagation:** triggering a non-PK error from recordAnswer requires either a concurrent question deletion (race) or schema corruption — fiddly to orchestrate without flaky tests. The discriminator unit test catches the regex correctness; the catch path's `if (!isPrimaryKeyConflict(e)) throw e` is mechanical. Sufficient coverage without flaky setup.
+
+**Dog-food check (forcing functions exercised):**
+  - ✅ Function 5 (FORMAT-UNIFORM ARTIFACTS) — bug-masking elimination preserves data quality. Imports that fail with non-PK errors now surface those failures so future-orion can investigate; pre-fix they'd be invisible.
+
+**Lattice metrics (BEFORE → AFTER):**
+  - Questions: 425 → 425 (no peer call)
+  - Answers: 961 → 961
+  - Tests: lattice 144 → 146 (+2 K-imp-5)
+
+**Files touched (4):**
+  - scripts/lattice/import-from-kg.ts (isPrimaryKeyConflict export + use in catch)
+  - scripts/lattice/import-from-kg.test.ts (2 K-imp-5 regression tests)
+  - docs/ephemeral-peer-reviews.md (K-imp-5 row updated to FIXED)
+  - docs/lattice-alt-a-progress.md (this entry)
+  - prompt.md (NL14 plan; cumulative ledger updated)
+
+**Commit:** (this turn).
+
+**WHAT'S NEXT (NL14):** Per file-touch rule (NL13 touched import-from-kg.ts), eligible:
+- L3, L5 (apprenticeship.ts, last touched NL6)
+- C2, C4, C5 (study-turn.ts, last touched NL8)
+- E1-E5, E7 (ephemeral-peer-review.ts, last touched NL4)
+- LC1-LC4 (lattice-context.ts, last touched NL12 — INELIGIBLE yet, need 1-iter gap)
+
+**Recommend NL14 → DRAIN E3** (lock-failure outside try → edge stuck on "orion" if lock fails). Reasons:
+- Real reliability bug in the load-bearing CLI used by every peer review.
+- ephemeral-peer-review.ts last touched NL4 (8 iters gap).
+- Modest fix (move the lock call into the try block; ensure park-on-lock-failure cleanup).
+- Test approach: simulate lock failure (write a stale lock file via fs operations before the CLI runs), verify edge ends up parked.
+
+After NL14, NL15+ candidates: E1+E2 (related race conditions, may need a coherent multi-test fix), C2 (selectStudyQuestions empty-body filter), L3 (single-answer reRankAnswers lifecycle gap).
 
 ### 2026-05-08T07:55Z (NL12: fresh peer review — carina on lattice-context.ts → 5 REAL findings; LC5 fixed; systemic /m-regex bug confirmed)
 
