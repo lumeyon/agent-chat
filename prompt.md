@@ -4,14 +4,17 @@
 > kernel as a primitive for **creative exploration outside the agents' RL-training
 > distribution**, not as a router for selecting between experts.
 >
-> **DO NOT STOP until all three tracks (A, B, C) are SHIPPED.** Order:
->   - Track A (per-agent anomaly detector) — ✅ shipped NL42 (commit cf16e1e)
->   - Track C (multi-agent boundary scout) — IN PROGRESS this iter
->   - Track B (generative residual sampler with local LLM logits) — IMMEDIATELY after C
+> **STATUS: ALL THREE TRACKS SHIPPED (NL42).**
+>   - Track A (per-agent anomaly detector) — ✅ shipped commit cf16e1e
+>   - Track C (multi-agent boundary scout) — ✅ shipped commit a60c91b
+>   - Track B (generative residual sampler with local LLM logits) — ✅ shipped commit 58c9466
 >
-> If a /loop iteration runs out of context before all three are done, the next iter
-> resumes at the next sub-step in this file. No "awaiting direction" pauses unless a
-> genuinely destructive choice is needed.
+> 19/20 tests pass (1 opt-in LLM integration test passes with env flag).
+> All three tracks share the same `residual_sample` kernel; differences are in
+> what M is. The substrate is now ready for downstream use:
+>   - Track A outputs feed Apprenticeship Substrate as study material
+>   - Track C outputs are dual-audience training data (every disagreement triple)
+>   - Track B is a generation policy for synthetic-data production / OOD probing
 >
 > The router framing (NL41) was the wrong direction. GPQA's empirical and ablation results
 > proved why: agents are deeply inside training distribution; the (task, expert) score matrix
@@ -273,6 +276,46 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 7. **Search before writing.** grep/find/ls before creating new files.
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
+
+## NL42 build status — ALL THREE TRACKS SHIPPED
+
+### Track A (cf16e1e) — per-agent anomaly detector
+- 11/11 tests pass; 5 src modules; ~485 lines
+- Output: `experiments/residual/results/anomalies_{codex,claude,agent_chat}.json`
+- Headline: rec6sE2CRtD4drtHg (Coleman-Weinberg) tops codex (54) AND claude (46)
+
+### Track C (a60c91b) — multi-agent boundary scout
+- 14/14 tests pass total; new `boundary.py` module
+- Matrix shape [190, 1188] (190 questions × 3 agents × 396 features)
+- Per-agent decomposition correctly attributes divergence: rec6sE2CRtD4drtHg total=224.5, codex=153, claude=59 (cross-validates Track A)
+- Output: `experiments/residual/results/disagreements.json`
+
+### Track B (58c9466) — generative residual sampler
+- 20/20 tests total (1 opt-in LLM integration); new `generative.py` + demo
+- Qwen2.5-1.5B-Instruct on 4090, vocab=151936, k=8 calibration basis on n=25 prompts
+- Visibly different completions from greedy/temperature on 8 demo prompts
+- Output: `experiments/residual/results/generative_demo.json`
+
+### Cross-track findings
+- The SAME hard question (Coleman-Weinberg pseudo-Goldstone, rec6sE2CRtD4drtHg) appears as a top-anomaly in Track A's per-agent codex matrix, top in Track A's per-agent claude matrix, AND top in Track C's multi-agent decomposition. This is the cleanest possible signal that residual analysis finds genuinely hard questions in a model-agnostic way.
+- Track A surfaces the soft-pushback failure mode in agent-chat responses ("the peer reviewer confirms..." pattern) automatically — this is the same failure mode we diagnosed manually in NL40, now extracted by the substrate.
+- Track B's residual-projected generations are noticeably different from greedy/temperature even at modest k=8 / calibration n=25. Increasing both should sharpen the effect.
+
+### Carryover and next directions (boss to direct)
+
+**Reusable kernel:** the 12-line `residual_sample` and 3-line `project_to_residual` are now shipped and tested. Any future M (any matrix where rows represent units we want to find anomalies/disagreements/creative-deviations across) plugs into the same primitives.
+
+**Natural next experiments (not yet built; awaiting boss direction):**
+- Larger calibration corpus + larger k for Track B → more pronounced creative deviation
+- Track A on a different benchmark (HumanEval, MATH) where more divergence exists per-agent
+- Track C with N>3 agents (extend petersen graph response data into a 10-agent matrix)
+- Apprenticeship Substrate integration: pipe Track A/C anomaly outputs into the apprenticeship loop's "study material" feed
+- Dual-audience export: serialize Track C disagreement triples in a format suitable for AI-training-data buyers
+
+**Deferred:**
+- Auto-tuning k via singular-value elbow detection
+- Time-windowed online residual updates (for streaming / online learning of basis)
+- Hebbian edge weights using Track C's per-agent divergence magnitudes (the v0.3 of the original router plan, now naturally subsumed)
 
 ## v0.1 build status (NL42 — SHIPPED, Track A)
 
