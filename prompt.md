@@ -1,8 +1,17 @@
 # Quantum-Inspired Residual Exploration — 100% pivot from expert-selection (NL42+)
 
-> **Mission (NL42+):** Use the Tang-style ℓ₂-norm-sampling-from-low-rank-residuals kernel as a
-> primitive for **creative exploration outside the agents' RL-training distribution**, not as
-> a router for selecting between experts.
+> **MISSION COMMITMENT (NL42+):** Use the Tang-style ℓ₂-norm-sampling-from-low-rank-residuals
+> kernel as a primitive for **creative exploration outside the agents' RL-training
+> distribution**, not as a router for selecting between experts.
+>
+> **DO NOT STOP until all three tracks (A, B, C) are SHIPPED.** Order:
+>   - Track A (per-agent anomaly detector) — ✅ shipped NL42 (commit cf16e1e)
+>   - Track C (multi-agent boundary scout) — IN PROGRESS this iter
+>   - Track B (generative residual sampler with local LLM logits) — IMMEDIATELY after C
+>
+> If a /loop iteration runs out of context before all three are done, the next iter
+> resumes at the next sub-step in this file. No "awaiting direction" pauses unless a
+> genuinely destructive choice is needed.
 >
 > The router framing (NL41) was the wrong direction. GPQA's empirical and ablation results
 > proved why: agents are deeply inside training distribution; the (task, expert) score matrix

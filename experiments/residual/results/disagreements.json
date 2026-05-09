@@ -1,0 +1,1717 @@
+{
+  "agents": [
+    "codex",
+    "claude",
+    "agent_chat"
+  ],
+  "k_lowrank": 5,
+  "n_samples": 20,
+  "n_valid_rows": 190,
+  "matrix_shape": [
+    190,
+    1188
+  ],
+  "per_agent_dim": 396,
+  "disagreements": [
+    {
+      "rank": 1,
+      "id": "recJZ3QEfRKjYw9a7",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 6.465558773959458,
+      "sample_prob": 0.001762725180014968,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 3.247605085372925,
+          "embedding_div_sq": 0.962828516960144,
+          "scalar_div_sq": 2.2847766876220703,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.375131607055664,
+              "signed": 1.375131607055664
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.5336326360702515,
+              "signed": -0.5336326360702515
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.288222074508667,
+              "signed": -0.288222074508667
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.6287492513656616,
+          "embedding_div_sq": 0.9614138007164001,
+          "scalar_div_sq": 0.6673354506492615,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 0.6450291872024536,
+              "signed": 0.6450291872024536
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.4023130536079407,
+              "signed": -0.4023130536079407
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.17166034877300262,
+              "signed": 0.17166034877300262
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.589202880859375,
+          "embedding_div_sq": 0.9576692581176758,
+          "scalar_div_sq": 0.6315336227416992,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.445286363363266,
+              "signed": -0.445286363363266
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.35465145111083984,
+              "signed": -0.35465145111083984
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.33408209681510925,
+              "signed": -0.33408209681510925
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: cyclohexanone was treated with bromine, forming product 1.\n1 was heated with sodium hydroxide, forming product 2.\n2 was treated with thionyl chloride and pyridine, forming 3.\n3 was treated with Lithium tri-tert-butoxyaluminum hydride, forming product ",
+      "responses": {
+        "codex": "Cyclohexanone first undergoes alpha-bromination to give 2-bromocyclohexanone.\n\nHeating that alpha-bromoketone with NaOH gives a Favorskii rearrangement: ring contraction to cyclopentanecarboxylic acid. SOCl2/pyridine converts this to the acid chloride, and lithium tri-tert-butoxyaluminum hydride reduces the acid chloride selectively to the aldehyde: cyclopentanecarbaldehyde.\n\nFor cyclopentanecarba",
+        "claude": "Looking at this problem, I need to track the products through the reaction sequence:\n\n**Step 1:** Cyclohexanone + Br\u2082 \u2192 2-bromocyclohexanone (Product 1)\n**Step 2:** 2-bromocyclohexanone + NaOH (heat) \u2192 cyclopentanecarboxylic acid (Favorskii rearrangement \u2192 ring contraction) (Product 2)\n**Step 3:** Cyclopentanecarboxylic acid + SOCl\u2082/pyridine \u2192 cyclopentanecarbonyl chloride (Product 3)\n**Step 4:** ",
+        "agent_chat": "The synthesis is correct: cyclohexanone \u2192 2-bromocyclohexanone \u2192 (Favorskii) cyclopentanecarboxylic acid \u2192 cyclopentanecarbonyl chloride \u2192 cyclopentanecarbaldehyde (LiAlH(OtBu)\u2083 stops at aldehyde).\n\nFor cyclopentanecarbaldehyde, the molecule has Cs symmetry (mirror plane through CHO, C1\u2013H, and midpoint of C3\u2013C4). This relates C2\u2194C5 and C3\u2194C4, but the two H's on each CH\u2082 are diastereotopic (the rin"
+      }
+    },
+    {
+      "rank": 2,
+      "id": "recVE8cUNHpHZIAvL",
+      "domain": "Physics",
+      "subdomain": "Astrophysics",
+      "total_divergence_sq": 202.40349250831423,
+      "sample_prob": 0.055181898176670074,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 189.23143005371094,
+          "embedding_div_sq": 1.1299679279327393,
+          "scalar_div_sq": 188.10147094726562,
+          "top_scalar_features": [
+            {
+              "feature": "n_questions",
+              "abs": 12.887712478637695,
+              "signed": 12.887712478637695
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 4.109344482421875,
+              "signed": 4.109344482421875
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 1.9610657691955566,
+              "signed": -1.9610657691955566
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 10.050690650939941,
+          "embedding_div_sq": 1.1492401361465454,
+          "scalar_div_sq": 8.901449203491211,
+          "top_scalar_features": [
+            {
+              "feature": "letter_unknown",
+              "abs": 1.9610657691955566,
+              "signed": -1.9610657691955566
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.6174876689910889,
+              "signed": -1.6174876689910889
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 1.0436381101608276,
+              "signed": -1.0436381101608276
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 3.1213812828063965,
+          "embedding_div_sq": 1.0763839483261108,
+          "scalar_div_sq": 2.0449979305267334,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.0528548955917358,
+              "signed": -1.0528548955917358
+            },
+            {
+              "feature": "letter_C",
+              "abs": 0.614392876625061,
+              "signed": -0.614392876625061
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.41827523708343506,
+              "signed": 0.41827523708343506
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Very large number of neutrinos produced by the Sun reach the Earth (very large flux of neutrinos, defined as the number of neutrinos per cm^2, per second).\n\nLet us assume that, hypothetically, the pp-III branch suddenly stopped in the core of the Sun about 8",
+      "responses": {
+        "codex": "The stopped pp-III branch removes the low-flux `8B` neutrino continuum. It does **not** remove the `7Be` neutrino line from pp-II.\n\nThe key feature is the strong `7Be` line at about `862 keV`, which lies in the `800-900 keV` band. The `700-800 keV` band has no comparable pp-chain line; it mainly gets small CNO continuum contributions. So:\n\n`flux(700-800 keV) / flux(800-900 keV) ~ few x 10^7 / few ",
+        "claude": "Looking at this problem:\n\n**Solar neutrino sources by branch:**\n- pp-I: pp neutrinos (continuous, endpoint ~420 keV) \u2014 below both bands\n- pp-II: \u2077Be neutrinos (lines at **861 keV** and 384 keV), pep at 1.44 MeV\n- pp-III: \u2078B neutrinos (continuous, endpoint ~15 MeV) \u2014 *stopped per problem*\n- CNO: \u00b9\u00b3N, \u00b9\u2075O continuous spectra (endpoints ~1.2 / 1.7 MeV)\n\n**With pp-III stopped, \u2078B is gone. What's left i",
+        "agent_chat": "Looking at this problem again with the critique in mind:\n\n**Solar neutrino sources after pp-III stops:**\n- pp-I: pp neutrinos (continuous, endpoint ~420 keV) \u2014 below both bands\n- pp-II: \u2077Be line at **861 keV** (90%) and 384 keV (10%) \u2014 **unaffected**\n- pp-III: \u2078B continuum \u2014 **stopped** (note: hep is technically separate, as the critique correctly points out, but negligible here)\n- CNO: \u00b9\u00b3N, \u00b9\u2075O c"
+      }
+    },
+    {
+      "rank": 3,
+      "id": "rec6sE2CRtD4drtHg",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "total_divergence_sq": 224.45913432982343,
+      "sample_prob": 0.061194971203804016,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 153.47470092773438,
+          "embedding_div_sq": 0.8964235782623291,
+          "scalar_div_sq": 152.5782928466797,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 11.777287483215332,
+              "signed": 11.777287483215332
+            },
+            {
+              "feature": "n_latex",
+              "abs": 2.6833927631378174,
+              "signed": 2.6833927631378174
+            },
+            {
+              "feature": "letter_A",
+              "abs": 1.945390224456787,
+              "signed": -1.945390224456787
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 59.04086685180664,
+          "embedding_div_sq": 0.8483330607414246,
+          "scalar_div_sq": 58.192527770996094,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 7.128701210021973,
+              "signed": 7.128701210021973
+            },
+            {
+              "feature": "letter_A",
+              "abs": 2.311232566833496,
+              "signed": -2.311232566833496
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.7776481509208679,
+              "signed": -0.7776481509208679
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 11.943479537963867,
+          "embedding_div_sq": 0.8531157374382019,
+          "scalar_div_sq": 11.090364456176758,
+          "top_scalar_features": [
+            {
+              "feature": "letter_A",
+              "abs": 2.23539137840271,
+              "signed": -2.23539137840271
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.2277510166168213,
+              "signed": 1.2277510166168213
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.955431342124939,
+              "signed": -0.955431342124939
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Consider the extension of the Standard Model given by the following Lagrangian\n\n\\mathcal{L}\\subset i\\bar{N}_{R}\\gamma^{\\mu}\\partial_{\\mu}N_{R}+\\frac{1}{2}\\left(\\partial^{\\mu}\\phi\\right)^{2}+\\left|D^{\\mu}S\\right|^{2}-\\frac{y_{i}}{2}\\phi\\bar{N}",
+      "responses": {
+        "codex": "The pseudo-Goldstone mass comes from the one-loop Coleman-Weinberg correction along the flat direction. It must scale as\n\n\\[\nM_{h_2}^2 \\propto \\frac{1}{8\\pi^2(x^2+v^2)}\n\\]\n\nwith positive bosonic mass-fourth contributions and negative fermionic ones. The full particle content contributing includes \\(h_1\\), \\(W\\), \\(Z\\), top quark, inert scalars \\(H^\\pm,H^0,A^0\\), and singlet fermions \\(N_i\\). This ",
+        "claude": "Looking at this problem, I need to identify the Coleman-Weinberg radiative correction to a pseudo-Goldstone boson mass.\n\nThe standard form is:\n$$M^2 \\sim \\frac{1}{8\\pi^2 f^2} \\sum_i (\\pm) M_i^4$$\n\nwhere:\n- **Bosons** (scalars, gauge bosons) contribute with **positive** sign\n- **Fermions** contribute with **negative** sign (due to fermion loop minus sign)\n- The prefactor is **1/f\u00b2** with f\u00b2 = x\u00b2 + ",
+        "agent_chat": "Looking at this problem again with the peer's critique:\n\n**Agreement points:**\n- The pseudo-Goldstone (likely Gildener-Weinberg scalon from radiatively broken classical scale invariance) gets its mass via Coleman-Weinberg radiative corrections\n- The denominator structure `8\u03c0\u00b2(x\u00b2+v\u00b2)` is correct\n- Bosons contribute with positive signs, fermions with negative signs\n- The full set of loop contributor"
+      }
+    },
+    {
+      "rank": 4,
+      "id": "recUOePh79cp4T2Bg",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 23.41540632006604,
+      "sample_prob": 0.006383813917636871,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 13.3685941696167,
+          "embedding_div_sq": 0.7773084044456482,
+          "scalar_div_sq": 12.591286659240723,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 3.392526626586914,
+              "signed": 3.392526626586914
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.5913516283035278,
+              "signed": -0.5913516283035278
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.5861982107162476,
+              "signed": -0.5861982107162476
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 7.643447399139404,
+          "embedding_div_sq": 0.7848023176193237,
+          "scalar_div_sq": 6.858645439147949,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 1.62726891040802,
+              "signed": -1.62726891040802
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.2163655757904053,
+              "signed": 1.2163655757904053
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 1.128269910812378,
+              "signed": -1.128269910812378
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 2.4033610820770264,
+          "embedding_div_sq": 0.8169366717338562,
+          "scalar_div_sq": 1.5864245891571045,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.9942697286605835,
+              "signed": 0.9942697286605835
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.6836767792701721,
+              "signed": -0.6836767792701721
+            },
+            {
+              "feature": "letter_A",
+              "abs": 0.2310773730278015,
+              "signed": 0.2310773730278015
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: The Cope rearrangement is a chemical reaction where a 1,5-diene molecule undergoes rearrangement, resulting in a change in the positions of its carbon-carbon double bonds. This rearrangement can be initiated by heat or light and is valuable for creati",
+      "responses": {
+        "codex": "The BuLi/H+ reaction of the benzyl prenyl ether gives the anionic `[2,3]`-Wittig rearrangement product: `Ph-CH(OH)-CH2-CH=C(CH3)2`, named **4-methyl-1-phenylpent-3-en-1-ol**.\n\nThe heated polycyclic diene undergoes a thermal Cope rearrangement, which shifts bonds without changing the overall hydrogen count, so the **hexahydro fluorene** product is selected rather than the tetrahydro alternative.\n\nA",
+        "claude": "Looking at this problem, I need to analyze two rearrangements.\n\n**Reaction A: PhCH\u2082-O-CH\u2082-CH=C(CH\u2083)\u2082 + BuLi, then H\u207a**\n\nThis is a [2,3]-Wittig / [1,2]-Wittig rearrangement on a benzyl prenyl ether:\n- BuLi deprotonates the benzylic position (most acidic): PhCH(\u207b)-O-CH\u2082-CH=CMe\u2082\n- A standard [2,3]-Wittig would form a bond at the \u03b3-carbon (CMe\u2082), but this requires forming a sterically hindered quatern",
+        "agent_chat": "Looking at this critique carefully, I'll work through both reactions again.\n\n## Reaction A: Re-examining the Wittig pathway\n\nLumeyon is right that I should justify [1,2] vs [2,3] more rigorously. Let me work through the [2,3]-Wittig product explicitly:\n\nPhCH(\u207b)\u2212O\u2212CH\u2082\u2212CH=CMe\u2082 undergoing [2,3]-Wittig:\n- New C\u2212C bond forms between the benzyl carbanion C and the **\u03b3-carbon** of the allyl (the CMe\u2082 ter"
+      }
+    },
+    {
+      "rank": 5,
+      "id": "recZt4x514UQNnsgy",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 24.90126364388948,
+      "sample_prob": 0.0067889089696109295,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 16.639602661132812,
+          "embedding_div_sq": 0.8129069805145264,
+          "scalar_div_sq": 15.826696395874023,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 3.9113125801086426,
+              "signed": 3.9113125801086426
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.48583269119262695,
+              "signed": 0.48583269119262695
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.29422736167907715,
+              "signed": -0.29422736167907715
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 5.490536212921143,
+          "embedding_div_sq": 0.7957918047904968,
+          "scalar_div_sq": 4.69474458694458,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 1.4176236391067505,
+              "signed": 1.4176236391067505
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 1.2058707475662231,
+              "signed": -1.2058707475662231
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.664210319519043,
+              "signed": -0.664210319519043
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 2.771122455596924,
+          "embedding_div_sq": 0.8153824806213379,
+          "scalar_div_sq": 1.955739974975586,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.2324838638305664,
+              "signed": 1.2324838638305664
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.4087402820587158,
+              "signed": -0.4087402820587158
+            },
+            {
+              "feature": "letter_A",
+              "abs": 0.3146127462387085,
+              "signed": 0.3146127462387085
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the starting material(s) required to synthesize methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate.\n\n(A) Cyclohexene and methyl 2,3-dimethylenehexanoate\n(B) methyl (2E,8E,10E)-tetradeca-2,8,10-trienoate\n(C) 1-vinylcyclohex-1",
+      "responses": {
+        "codex": "Retrosynthetically, the target is a fused cyclohexene/decalin product from an intramolecular Diels-Alder reaction.\n\nThe remaining alkene in the product comes from the diene\u2019s internal double bond, while the ester-bearing alkene is the dienophile. In choice B, methyl `(2E,8E,10E)-tetradeca-2,8,10-trienoate` has:\n\n- an electron-poor dienophile at C2-C3 next to the ester\n- a conjugated diene at C8-C1",
+        "claude": "Looking at the target: methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate is a *cis*- or *trans*-fused decalin with:\n- One double bond at C3\u2013C4 (the only unsaturated positions)\n- A methyl ester at C1\n- A propyl group at C2\n\nThis is a classic **intramolecular Diels\u2013Alder (IMDA)** product.\n\n**Disconnection (retro-IMDA):**\n- The C3=C4 double bond is the central bond of the diene.\n- ",
+        "agent_chat": "The peer critique is correct on both points:\n\n1. **Re: option A** \u2014 My rejection was poorly worded. Cyclohexene *can* serve as a dienophile, and methyl 2,3-dimethylenehexanoate is a legitimate diene (an exocyclic/cross-conjugated diene with an ester). The real reason A fails is regiochemical: a Diels-Alder between this diene and cyclohexene would put the COOMe and propyl substituents on the carbon"
+      }
+    },
+    {
+      "rank": 6,
+      "id": "recf6ayQmL1SxKbvW",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "total_divergence_sq": 58.34921331148712,
+      "sample_prob": 0.015907928347587585,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 41.9908332824707,
+          "embedding_div_sq": 0.8335800170898438,
+          "scalar_div_sq": 41.15725326538086,
+          "top_scalar_features": [
+            {
+              "feature": "n_questions",
+              "abs": 5.0869598388671875,
+              "signed": 5.0869598388671875
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 2.8400683403015137,
+              "signed": 2.8400683403015137
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.8801219463348389,
+              "signed": -1.8801219463348389
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 9.89067268371582,
+          "embedding_div_sq": 1.0114212036132812,
+          "scalar_div_sq": 8.879250526428223,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.216869592666626,
+              "signed": 2.216869592666626
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.7193468809127808,
+              "signed": 1.7193468809127808
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.9451674222946167,
+              "signed": 0.9451674222946167
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 6.46770715713501,
+          "embedding_div_sq": 0.9083737134933472,
+          "scalar_div_sq": 5.559333324432373,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.622684359550476,
+              "signed": 1.622684359550476
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.1013851165771484,
+              "signed": -1.1013851165771484
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.777992844581604,
+              "signed": -0.777992844581604
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: Imagine a situation where a novel natural molecule, Xantheraquin, is discovered and is being investigated for in silico testing against a bacterial pathogen that is multidrug resistant. Preliminary studies indicate that Xantheraquin has multiple chiral ",
+      "responses": {
+        "codex": "Xantheraquin\u2019s docking results could vary greatly depending on stereochemistry and tautomeric state. The most important pre-docking step is therefore ligand preparation: enumerate relevant chiral and tautomeric forms, then prioritize the biologically plausible ones using physicochemical criteria such as pH-dependent stability, charge state, and likely binding-compatible geometry.\n\nA is more about ",
+        "claude": "Looking at this question, the key challenge is that Xantheraquin has multiple chiral centers and tautomeric forms, which means there are many possible 3D structures to dock.\n\n**Analysis of options:**\n\n- **(A)** ADME/PK studies are typically performed after initial docking hits are identified, not before docking. This addresses a different stage of drug discovery.\n\n- **(B)** Directly addresses the ",
+        "agent_chat": "The peer critique accepts my answer (B) but suggests refining the reasoning about D. Let me reconsider:\n\n**Step 1: What does the question actually ask?**\nThe MOST crucial step BEFORE in silico docking, given multiple chiral centers and tautomeric forms.\n\n**Step 2: Evaluate each option as pre-docking ligand preparation:**\n- **(A)** ADME/MD simulations \u2014 relevant later in the pipeline, doesn't addre"
+      }
+    },
+    {
+      "rank": 7,
+      "id": "recyPffUDqC2k7ZZO",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "total_divergence_sq": 95.33213778106528,
+      "sample_prob": 0.025990698486566544,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 90.71936798095703,
+          "embedding_div_sq": 0.986713171005249,
+          "scalar_div_sq": 89.732666015625,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 9.396367073059082,
+              "signed": 9.396367073059082
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.5983341932296753,
+              "signed": 0.5983341932296753
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.5476317405700684,
+              "signed": 0.5476317405700684
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 2.631495475769043,
+          "embedding_div_sq": 0.9372378587722778,
+          "scalar_div_sq": 1.6942574977874756,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.8917321562767029,
+              "signed": -0.8917321562767029
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.6792401671409607,
+              "signed": 0.6792401671409607
+            },
+            {
+              "feature": "letter_D",
+              "abs": 0.4256943464279175,
+              "signed": -0.4256943464279175
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.9812586307525635,
+          "embedding_div_sq": 0.9778503775596619,
+          "scalar_div_sq": 1.0034081935882568,
+          "top_scalar_features": [
+            {
+              "feature": "letter_D",
+              "abs": 0.5630587339401245,
+              "signed": -0.5630587339401245
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.5350160002708435,
+              "signed": 0.5350160002708435
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.34525659680366516,
+              "signed": -0.34525659680366516
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Imagine an operator $\\vec{P}$ of a system have components $P_x, P_y$ and $P_z$. The matrix form of the  operator $P_x$ has components in the first row as $(0, \\hbar/\\sqrt{2}, 0)$, that in the second row as $(\\hbar/\\sqrt{2}, 0, \\hbar/\\sqrt{2})$ and that ",
+      "responses": {
+        "codex": "In the given normalized state,\n\\[\n|\\psi\\rangle=\\begin{pmatrix}-1/2\\\\ 1/\\sqrt2\\\\ -1/2\\end{pmatrix}\n\\]\nand\n\\[\nP_z=\\begin{pmatrix}\\hbar&0&0\\\\0&0&0\\\\0&0&-\\hbar\\end{pmatrix}.\n\\]\n\n\\[\n\\langle P_z\\rangle=\\frac14\\hbar+\\frac14(-\\hbar)=0\n\\]\n\nAlso,\n\\[\nP_z^2=\\begin{pmatrix}\\hbar^2&0&0\\\\0&0&0\\\\0&0&\\hbar^2\\end{pmatrix}\n\\]\nso\n\\[\n\\langle P_z^2\\rangle=\\frac14\\hbar^2+\\frac14\\hbar^2=\\frac{\\hbar^2}{2}.\n\\]\n\nTherefore,\n",
+        "claude": "State: \u03c8 = (-1/2, 1/\u221a2, -1/2), with |c\u2081|\u00b2 = 1/4, |c\u2082|\u00b2 = 1/2, |c\u2083|\u00b2 = 1/4.\n\nP_z is diagonal: eigenvalues \u210f, 0, -\u210f.\n\n\u27e8P_z\u27e9 = (1/4)(\u210f) + (1/2)(0) + (1/4)(-\u210f) = 0\n\n\u27e8P_z\u00b2\u27e9 = (1/4)(\u210f\u00b2) + 0 + (1/4)(\u210f\u00b2) = \u210f\u00b2/2\n\n\u0394P_z = \u221a(\u27e8P_z\u00b2\u27e9 - \u27e8P_z\u27e9\u00b2) = \u221a(\u210f\u00b2/2) = \u210f/\u221a2\n\nAnswer: D",
+        "agent_chat": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar) = 1/4$\n- $P(0) = 1/2$\n- $P(-\\hbar) = 1/4$\n\n$\\langle P_z \\rangle = (1/4)(\\hbar) + (1/2)(0) + (1/4)(-\\hbar) = 0$\n\n$\\langle P_z^2 \\rangle = (1/4)(\\hbar^2) + (1/2)(0) + (1/4)(\\hbar^2) = \\hbar^2/2$\n\n$(\\D"
+      }
+    },
+    {
+      "rank": 8,
+      "id": "recNuT2oSnO86bxOx",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 4.10121345485237,
+      "sample_prob": 0.0011181269073858857,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 1.563538908958435,
+          "embedding_div_sq": 1.002217173576355,
+          "scalar_div_sq": 0.5613217949867249,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.6560704708099365,
+              "signed": -0.6560704708099365
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.26454195380210876,
+              "signed": -0.26454195380210876
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.209949791431427,
+              "signed": 0.209949791431427
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.2791615724563599,
+          "embedding_div_sq": 0.9950125217437744,
+          "scalar_div_sq": 0.28414905071258545,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.30916106700897217,
+              "signed": -0.30916106700897217
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.29479503631591797,
+              "signed": -0.29479503631591797
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.24893707036972046,
+              "signed": -0.24893707036972046
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.2585134506225586,
+          "embedding_div_sq": 0.9933247566223145,
+          "scalar_div_sq": 0.26518872380256653,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.42143529653549194,
+              "signed": -0.42143529653549194
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.16290634870529175,
+              "signed": -0.16290634870529175
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.1187337338924408,
+              "signed": 0.1187337338924408
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: benzene is treated with HNO3 and H2SO4, forming product 1.\nproduct 1 is treated with Br2 and iron powder, forming product 2.\nproduct 2 is stirred with Pd/C under a hydrogen atmosphere, forming product 3.\nProduct 3 is treated with NaNO2 and HBF4, formi",
+      "responses": {
+        "codex": "Nitration gives nitrobenzene. Bromination of nitrobenzene occurs meta to the nitro group, giving 3-bromonitrobenzene. Hydrogenation reduces `NO2` to `NH2`, giving 3-bromoaniline.\n\n`NaNO2/HBF4` converts the aniline into the diazonium tetrafluoroborate. Heating forms an aryl radical/cation equivalent that couples with anisole, which directs electrophilic substitution mainly para to methoxy. Final pr",
+        "claude": "Step 1: Benzene + HNO3/H2SO4 \u2192 **nitrobenzene** (product 1).\n\nStep 2: Nitrobenzene + Br2/Fe. The NO2 group is a meta-director, so bromine goes meta \u2192 **1-bromo-3-nitrobenzene** (product 2).\n\nStep 3: Pd/C, H2 reduces NO2 to NH2 \u2192 **3-bromoaniline** (product 3). (Aryl bromides aren't cleaved under mild Pd/C hydrogenation.)\n\nStep 4: NaNO2 + HBF4 diazotizes the amine \u2192 **3-bromobenzenediazonium tetraf",
+        "agent_chat": "The peer agrees with my answer (B) and only flags wording ambiguity at step 5. Reviewing the synthesis:\n\n1. Benzene \u2192 nitrobenzene\n2. \u2192 3-bromonitrobenzene (meta-direction by NO2)\n3. \u2192 3-bromoaniline (NO2 reduced to NH2; C-Br survives Pd/C since it's an aryl bromide and conditions aren't forcing)\n4. \u2192 3-bromobenzenediazonium tetrafluoroborate\n5. Heating an aryldiazonium salt in the presence of an "
+      }
+    },
+    {
+      "rank": 9,
+      "id": "recb4cGsC6BJUCU3V",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 20.519757078444854,
+      "sample_prob": 0.005594365298748016,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 16.773143768310547,
+          "embedding_div_sq": 0.9374557137489319,
+          "scalar_div_sq": 15.835686683654785,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 3.95424222946167,
+              "signed": 3.95424222946167
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.34278348088264465,
+              "signed": -0.34278348088264465
+            },
+            {
+              "feature": "letter_D",
+              "abs": 0.1488027572631836,
+              "signed": -0.1488027572631836
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 2.5640227794647217,
+          "embedding_div_sq": 0.9490548372268677,
+          "scalar_div_sq": 1.614967942237854,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 0.9526673555374146,
+              "signed": -0.9526673555374146
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.5599033236503601,
+              "signed": -0.5599033236503601
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.4822532534599304,
+              "signed": -0.4822532534599304
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 1.1825934648513794,
+          "embedding_div_sq": 0.9407507181167603,
+          "scalar_div_sq": 0.2418428361415863,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.32917216420173645,
+              "signed": -0.32917216420173645
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.24114331603050232,
+              "signed": 0.24114331603050232
+            },
+            {
+              "feature": "letter_A",
+              "abs": 0.1688593626022339,
+              "signed": 0.1688593626022339
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Compound A (C3H6) undergoes bromination in the presence of carbon tetrachloride to form compound B. When compound B reacts with alcoholic KOH, it forms compound C. Passing compound C through a red-hot iron tube produces compound D. Compound D reacts w",
+      "responses": {
+        "codex": "Compound `A` is propene, leading to propyne `C`, then trimerization gives mesitylene `D`. Mesitylene has equivalent aromatic H atoms and equivalent methyl groups, so its `1H NMR` shows two singlets. The sequence eventually gives a substituted phenol `H`, which gives a colored ferric chloride test. The incorrect statement is that `H` gives a **yellow** color with ferric chloride; phenols typically ",
+        "claude": "Tracing the sequence:\n- **A** = propene (C\u2083H\u2086)\n- **B** = 1,2-dibromopropane (Br\u2082/CCl\u2084 addition)\n- **C** = propyne (double dehydrohalogenation by alc. KOH)\n- **D** = mesitylene / 1,3,5-trimethylbenzene (cyclotrimerization over red-hot Fe)\n- **E** = nitromesitylene (HNO\u2083/H\u2082SO\u2084)\n- **F** = mesidine / 2,4,6-trimethylaniline (Fe/HCl reduction)\n- **G** = diazonium salt (HNO\u2082)\n- **H** = 2,4,6-trimethylphe",
+        "agent_chat": "The peer reviewer endorses my answer and only refines the nuance about FeCl\u2083 colors. My reasoning stands:\n\n- A = propene \u2192 B = 1,2-dibromopropane \u2192 C = propyne \u2192 D = mesitylene \u2192 E = nitromesitylene \u2192 F = mesidine \u2192 G = diazonium salt \u2192 H = mesitol\n- (A) Aromatic amines are dye intermediates \u2014 correct\n- (B) Mesitylene shows 2 singlets (9H methyl + 3H aromatic) \u2014 correct\n- (C) Propyne is a flammabl"
+      }
+    },
+    {
+      "rank": 10,
+      "id": "recZbxrocrxh9YENH",
+      "domain": "Chemistry",
+      "subdomain": "Chemistry (general)",
+      "total_divergence_sq": 45.786154598210715,
+      "sample_prob": 0.012482821941375732,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 28.102378845214844,
+          "embedding_div_sq": 1.026576042175293,
+          "scalar_div_sq": 27.0757999420166,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 3.5438008308410645,
+              "signed": 3.5438008308410645
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 3.283350944519043,
+              "signed": 3.283350944519043
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 1.1399157047271729,
+              "signed": -1.1399157047271729
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 9.04018783569336,
+          "embedding_div_sq": 1.035094976425171,
+          "scalar_div_sq": 8.00509262084961,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.4798295497894287,
+              "signed": 2.4798295497894287
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.9121754169464111,
+              "signed": 0.9121754169464111
+            },
+            {
+              "feature": "letter_C",
+              "abs": 0.7509369850158691,
+              "signed": 0.7509369850158691
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 8.64358901977539,
+          "embedding_div_sq": 1.0232845544815063,
+          "scalar_div_sq": 7.620305061340332,
+          "top_scalar_features": [
+            {
+              "feature": "letter_B",
+              "abs": 1.5017859935760498,
+              "signed": 1.5017859935760498
+            },
+            {
+              "feature": "letter_C",
+              "abs": 1.2579033374786377,
+              "signed": -1.2579033374786377
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.112587809562683,
+              "signed": -1.112587809562683
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: Calculate the enthalpy of formation of (CH3)2C=CH-CH2-CH(CH3)-CH2-CH=C(CH3)2. Given,\nEnthalpy of atomization of carbon = 1000 kJ/mol.\nBond energy of H-H = 100 kJ/mol\nBond energy of C-C = 200 kJ/mol\nBond energy of C=C = 300 kJ/mol\nBond energy of C-H ",
+      "responses": {
+        "codex": "Molecule formula: `C12H22`\n\nFormation from elements:\n`12 C(s) + 11 H2(g) -> C12H22`\n\nEnergy required to atomize elements:\n`12(1000) + 11(100) = 13100 kJ/mol`\n\nBonds in molecule:\n- C-H: 22 bonds \u2192 `22(400) = 8800`\n- C-C single: 9 bonds \u2192 `9(200) = 1800`\n- C=C double: 2 bonds \u2192 `2(300) = 600`\n\nEnergy released forming bonds:\n`8800 + 1800 + 600 = 11200 kJ/mol`\n\nSo,\n`\u0394Hf = 13100 - 11200 = 1900 kJ/mol`\n",
+        "claude": "Looking at this problem, I need to find \u0394H_f for C12H22 (12 C, 22 H).\n\n**Counting atoms:**\n- Main chain: 7 carbons (C=C-C-C-C-C=C)\n- 5 methyl branches: 5 carbons\n- Total: 12 C, 22 H \u2192 C\u2081\u2082H\u2082\u2082\n\n**Counting bonds in the product:**\n- C=C bonds: 2\n- C-C single bonds: 4 (main chain) + 5 (to methyls) = 9\n- C-H bonds: 5(3) + 1 + 2 + 1 + 2 + 1 = 22\n\n**Formation reaction:** 12 C(s) + 11 H\u2082(g) \u2192 C\u2081\u2082H\u2082\u2082\n\n**Ene",
+        "agent_chat": "Looking at this again with the peer's critique in mind:\n\n**My calculation gives: \u0394Hf = 1900 kJ/mol** (the arithmetic is confirmed correct by the peer).\n\n**Evaluating the options:**\n- (A) 67.4 kJ/mol \u2014 doesn't match\n- (B) 11.44 kJ/g \u2014 only matches after an unsolicited per-gram conversion\n- (C) 1900 kJ/g \u2014 matches the calculated **number** exactly, with a unit label that appears to be a typo (should"
+      }
+    },
+    {
+      "rank": 11,
+      "id": "recHVUd2DkoKfedJZ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 11.11031745632522,
+      "sample_prob": 0.0030290409922599792,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 6.648077011108398,
+          "embedding_div_sq": 0.9917919635772705,
+          "scalar_div_sq": 5.656284809112549,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.8067021369934082,
+              "signed": -1.8067021369934082
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.886504590511322,
+              "signed": -0.886504590511322
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.8706099987030029,
+              "signed": -0.8706099987030029
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 2.6356396675109863,
+          "embedding_div_sq": 0.9862433075904846,
+          "scalar_div_sq": 1.6493964195251465,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 1.0644245147705078,
+              "signed": -1.0644245147705078
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.4923025369644165,
+              "signed": -0.4923025369644165
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.3665216863155365,
+              "signed": 0.3665216863155365
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.8266021013259888,
+          "embedding_div_sq": 0.9831960797309875,
+          "scalar_div_sq": 0.8434059619903564,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.503918468952179,
+              "signed": -0.503918468952179
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.396400511264801,
+              "signed": -0.396400511264801
+            },
+            {
+              "feature": "letter_A",
+              "abs": 0.3669297695159912,
+              "signed": 0.3669297695159912
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Enamine reactions include nucleophilic substitutions, electrophilic additions, and the condensation of secondary amines with carbonyl compounds to generate enamines. Enamine reactions are useful techniques for creating complex compounds with specified",
+      "responses": {
+        "codex": "Deprotonation with `LDA` in `DME` forms the enamine, ethyl iodide alkylates the alpha carbon, and acidic hydrolysis regenerates the ketone. Ethylation gives the symmetrical ketone `heptan-4-one`.\n\nAnswer: A",
+        "claude": "Looking at this problem:\n\n**Starting material**: (E)-N-methyl-N-(pentan-2-ylidene)ethanaminium \u2014 an iminium salt derived from pentan-2-one (CH\u2083-CO-CH\u2082CH\u2082CH\u2083) and N-methylethanamine.\n\n**Mechanism (Stork-type alkylation via metalated enamine)**:\n1. **LDA in DME**: LDA (bulky base) deprotonates at the **less hindered \u03b1-carbon** (the methyl side, kinetic deprotonation) to generate the aza-enolate.\n2. ",
+        "agent_chat": "The critique confirms my reasoning and endorses choice A. Both my analysis and the peer's review agree:\n\n1. **Mechanism**: LDA deprotonates the iminium/enaminium to form the enamine, which is \u03b1-alkylated by ethyl iodide, then hydrolyzed by H\u2083O\u207a to regenerate the ketone.\n\n2. **Product tracking**: Ethylation at the less-hindered methyl side of pentan-2-one (CH\u2083\u2013CO\u2013CH\u2082CH\u2082CH\u2083) extends C1 to a propyl c"
+      }
+    },
+    {
+      "rank": 12,
+      "id": "recdya6FuYraBU5Rh",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "total_divergence_sq": 8.343097415491684,
+      "sample_prob": 0.0022746045142412186,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 4.36234712600708,
+          "embedding_div_sq": 0.9906788468360901,
+          "scalar_div_sq": 3.3716683387756348,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 1.279751181602478,
+              "signed": -1.279751181602478
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.8164033889770508,
+              "signed": -0.8164033889770508
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.765011727809906,
+              "signed": -0.765011727809906
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 2.5851449966430664,
+          "embedding_div_sq": 0.9750138521194458,
+          "scalar_div_sq": 1.6101311445236206,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.811441957950592,
+              "signed": -0.811441957950592
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.6041955947875977,
+              "signed": -0.6041955947875977
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.5576502084732056,
+              "signed": -0.5576502084732056
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.3956044912338257,
+          "embedding_div_sq": 0.9892897605895996,
+          "scalar_div_sq": 0.4063149094581604,
+          "top_scalar_features": [
+            {
+              "feature": "letter_A",
+              "abs": 0.3841414451599121,
+              "signed": 0.3841414451599121
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.28567928075790405,
+              "signed": -0.28567928075790405
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.25192806124687195,
+              "signed": 0.25192806124687195
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Astronomers are searching for exoplanets around two stars with exactly the same masses. Using the RV method, they detected one planet around each star, both with masses similar to that of Neptune. The stars themselves have masses similar to that of our ",
+      "responses": {
+        "codex": "For the same spectral line, the Doppler wavelength shift is proportional to the star\u2019s radial velocity amplitude:\n\n\\[\n\\Delta \\lambda \\propto K\n\\]\n\nSo:\n\n\\[\n\\frac{K_2}{K_1}=\\frac{7}{5}=1.4\n\\]\n\nFor circular RV orbits with the same stellar masses and similar planet masses:\n\n\\[\nK \\propto P^{-1/3}\n\\]\n\nTherefore:\n\n\\[\n\\frac{P_2}{P_1}=\\left(\\frac{K_1}{K_2}\\right)^3\n=\\left(\\frac{5}{7}\\right)^3\n\\approx 0.36\n",
+        "claude": "Using the RV method for circular orbits with equal star and planet masses:\n\nK \u221d \u0394\u03bb/\u03bb, and K \u221d P^(-1/3) (since K = (2\u03c0G M_p / (P M_star^(2/3)))^... with M_p, M_star fixed)\n\nSo K\u2081/K\u2082 = (P\u2082/P\u2081)^(1/3)\nP\u2082/P\u2081 = (K\u2081/K\u2082)\u00b3 = (5/7)\u00b3 = 125/343 \u2248 0.364\n\nAnswer: A",
+        "agent_chat": "The peer endorses my answer with a valid caveat about the problem's under-specification (Neptune-similar masses, sin i unstated). Both are standard assumptions for this type of textbook problem.\n\nThe physics: For circular orbits, RV semi-amplitude K = (2\u03c0G/P)^(1/3) \u00b7 M_p sin i / M_star^(2/3).\n\nWith identical stellar masses and assuming identical M_p sin i:\n- K \u221d P^(-1/3)\n- P \u221d K^(-3)\n- \u0394\u03bb \u221d K (sam"
+      }
+    },
+    {
+      "rank": 13,
+      "id": "recnGEpF1srQpaqWq",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 189.93113163197359,
+      "sample_prob": 0.05178151652216911,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 181.67575073242188,
+          "embedding_div_sq": 0.894771933555603,
+          "scalar_div_sq": 180.78097534179688,
+          "top_scalar_features": [
+            {
+              "feature": "n_codeblocks",
+              "abs": 13.375996589660645,
+              "signed": 13.375996589660645
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.0226274728775024,
+              "signed": 1.0226274728775024
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.609793484210968,
+              "signed": -0.609793484210968
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 4.912070274353027,
+          "embedding_div_sq": 0.9003556370735168,
+          "scalar_div_sq": 4.011714458465576,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.9105254411697388,
+              "signed": -1.9105254411697388
+            },
+            {
+              "feature": "letter_D",
+              "abs": 0.4128948450088501,
+              "signed": -0.4128948450088501
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.32879146933555603,
+              "signed": -0.32879146933555603
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 3.3433432579040527,
+          "embedding_div_sq": 0.8859823346138,
+          "scalar_div_sq": 2.4573612213134766,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.1253710985183716,
+              "signed": -1.1253710985183716
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.6446202397346497,
+              "signed": -0.6446202397346497
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.5203849077224731,
+              "signed": -0.5203849077224731
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Which of the following molecules is formed when 5-butylnona-2,6-diene is heated?\n\n(A) 5-ethyl-4-methyldeca-2,6-diene\n(B) 5-ethyl-4-methyldeca-2,6-diene\n(C) 5-ethylundeca-2,6-diene\n(D) 4-ethyl-3-methyldeca-1,5-diene",
+      "responses": {
+        "codex": "Heating a 1,5-diene promotes a **Cope rearrangement**.  \nFor 5-butylnona-2,6-diene, the [3,3]-sigmatropic shift gives the rearranged diene skeleton corresponding to **4-ethyl-3-methyldeca-1,5-diene**.\n\nAnswer: D",
+        "claude": "Looking at this problem, I need to recognize that heating a 1,5-diene triggers a **Cope rearrangement** ([3,3]-sigmatropic shift).\n\n## Step 1: Draw 5-butylnona-2,6-diene\n\n```\nCH\u2083-CH=CH-CH\u2082-CH(C\u2084H\u2089)-CH=CH-CH\u2082-CH\u2083\n 1    2   3   4    5      6   7   8   9\n```\nwhere C\u2084H\u2089 = -CH\u2082CH\u2082CH\u2082CH\u2083 (butyl on C5)\n\n## Step 2: Identify the 1,5-hexadiene system\n\nThe Cope-active framework uses C2=C3 and C6=C7, connecte",
+        "agent_chat": "The critique endorses my reasoning, and re-verifying confirms the analysis is correct.\n\n**Verification:**\n- Starting material has a 1,5-diene embedded (C2=C3\u2013C4\u2013C5\u2013C6=C7) \u2192 Cope rearrangement applies\n- Bond changes: break \u03c3(C4\u2013C5), form \u03c3(C2\u2013C7), shift \u03c0 bonds to C3=C4 and C5=C6\n- Resulting structure: CH\u2082=CH\u2013CH(CH\u2083)\u2013CH(C\u2082H\u2085)\u2013CH=CH\u2013CH\u2082CH\u2082CH\u2082CH\u2083\n- Longest chain through both double bonds: 10 carbons "
+      }
+    },
+    {
+      "rank": 14,
+      "id": "reczUoM8JsxU6pYxr",
+      "domain": "Physics",
+      "subdomain": "Astrophysics",
+      "total_divergence_sq": 29.705200695389976,
+      "sample_prob": 0.008098620921373367,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 14.134875297546387,
+          "embedding_div_sq": 1.0589957237243652,
+          "scalar_div_sq": 13.075879096984863,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 3.505777359008789,
+              "signed": 3.505777359008789
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.598408579826355,
+              "signed": 0.598408579826355
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.5183074474334717,
+              "signed": -0.5183074474334717
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 8.934703826904297,
+          "embedding_div_sq": 1.049600601196289,
+          "scalar_div_sq": 7.885103702545166,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.648493766784668,
+              "signed": 2.648493766784668
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.5766581892967224,
+              "signed": 0.5766581892967224
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.5183074474334717,
+              "signed": -0.5183074474334717
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 6.635621070861816,
+          "embedding_div_sq": 1.0064818859100342,
+          "scalar_div_sq": 5.629138469696045,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 2.2213504314422607,
+              "signed": 2.2213504314422607
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.6503167748451233,
+              "signed": -0.6503167748451233
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.4396311342716217,
+              "signed": -0.4396311342716217
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Observations of a quasar across the electromagnetic spectrum are being carried out. Focusing on the near infrared and optical spectrum, there is a peak at wavelength of about 790 nm, and at shorter wavelengths < 790 nm the flux drops significantly.\n\nIf we li",
+      "responses": {
+        "codex": "The sharp drop shortward of 790 nm is interpreted as the redshifted Lyman-alpha break.\n\nRest wavelength of Lyman-alpha: 121.6 nm\n\n\\[\nz = \\frac{790}{121.6} - 1 \\approx 5.5\n\\]\n\nFor a flat Lambda-CDM universe with \\(H_0 = 70\\), \\(\\Omega_m=0.3\\), \\(\\Omega_\\Lambda=0.7\\), the comoving distance to \\(z \\approx 5.5\\) is about:\n\n\\[\nD_C \\approx 8 \\text{ Gpc}\n\\]\n\nAnswer: D",
+        "claude": "Looking at this problem, I need to identify what spectral feature gives a peak at 790 nm with flux dropping at shorter wavelengths.\n\n**Identifying the spectral feature:**\nThe signature \"peak with drop below\" is characteristic of the Lyman-alpha emission line of a quasar with the Lyman-alpha forest/break suppressing flux at shorter wavelengths. Rest-frame Lyman-\u03b1 is at 121.6 nm.\n\n**Calculating reds",
+        "agent_chat": "The critique endorses my answer and confirms the reasoning. Let me verify the key steps:\n\n**Spectral identification:** A peak at 790 nm with sharp flux suppression at shorter wavelengths is the canonical Lyman-\u03b1 emission line plus Lyman-\u03b1 forest/Gunn-Peterson absorption signature. Rest wavelength 121.6 nm gives:\n$$z = 790/121.6 - 1 \\approx 5.5$$\n\n**Comoving distance:** With $c/H_0 \\approx 4286$ Mp"
+      }
+    },
+    {
+      "rank": 15,
+      "id": "recrHBEJJoDTV05JR",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 4.121756590148152,
+      "sample_prob": 0.001123727415688336,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.4810452461242676,
+          "embedding_div_sq": 0.9693849086761475,
+          "scalar_div_sq": 0.5116602182388306,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.44223377108573914,
+              "signed": -0.44223377108573914
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.3570207953453064,
+              "signed": -0.3570207953453064
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.3135588765144348,
+              "signed": -0.3135588765144348
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 1.3954401016235352,
+          "embedding_div_sq": 1.000138282775879,
+          "scalar_div_sq": 0.395301878452301,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.5430976748466492,
+              "signed": -0.5430976748466492
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.2820945382118225,
+              "signed": -0.2820945382118225
+            },
+            {
+              "feature": "letter_D",
+              "abs": 0.06821489334106445,
+              "signed": -0.06821489334106445
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.2452715635299683,
+          "embedding_div_sq": 0.9755338430404663,
+          "scalar_div_sq": 0.2697376310825348,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.4024667739868164,
+              "signed": -0.4024667739868164
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.17580179870128632,
+              "signed": 0.17580179870128632
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.16787564754486084,
+              "signed": -0.16787564754486084
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Substance X, known for incorporating a heavier isotope of one of its constituent elements, reacts violently with liquid Y with the release of a gas W whose molecule contains the same number of neutrons and protons, and a precipitate G forms, which, wh",
+      "responses": {
+        "codex": "Substance X is lithium aluminium deuteride, `LiAlD4`, the deuterated analog of `LiAlH4`.\n\nIt reacts with heavy water:\n\n`LiAlD4 + 4D2O -> LiOD + Al(OD)3 + 4D2`\n\n`D2` has 2 protons and 2 neutrons. Heating `Al(OD)3` releases `D2O`, whose melting point is about `276.97 K`.\n\nFor `LiAlD4`, the lightest element present is deuterium, mass `2`, with 4 atoms: `4 x 2 = 8`.\n\nThe heaviest element is aluminium,",
+        "claude": "Looking at this problem, I need to identify Substance X.\n\n**Identifying X:**\n- Used as a reagent in organic chemistry with a close analog also used as reagent \u2192 suggests LiAlH\u2084/LiAlD\u2084 family\n- Contains heavier isotope \u2192 **LiAlD\u2084** (lithium aluminum deuteride), with close analog LiAlH\u2084\n\n**Verifying with reactions:**\n- Liquid Y = D\u2082O (heavy water): LiAlD\u2084 + 4 D\u2082O \u2192 LiOD + Al(OD)\u2083 + 4 D\u2082\u2191\n- Gas W = D",
+        "agent_chat": "The peer reviewer agrees with my answer and raises only minor caveats that don't change the conclusion.\n\n**Verification:**\n- X = LiAlD\u2084 (deuterated lithium aluminum hydride; close analog LiAlH\u2084 is the famous reagent)\n- Y = D\u2082O (must be heavy water for self-consistency: violent reaction \u2192 D\u2082 gas with equal n=p, and B = D\u2082O with mp \u2248 277 K matches)\n- W = D\u2082 (2 protons, 2 neutrons \u2713)\n- G = Al(OD)\u2083, w"
+      }
+    },
+    {
+      "rank": 16,
+      "id": "recEmTBhx2hgw6tPQ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 7.904988477541565,
+      "sample_prob": 0.0021551616955548525,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 4.616662979125977,
+          "embedding_div_sq": 0.813112199306488,
+          "scalar_div_sq": 3.8035504817962646,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 1.1090764999389648,
+              "signed": 1.1090764999389648
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.9183622598648071,
+              "signed": -0.9183622598648071
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.8971759080886841,
+              "signed": 0.8971759080886841
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 2.0466294288635254,
+          "embedding_div_sq": 0.7877944111824036,
+          "scalar_div_sq": 1.2588350772857666,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.728195309638977,
+              "signed": -0.728195309638977
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.43847930431365967,
+              "signed": -0.43847930431365967
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.41933560371398926,
+              "signed": -0.41933560371398926
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 1.2416967153549194,
+          "embedding_div_sq": 0.7983991503715515,
+          "scalar_div_sq": 0.44329753518104553,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.3420008420944214,
+              "signed": -0.3420008420944214
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.3343244194984436,
+              "signed": -0.3343244194984436
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.2934856712818146,
+              "signed": -0.2934856712818146
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
+      "responses": {
+        "codex": "2,5-Dimethylthiophene is the diene, so the sulfur becomes the bridge in the bicyclic Diels-Alder adduct. That rules out the epoxy/benzo[c]thiophene options A and D.\n\nThe exo adduct has the anhydride moiety oriented away from the sulfur bridge, corresponding to the epithioisobenzofuran product with configuration `(3aR,4S,7R,7aS)`.\n\nAnswer: C",
+        "claude": "Looking at this [4+2] cycloaddition:\n\n**Identifying the diene and dienophile:**\n- 2,5-Dimethylthiophene = diene (contributes the **sulfur bridge**)\n- Furan-2,5-dione (maleic anhydride) = dienophile (contributes the anhydride/\"isobenzofuran-1,3-dione\" core)\n\n**Eliminating bridge type:**\nThe bridge atom comes from thiophene \u2192 must be **sulfur** \u2192 \"epithio\" prefix on an \"isobenzofuran-1,3-dione\" core",
+        "agent_chat": "Re-examining this with the peer's critique in mind, I need to actually walk through the CIP assignment rather than assert the pattern.\n\n## Re-analysis\n\n**Connectivity (still solid):** thiophene supplies the **epithio** bridge; maleic anhydride contributes the **isobenzofuran-1,3-dione** core. So the answer is B or C.\n\n**Critical priority issue at C3a (which I oversimplified):**\n\nAt C3a, comparing "
+      }
+    },
+    {
+      "rank": 17,
+      "id": "recKcjTwONILZqHAX",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "total_divergence_sq": 9.157746808479942,
+      "sample_prob": 0.002496704924851656,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 4.00475549697876,
+          "embedding_div_sq": 0.97463059425354,
+          "scalar_div_sq": 3.0301249027252197,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 1.6233640909194946,
+              "signed": 1.6233640909194946
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.4891026020050049,
+              "signed": -0.4891026020050049
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.2772328853607178,
+              "signed": 0.2772328853607178
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 3.1628220081329346,
+          "embedding_div_sq": 0.9534168243408203,
+          "scalar_div_sq": 2.209404706954956,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.412628173828125,
+              "signed": -1.412628173828125
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.3063024878501892,
+              "signed": -0.3063024878501892
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.30044785141944885,
+              "signed": -0.30044785141944885
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.9901701211929321,
+          "embedding_div_sq": 0.9808216094970703,
+          "scalar_div_sq": 1.0093483924865723,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 0.8266474008560181,
+              "signed": -0.8266474008560181
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.4271065592765808,
+              "signed": -0.4271065592765808
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.31294190883636475,
+              "signed": -0.31294190883636475
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
+      "responses": {
+        "codex": "In four-dimensional QFT, each loop typically contributes a loop-suppression factor\n\n\\[\n\\frac{1}{16\\pi^2}=\\frac{1}{(4\\pi)^2}.\n\\]\n\nThe note contains\n\n\\[\n\\frac{1}{(4\\pi)^6}.\n\\]\n\nSo\n\n\\[\n(4\\pi)^{-6} = \\left((4\\pi)^{-2}\\right)^3,\n\\]\n\nwhich corresponds to 3 loops.\n\nAnswer: D",
+        "claude": "Each loop integral in 4D spacetime contributes a factor of 1/(4\u03c0)\u00b2 after standard loop integration (from the d\u2074k/(2\u03c0)\u2074 measure combined with typical Feynman parameter integrals).\n\nGiven factor: 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]\u00b3\n\nSo the diagram has 3 loops.\n\nThe other elements are consistent: \u03b1\u00b3 g\u00b2 indicates coupling powers (vertices), \u221a2 and 8 are symmetry/combinatoric factors, and (Q/M)\u00b2 is a ratio of physica",
+        "agent_chat": "Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that each loop contributes a factor of 1/(4\u03c0)\u00b2. This comes from the angular part of the 4D momentum integration: \u222bd\u2074k/(2\u03c0)\u2074 yields factors involving 1/(16\u03c0\u00b2) = 1/(4\u03c0)\u00b2 after the angular integration.\n\nThe size estimate contains 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]"
+      }
+    },
+    {
+      "rank": 18,
+      "id": "reccOKzFNmyqeJ6ry",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 10.372082437882511,
+      "sample_prob": 0.002827773103490472,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 4.141510009765625,
+          "embedding_div_sq": 0.9211779236793518,
+          "scalar_div_sq": 3.2203316688537598,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 1.5367828607559204,
+              "signed": 1.5367828607559204
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.5118208527565002,
+              "signed": -0.5118208527565002
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.4302094578742981,
+              "signed": -0.4302094578742981
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 3.5157716274261475,
+          "embedding_div_sq": 0.9351083636283875,
+          "scalar_div_sq": 2.5806634426116943,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.9158636331558228,
+              "signed": -0.9158636331558228
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.726772129535675,
+              "signed": -0.726772129535675
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.7130579948425293,
+              "signed": -0.7130579948425293
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 2.714801073074341,
+          "embedding_div_sq": 0.9248700141906738,
+          "scalar_div_sq": 1.789931058883667,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 1.1720516681671143,
+              "signed": -1.1720516681671143
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.4602748155593872,
+              "signed": -0.4602748155593872
+            },
+            {
+              "feature": "letter_A",
+              "abs": 0.27182507514953613,
+              "signed": 0.27182507514953613
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: A student performed an acid-catalyzed reaction of 3-methylpyrrolidine with compound A, the final product of the reaction is 1-(cyclohexylidenemethyl)-3-methylpyrrolidine. Select the suitable reagent (A) and catalyst (B) for the reaction.\n3-methylpyrro",
+      "responses": {
+        "codex": "The product is an enamine formed by condensation of a secondary amine with an aldehyde. The `cyclohexylidenemethyl` group comes from cyclohexanecarbaldehyde, followed by iminium formation and alpha-deprotonation.\n\n`TsOH` is the suitable acid catalyst under heated solvent conditions for this dehydration/enamine-forming reaction.\n\nAnswer: A",
+        "claude": "The product 1-(cyclohexylidenemethyl)-3-methylpyrrolidine is an enamine: the pyrrolidine nitrogen is attached to =CH\u2013(cyclohexylidene), i.e., N\u2013CH=C(cyclohexane ring). This is the classic Stork enamine formed from a secondary amine + an aldehyde with loss of water.\n\n- The aldehyde must provide the =CH\u2013 carbon attached to a cyclohexylidene. That requires cyclohexanecarbaldehyde (C6H11\u2013CHO): condens",
+        "agent_chat": "The product 1-(cyclohexylidenemethyl)-3-methylpyrrolidine is an enamine with connectivity N\u2013CH=C(cyclohexylidene). This forms from a secondary amine condensing with an aldehyde bearing \u03b1-hydrogens.\n\nCyclohexanecarbaldehyde (C\u2086H\u2081\u2081\u2013CHO) has \u03b1-H on the ring carbon. Condensation with 3-methylpyrrolidine (secondary amine) followed by dehydration gives exactly the exocyclic enamine described. Vinylcyclo"
+      }
+    },
+    {
+      "rank": 19,
+      "id": "receYQxnUBvxPcvbQ",
+      "domain": "Physics",
+      "subdomain": "Astrophysics",
+      "total_divergence_sq": 14.003473006825118,
+      "sample_prob": 0.003817810909822583,
+      "per_agent_divergence": [
+        {
+          "agent": "codex",
+          "divergence_sq": 10.756573677062988,
+          "embedding_div_sq": 1.0035243034362793,
+          "scalar_div_sq": 9.75304889678955,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.9771549701690674,
+              "signed": 2.9771549701690674
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.7602543830871582,
+              "signed": -0.7602543830871582
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.41063088178634644,
+              "signed": -0.41063088178634644
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.830110788345337,
+          "embedding_div_sq": 1.0131309032440186,
+          "scalar_div_sq": 0.8169799447059631,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 0.5466154217720032,
+              "signed": -0.5466154217720032
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.37671124935150146,
+              "signed": -0.37671124935150146
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.3338772654533386,
+              "signed": -0.3338772654533386
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 1.4167900085449219,
+          "embedding_div_sq": 1.0155380964279175,
+          "scalar_div_sq": 0.4012519419193268,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.378845751285553,
+              "signed": -0.378845751285553
+            },
+            {
+              "feature": "letter_unknown",
+              "abs": 0.37671124935150146,
+              "signed": -0.37671124935150146
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.2059289813041687,
+              "signed": -0.2059289813041687
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Astronomers are currently observing a star with a radius equal to that of the Sun. One  hemisphere of the star is covered in dark spots with a filling factor of 20%. The star has an effective temperature (Teff) of 6000K, and the spots exhibit a temperature d",
+      "responses": {
+        "codex": "Spot temperature is `6000K - 1000K = 5000K`.\n\nSpot flux contrast, assuming blackbody bolometric flux:\n\n`1 - (5000/6000)^4 \u2248 1 - 0.482 \u2248 0.518`\n\nWith 20% of the visible hemisphere spotted, the brightness drop is:\n\n`0.20 \u00d7 0.518 \u2248 0.104`\n\nAn exoplanet transit depth is approximately:\n\n`(Rpl/Rstar)^2`\n\nSo:\n\n`Rpl/Rstar \u2248 sqrt(0.104) \u2248 0.32`\n\nAnswer: C",
+        "claude": "Looking at this problem:\n\n**Spot-induced amplitude:**\nWhen the spotted hemisphere faces us vs. the clean hemisphere:\n- \u0394F/F = f \u00b7 (1 \u2212 (T_spot/T_eff)\u2074)\n- f = 0.20, T_spot = 5000K, T_eff = 6000K\n- (5000/6000)\u2074 = (5/6)\u2074 = 625/1296 \u2248 0.4823\n- \u0394F/F = 0.20 \u00b7 (1 \u2212 0.4823) = 0.20 \u00b7 0.5177 \u2248 0.1035\n\n**Equivalent transit depth:**\nFor a transit: \u0394F/F = (R_pl/R_star)\u00b2\n- R_pl/R_star = \u221a0.1035 \u2248 0.322\n\nAnswer:",
+        "agent_chat": "Looking at this problem again with the critique in mind:\n\n**Spot-induced brightness amplitude:**\n- Unspotted hemisphere facing us: F_max \u221d T_eff\u2074 = 6000\u2074\n- Spotted hemisphere facing us: F_min \u221d 0.8\u00b7T_eff\u2074 + 0.2\u00b7T_spot\u2074\n\n**Amplitude:**\n\u0394F/F = 0.2 \u00d7 [1 \u2212 (5000/6000)\u2074]\n     = 0.2 \u00d7 [1 \u2212 0.4823]\n     \u2248 0.1035\n\n**Equivalent transit depth:**\n(R_pl/R_star)\u00b2 = 0.1035\nR_pl/R_star \u2248 0.322\n\nThe peer reviewer"
+      }
+    },
+    {
+      "rank": 20,
+      "id": "recOYsaYs6RmtlTDy",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "total_divergence_sq": 35.39716970481663,
+      "sample_prob": 0.009650438092648983,
+      "per_agent_divergence": [
+        {
+          "agent": "claude",
+          "divergence_sq": 24.31831932067871,
+          "embedding_div_sq": 0.9908463358879089,
+          "scalar_div_sq": 23.32747459411621,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 4.622905731201172,
+              "signed": 4.622905731201172
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 1.304145097732544,
+              "signed": -1.304145097732544
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.31357234716415405,
+              "signed": -0.31357234716415405
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 7.453681945800781,
+          "embedding_div_sq": 0.9694387316703796,
+          "scalar_div_sq": 6.484243392944336,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 1.8076149225234985,
+              "signed": 1.8076149225234985
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.3674192428588867,
+              "signed": 1.3674192428588867
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.6360600590705872,
+              "signed": -0.6360600590705872
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 3.625157117843628,
+          "embedding_div_sq": 1.0004667043685913,
+          "scalar_div_sq": 2.624690055847168,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.9872347116470337,
+              "signed": -0.9872347116470337
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.7530068755149841,
+              "signed": -0.7530068755149841
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.6512978672981262,
+              "signed": -0.6512978672981262
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Let there be a diatomic molecule, with elements X and Y, that can be modeled using the quantum rotation-vibration model (or non-rigid rotor model). If the molecule is in its fundamental state, what momentum should an absorbed photon have, in order for t",
+      "responses": {
+        "codex": "The first vibrational excitation has energy gap\n\n\\[\n\\Delta E \\approx \\hbar \\omega\n= (1.055\\times10^{-34})(4\\times10^{14})\n\\approx 4.22\\times10^{-20}\\text{ J}\n\\]\n\nPhoton momentum is\n\n\\[\np=\\frac{\\Delta E}{c}\n\\approx \\frac{4.22\\times10^{-20}}{3.0\\times10^8}\n\\approx 1.4\\times10^{-28}\\text{ N s}\n\\]\n\nSo the closest choice is A.\n\nAnswer: A",
+        "claude": "Looking at this problem:\n\n**Fundamental state**: v=0, J=0. Selection rules for rovibrational transitions: \u0394v=+1, \u0394J=\u00b11. From J=0, only \u0394J=+1 is allowed, so the lowest-energy next state is (v=1, J=1).\n\n**Energy of transition**:\n$$\\Delta E = \\hbar\\omega + \\frac{\\hbar^2}{2I}[J(J+1) - 0] = \\hbar\\omega + \\frac{\\hbar^2}{I}$$\n\n**Reduced mass**:\n$$\\mu = \\frac{20 \\cdot 2}{22} \\text{ amu} = 1.818 \\text{ amu",
+        "agent_chat": "The peer's critique raises a fair conceptual point, but the answer choices themselves resolve the ambiguity. The pure rotational transition gives ~3.1\u00d710\u207b\u00b3\u00b9 N\u00b7s, which is roughly 3 orders of magnitude smaller than any choice. Since none of the four options corresponds to a pure rotational transition, the question must intend a vibrational absorption (IR transition) where \u0394v = +1 is required, with "
+      }
+    }
+  ]
+}

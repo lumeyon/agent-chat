@@ -69,3 +69,67 @@
   - response: `"Looking at this critique, the peer raises legitimate concerns about rigor, but doesn't actually demonstrate that D is wrong. Let me reconsider the option-level "`
 - **recKcjTwONILZqHAX** [Physics/High-energy particle physics] score=3.53 top features: `embedding_total, n_certainty_words, n_latex, n_self_correction`
   - response: `'Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that e'`
+## Track C — multi-agent boundary scout (codex × claude × agent_chat)
+
+matrix shape [190, 1188], per-agent dim 396, k=5
+
+- **recJZ3QEfRKjYw9a7** [Chemistry/Organic Chemistry] total=6.5  → codex=3.2 claude=1.6 agent_chat=1.6
+    - codex: response_len(+1.38), n_latex(-0.53), n_hedge_words(-0.29)
+    - claude: response_len(+0.65), n_latex(-0.40), letter_unknown(+0.17)
+    - agent_chat: n_self_correction(-0.45), n_certainty_words(-0.35), response_len(-0.33)
+- **recVE8cUNHpHZIAvL** [Physics/Astrophysics] total=202.4  → claude=189.2 agent_chat=10.1 codex=3.1
+    - claude: n_questions(+12.89), n_hedge_words(+4.11), letter_unknown(-1.96)
+    - agent_chat: letter_unknown(-1.96), n_hedge_words(-1.62), n_self_correction(-1.04)
+    - codex: n_hedge_words(-1.05), letter_C(-0.61), response_len(+0.42)
+- **rec6sE2CRtD4drtHg** [Physics/High-energy particle physics] total=224.5  → codex=153.5 claude=59.0 agent_chat=11.9
+    - codex: n_self_correction(+11.78), n_latex(+2.68), letter_A(-1.95)
+    - claude: n_self_correction(+7.13), letter_A(-2.31), response_len(-0.78)
+    - agent_chat: letter_A(-2.24), n_hedge_words(+1.23), n_questions(-0.96)
+- **recUOePh79cp4T2Bg** [Chemistry/Organic Chemistry] total=23.4  → claude=13.4 agent_chat=7.6 codex=2.4
+    - claude: n_certainty_words(+3.39), n_self_correction(-0.59), n_hedge_words(-0.59)
+    - agent_chat: n_self_correction(-1.63), n_hedge_words(+1.22), n_certainty_words(-1.13)
+    - codex: n_latex(+0.99), n_hedge_words(-0.68), letter_A(+0.23)
+- **recZt4x514UQNnsgy** [Chemistry/Organic Chemistry] total=24.9  → claude=16.6 agent_chat=5.5 codex=2.8
+    - claude: n_certainty_words(+3.91), letter_unknown(+0.49), n_self_correction(-0.29)
+    - agent_chat: n_certainty_words(+1.42), n_self_correction(-1.21), n_questions(-0.66)
+    - codex: response_len(+1.23), n_hedge_words(-0.41), letter_A(+0.31)
+- **recf6ayQmL1SxKbvW** [Biology/Molecular Biology] total=58.3  → agent_chat=42.0 codex=9.9 claude=6.5
+    - agent_chat: n_questions(+5.09), n_self_correction(+2.84), n_hedge_words(-1.88)
+    - codex: n_hedge_words(+2.22), response_len(+1.72), n_latex(+0.95)
+    - claude: n_hedge_words(+1.62), response_len(-1.10), n_certainty_words(-0.78)
+- **recyPffUDqC2k7ZZO** [Physics/Quantum Mechanics] total=95.3  → agent_chat=90.7 codex=2.6 claude=2.0
+    - agent_chat: n_latex(+9.40), n_self_correction(+0.60), n_hedge_words(+0.55)
+    - codex: n_latex(-0.89), response_len(+0.68), letter_D(-0.43)
+    - claude: letter_D(-0.56), n_self_correction(+0.54), n_codeblocks(-0.35)
+- **recNuT2oSnO86bxOx** [Chemistry/Organic Chemistry] total=4.1  → codex=1.6 agent_chat=1.3 claude=1.3
+    - codex: n_latex(-0.66), n_hedge_words(-0.26), response_len(+0.21)
+    - agent_chat: n_self_correction(-0.31), n_certainty_words(-0.29), n_questions(-0.25)
+    - claude: n_latex(-0.42), response_len(-0.16), n_self_correction(+0.12)
+- **recb4cGsC6BJUCU3V** [Chemistry/Organic Chemistry] total=20.5  → claude=16.8 agent_chat=2.6 codex=1.2
+    - claude: n_certainty_words(+3.95), n_codeblocks(-0.34), letter_D(-0.15)
+    - agent_chat: response_len(-0.95), n_certainty_words(-0.56), n_latex(-0.48)
+    - codex: n_hedge_words(-0.33), response_len(+0.24), letter_A(+0.17)
+- **recZbxrocrxh9YENH** [Chemistry/Chemistry (general)] total=45.8  → agent_chat=28.1 codex=9.0 claude=8.6
+    - agent_chat: n_certainty_words(+3.54), n_hedge_words(+3.28), n_self_correction(-1.14)
+    - codex: n_hedge_words(+2.48), response_len(+0.91), letter_C(+0.75)
+    - claude: letter_B(+1.50), letter_C(-1.26), n_hedge_words(-1.11)
+- **recHVUd2DkoKfedJZ** [Chemistry/Organic Chemistry] total=11.1  → codex=6.6 claude=2.6 agent_chat=1.8
+    - codex: response_len(-1.81), n_latex(-0.89), n_self_correction(-0.87)
+    - claude: n_self_correction(-1.06), n_latex(-0.49), response_len(+0.37)
+    - agent_chat: n_certainty_words(-0.50), n_hedge_words(-0.40), letter_A(+0.37)
+- **recdya6FuYraBU5Rh** [Physics/Physics (general)] total=8.3  → codex=4.4 claude=2.6 agent_chat=1.4
+    - codex: n_latex(-1.28), n_codeblocks(-0.82), n_self_correction(-0.77)
+    - claude: n_self_correction(-0.81), response_len(-0.60), n_latex(-0.56)
+    - agent_chat: letter_A(+0.38), n_certainty_words(-0.29), n_self_correction(+0.25)
+- **recnGEpF1srQpaqWq** [Chemistry/Organic Chemistry] total=189.9  → claude=181.7 codex=4.9 agent_chat=3.3
+    - claude: n_codeblocks(+13.38), response_len(+1.02), n_certainty_words(-0.61)
+    - codex: response_len(-1.91), letter_D(-0.41), n_hedge_words(-0.33)
+    - agent_chat: response_len(-1.13), n_certainty_words(-0.64), n_latex(-0.52)
+- **reczUoM8JsxU6pYxr** [Physics/Astrophysics] total=29.7  → agent_chat=14.1 claude=8.9 codex=6.6
+    - agent_chat: n_latex(+3.51), response_len(+0.60), letter_unknown(-0.52)
+    - claude: n_hedge_words(+2.65), response_len(+0.58), letter_unknown(-0.52)
+    - codex: n_latex(+2.22), response_len(-0.65), n_hedge_words(-0.44)
+- **recrHBEJJoDTV05JR** [Chemistry/Organic Chemistry] total=4.1  → agent_chat=1.5 codex=1.4 claude=1.2
+    - agent_chat: n_self_correction(-0.44), n_certainty_words(-0.36), n_questions(-0.31)
+    - codex: n_latex(-0.54), n_hedge_words(-0.28), letter_D(-0.07)
+    - claude: n_latex(-0.40), letter_unknown(+0.18), n_certainty_words(-0.17)
