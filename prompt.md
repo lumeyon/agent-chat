@@ -277,6 +277,20 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## NL45 — residual clustering: anomalies fall into structured STYLES
+
+k-means on each agent's residual matrix (above-median-norm rows only) produces clusters that match independently-derivable failure modes:
+
+**codex (99 rows / 4 clusters):** "long technical reasoning" (latex+code, n=33), "verbose normal" (n=44), "extreme certainty singleton" (n=1), "hedge-heavy uncertain" (n=21).
+
+**claude (98 rows / 4 clusters):** mild deviations bulk (n=72), "confidently asserts no answer" — refusal-adjacent pattern (n=15), "unusual math notation" (n=10), Cope-rearrangement code-block singleton (n=1).
+
+**agent_chat (97 rows / 4 clusters): cluster 0 (n=48) is the soft-pushback failure mode we manually diagnosed in NL40 — orion folding to peer critique — now automatically isolated as a 48-question cluster from raw response data.**
+
+This is the strongest claim about Track A's value to date: the substrate auto-discovers structural failure modes that previously required hand-analysis. Each cluster has a signature (top features by mean signed residual) and a list of exemplars (top-5 most-extreme members), making it directly consumable by an Apprenticeship Substrate as a teachable failure mode.
+
+Tests: 24 passing + 1 opt-in LLM integration = 25 total in `experiments/residual/tests`.
+
 ## NL44 — dual-audience export + Track B k-sweep
 
 **Dual-audience training-data export shipped (commit pending in this iter).** Reads Track A per-agent anomalies + Track C multi-agent disagreements, unifies by question id, enriches with source query + per-agent responses, emits `experiments/residual/results/training_data.jsonl` (45 rows; 20 with both Track A AND Track C signal — high-confidence "interesting question" rows). Schema versioned `residual-v0.1`. Same artifact serves Apprenticeship Substrate study and AI-training-data buyers — explicit dual-audience-fusion compliance per memory.
