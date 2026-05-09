@@ -308,6 +308,32 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL50 — recursive substrate use: soft-pushback cluster PERSISTS in v1.1
+
+Applied Track A clustering to the v1.1 revise responses themselves (recursive substrate). Question: did the prescribed v1.1 prompt fix actually eliminate the soft-pushback cluster, or just suppress its numerical cost?
+
+**Result: the cluster persists — same size, stronger signature.**
+
+| | v1.0 | v1.1 |
+|---|---|---|
+| Cluster 0 size | 48 | 46 |
+| n_self_correction | +0.44σ | **+0.95σ** (LARGER) |
+| n_certainty_words | -0.71σ | -0.43σ |
+| NEW in v1.1: letter_A | — | +0.77σ |
+
+**This refines our understanding of the substrate.** The "high self-correction" cluster captured a FEATURE pattern (regex matching "wait", "actually", "let me reconsider") that was correlated with soft-pushback in v1.0 but ALSO matches v1.1's mandated VALID/INVALID rebuttal step.
+
+- v1.0 cluster 0: 48 rows of "let me redo this with peer's corrections" (deferential)
+- v1.1 cluster 0: 46 rows of "let me list the critique claims one by one" (rebuttal)
+
+**Same feature signature. Different reasoning. Different correctness outcomes (+4 net).** The substrate can't distinguish deferential self-correction from rebuttal-driven self-correction at the feature level.
+
+**v1.1 didn't eliminate the BEHAVIOR — it shifted the MIX of why orion uses self-correction language.** Numerical fix worked because high-deliberation can be either deferential (bad) or rebuttal-driven (good); v1.1 shifted the mix toward rebuttal.
+
+**v1.1-specific bias to flag:** cluster 0 has letter_A +0.77σ. Orion's rebuttal reasoning converges on A more often than baseline. Possibly: "I'll defend my draft answer" → if draft was A, stays A; v1.1 may be reinforcing draft-letter A specifically. Worth investigating if v1.1 generalizes to other benchmarks.
+
+**Methodological lesson:** features were too coarse to distinguish two patterns that look identical at the regex level. Future Track A iterations should use richer features — e.g., LLM-judged "is this self-correction deferential or rebuttal-driven?" — to separate them. This is the natural next refinement of the substrate.
+
 ## NL49 — v1.2 hypothesis REFUTED
 
 Tested v1.2 prompt change on the 8 cases that flipped under v1.1 (6 FIX + 2 BREAK). v1.2 added: "list strongest specific argument for draft, compare head-to-head, tie goes to critique."
