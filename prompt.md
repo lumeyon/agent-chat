@@ -277,9 +277,19 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
-## NL48 — v1.1 fix scaling to ALL 198 questions (in flight)
+## NL48 — v1.1 fix scaling to ALL 198 questions (in flight, 75/195 = 38% done)
 
-Background runner pid 475845 launched: `experiments/residual/src/run_v11_full.py` re-runs ONLY the revise step on all 195 valid agent-chat entries (those with both draft + critique recorded) using the v1.1 prompt change. Reuses existing draft + critique to keep cost at 1 LLM call per question (vs 3 for full re-run). ETA ~1.5-3 hours wall.
+Background runner pid 475845 launched: `experiments/residual/src/run_v11_full.py` re-runs ONLY the revise step on all 195 valid agent-chat entries (those with both draft + critique recorded) using the v1.1 prompt change. Reuses existing draft + critique to keep cost at 1 LLM call per question (vs 3 for full re-run). Mean elapsed 25s; ETA ~50 more minutes.
+
+**Mid-sweep tally (n=75):** 3 FIX, 1 BREAK, 66 STAY-RIGHT, 5 STAY-WRONG. Net +2 correct.
+
+Extrapolating to full n=195: ~+5 correct → agent-chat 175 → ~180/198 = **90.9%**. **Would beat codex (89.4%) by 1.5% — first time agent-chat beats both single-model baselines on this benchmark.**
+
+**New failure mode discovered from the 1 BREAK case** (`recDDxpS9s8cwkqfq`): v1.1's "defend draft if critique is wrong" instruction can backfire — orion sometimes misjudges a VALID critique as INVALID, converting v1.0 FIX cases (correct critique-driven flip) into v1.1 BREAK cases (over-defensive hold). Orion's reasoning explicitly stated "no claim validly demonstrates my draft is wrong, I defend the original reasoning" — but the critique was right.
+
+This is the classic reverse failure mode of the soft-pushback fix: trade soft-pushback for over-defensiveness. Real tradeoff. The aggregate question is whether the +FIX rate on previously-soft-pushback cases is bigger than the -BREAK rate on previously-correctly-flipped cases. n=75 says yes (3 vs 1) but the gap is small.
+
+**v1.2 design hypothesis (to defer until full sweep completes):** combine v1.1's VALID/INVALID rebuttal discipline with v1.0's "consider the critique carefully" tone. Maybe: "Mark each claim VALID/INVALID, AND if you mark all claims INVALID, double-check by stating WHY each draft step is more sound than the critique alleges." Forces the over-defensive case to actually verify its grounds.
 
 Resumable via skip-completed-ids on the output file. Defensive: 3 consecutive sub-1s claude exits → bail out (the disk-fill failure mode pattern from NL40 turned into a circuit breaker).
 
