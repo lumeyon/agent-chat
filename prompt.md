@@ -42,6 +42,20 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 
 **agent-chat full run KICKED OFF** (background task `bzvxotsja`): 198 problems × 3 calls each (draft + codex critique + revise) × 20-min/call budget. Worst case 60 min/Q × 198 = 198 hours; realistic on smoke is ~30s/Q happy path = ~100 min wall total. Monitor `bmdicli6y` armed for # done / DRAFT-FAIL / CRIT-FAIL / FATAL events.
 
+**v1 verdict (forming at 58%, will refine at completion):** agent-chat v1 LOSES to both single-model baselines.
+
+| | n=115 | acc | net vs agent-chat |
+|---|---|---|---|
+| codex | 102/115 | 88.7% | +5 |
+| claude | 99/115 | 86.1% | +2 |
+| agent-chat | 97/115 | **84.3%** | — |
+
+Mechanism diagnosis: of 5 flips so far, 2 were fixes (substrate caught a real claude error) and 3 were breaks (codex critique convinced claude to flip away from a correct answer). The "critique sees claude's draft first" pattern anchors codex on claude's framing — when codex_alone disagrees with claude_alone, agent-chat tends to converge on claude's wrong answer rather than codex's right one. Anchoring net cost: ~1 question. Plus ~1 from stochastic claude-draft variance vs claude-baseline. Combined: -2 vs claude.
+
+**Right next move (whenever boss directs):** stop v1, design v2 that DOES NOT show codex claude's draft until codex has answered independently. v2 = parallel-answers + judge-vote (claude answers, codex answers, then a judge agent picks the best). 4 calls per question instead of 3. Should preserve codex's independence and let the substrate aggregate rather than corrupt.
+
+If v2 doesn't beat codex_alone either, the honest conclusion is: GPQA Diamond is too saturated at 89% for orchestration of two equally-capable single-model agents to add value. We'd need to test on a less-saturated benchmark (HLE, ARC-AGI-2) where the two models' error patterns are more diverse.
+
 **Fairness budget decision (NL38):** 20-min/call is THE budget across all conditions. agent-chat's per-call timeout matches the baselines' retry budget, so it can't be argued the comparison gave agent-chat unfair compute.
 
 **Operational state:**
