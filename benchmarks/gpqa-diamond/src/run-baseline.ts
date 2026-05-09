@@ -93,11 +93,17 @@ function loadProblems(): Problem[] {
  *
  *  A "timeout-like" no-extract is recognized by:
  *    - answer_extracted is null, AND
- *    - response is empty (len 0), AND
- *    - error is non-empty (cli exited / dispatch threw / etc.).
+ *    - response is empty or near-empty (len < 8 — covers truly empty
+ *      timeouts plus stray whitespace).
  *
- *  Refusals have a non-empty response (the canned refusal text); we
- *  leave those alone.
+ *  Refusals have a non-empty response (the canned refusal text, ~350
+ *  chars); they fail the len-near-empty check and stay put.
+ *
+ *  Note: we intentionally don't gate on the `error` field. claude's
+ *  CLI sets it on timeout (cli exited 143); codex's CLI exits 0 on
+ *  SIGTERM with empty stdout, so the error field stays undefined
+ *  even though the call timed out. The empty-response heuristic
+ *  catches both.
  */
 function findTimeoutIds(resultsPath: string): Set<string> {
   if (!fs.existsSync(resultsPath)) return new Set();
@@ -106,7 +112,7 @@ function findTimeoutIds(resultsPath: string): Set<string> {
   for (const line of lines) {
     try {
       const r = JSON.parse(line);
-      if (r.answer_extracted === null && (!r.response || r.response.length === 0) && r.error) {
+      if (r.answer_extracted === null && (!r.response || r.response.length < 8)) {
         ids.add(r.id);
       }
     } catch { /* tolerate */ }
