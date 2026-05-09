@@ -277,6 +277,21 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## NL46 — Apprenticeship Substrate bridge: 12 study cards + cross-agent overlap
+
+Each cluster auto-formats to a structured markdown study card at `experiments/residual/results/study_cards/<agent>_cluster_<id>.md` with: failure-mode name (heuristic-named from top features), residual signature (z-scores), top-5 exemplars with response excerpts, and a **concrete fix prescription**.
+
+**The agent_chat cluster 0 card is the headline:** 48 of 97 high-residual rows (49%) automatically labeled "soft-pushback / deferral", with exemplars showing the unmistakable pattern ("Looking at this critique...", "Lumeyon is right that I should...", "Reconsidering carefully..."). The card prescribes the exact v1.1 prompt-engineering fix:
+
+> append to the revise template:
+> "For each substantive claim in the critique, state: VALID [why] or INVALID [counter-argument]. Then produce your final answer."
+
+This is the smallest possible Apprenticeship-Substrate teaching unit: pattern + exemplars + remedy in one auto-generated artifact.
+
+**Cross-agent overlap:** 8 queries appear in ≥2 agents' clusters. `recD8oX1KevFbl7bL` flagged by all three agents (different failure styles). `rec6sE2CRtD4drtHg` (Coleman-Weinberg) flagged by codex AND claude — **the fourth independent angle from which this question has surfaced** (Track A codex anomaly, Track A claude anomaly, Track C disagreement, now cross-agent cluster overlap). Strong evidence the residual substrate is finding structurally hard questions, not just per-agent noise.
+
+Tests: 27 passing + 1 opt-in LLM integration = 28 total.
+
 ## NL45 — residual clustering: anomalies fall into structured STYLES
 
 k-means on each agent's residual matrix (above-median-norm rows only) produces clusters that match independently-derivable failure modes:
