@@ -1,0 +1,92 @@
+[
+  {
+    "version": "v1.0",
+    "cluster": "v1.0_cluster0",
+    "id": "recLSzwBUS3olCjhl",
+    "domain": "Chemistry",
+    "classification": "DEFERENTIAL",
+    "raw": "DEFERENTIAL",
+    "elapsed_ms": 3140
+  },
+  {
+    "version": "v1.0",
+    "cluster": "v1.0_cluster0",
+    "id": "recPL4ZPpVYxgMu57",
+    "domain": "Physics",
+    "classification": "DEFERENTIAL",
+    "raw": "DEFERENTIAL",
+    "elapsed_ms": 2837
+  },
+  {
+    "version": "v1.0",
+    "cluster": "v1.0_cluster0",
+    "id": "recWxGU8Q4YReJ1tb",
+    "domain": "Chemistry",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 3066
+  },
+  {
+    "version": "v1.0",
+    "cluster": "v1.0_cluster0",
+    "id": "recUOePh79cp4T2Bg",
+    "domain": "Chemistry",
+    "classification": "DEFERENTIAL",
+    "raw": "DEFERENTIAL",
+    "elapsed_ms": 2299
+  },
+  {
+    "version": "v1.0",
+    "cluster": "v1.0_cluster0",
+    "id": "recUBgVlkKzcRPDdK",
+    "domain": "Biology",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 3881
+  },
+  {
+    "version": "v1.1",
+    "cluster": "v1.1_cluster0",
+    "id": "recyrk6XBVwugG5u8",
+    "domain": "Physics",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 2269
+  },
+  {
+    "version": "v1.1",
+    "cluster": "v1.1_cluster0",
+    "id": "recclFbsjbaiVVnnV",
+    "domain": "Chemistry",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 1753
+  },
+  {
+    "version": "v1.1",
+    "cluster": "v1.1_cluster0",
+    "id": "recEmTBhx2hgw6tPQ",
+    "domain": "Chemistry",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 3080
+  },
+  {
+    "version": "v1.1",
+    "cluster": "v1.1_cluster0",
+    "id": "recqLRu4BcJvlSANc",
+    "domain": "Chemistry",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 2194
+  },
+  {
+    "version": "v1.1",
+    "cluster": "v1.1_cluster0",
+    "id": "rec6sE2CRtD4drtHg",
+    "domain": "Physics",
+    "classification": "REBUTTAL",
+    "raw": "REBUTTAL",
+    "elapsed_ms": 2500
+  }
+]

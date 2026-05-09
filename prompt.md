@@ -308,6 +308,32 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL51 — LLM-judge validates that v1.1 structurally shifted cluster 0
+
+NL50 hypothesis: regex feature `n_self_correction` is too coarse — it catches both deferential and rebuttal-driven self-correction. An LLM-judge should distinguish them.
+
+Tested with 10 LLM calls on the top-5 exemplars of v1.0 cluster 0 and v1.1 cluster 0. Judge prompt: "DEFERENTIAL / REBUTTAL / AMBIGUOUS, single word answer."
+
+**Result:**
+
+| | v1.0 cluster 0 | v1.1 cluster 0 |
+|---|---|---|
+| DEFERENTIAL | 3/5 (60%) | **0/5 (0%)** |
+| REBUTTAL | 2/5 (40%) | **5/5 (100%)** |
+
+**v1.1 cleanly eliminated deferential responses** in cluster 0. The cluster persists in v1.1 because both deferential and rebuttal responses share the regex `n_self_correction` signature, but the **interior composition shifted entirely** from 60% deferential to 0% deferential.
+
+**Three findings:**
+1. **LLM-judge methodology works** — distinguishes patterns that look identical at the regex level. Path forward for Track A v0.2 (richer features).
+2. **v1.1's effect is REAL at the structural level**, not just numerical. The +4 net correct outcome is paired with a structural shift in WHY orion uses self-correction language.
+3. **The substrate's value model holds at finer resolution.** Coarse regex features find a meaningful cluster; LLM-judge resolves its internal composition; v1.1 shifts that composition correctly.
+
+Track A v0.2 design (queued, not yet built):
+- Augment scalar feature vector with M LLM-judge dimensions (DEFERENTIAL/REBUTTAL/CONFIDENT-NO-ANSWER/REFUSAL/ASKS-BACK/...)
+- Use cheap LLM (Haiku-class) for batch classification at construction time
+- Re-cluster with higher-resolution features
+- Expected outcome: cleanly separated clusters per pattern, no more ambiguous 46-row buckets
+
 ## NL50 — recursive substrate use: soft-pushback cluster PERSISTS in v1.1
 
 Applied Track A clustering to the v1.1 revise responses themselves (recursive substrate). Question: did the prescribed v1.1 prompt fix actually eliminate the soft-pushback cluster, or just suppress its numerical cost?
