@@ -1,33 +1,34 @@
 {
-  "n_v11": 89,
+  "n_v11": 132,
   "counts": {
-    "STAY-RIGHT": 77,
-    "STAY-WRONG": 8,
-    "BREAK": 1,
-    "FIX": 3
+    "STAY-RIGHT": 113,
+    "STAY-WRONG": 12,
+    "BREAK": 2,
+    "FIX": 5
   },
-  "net_correct_change": 2,
+  "net_correct_change": 3,
   "n_paired": 198,
   "codex_correct": 177,
   "claude_correct": 176,
   "agent_chat_v10_correct": 175,
-  "agent_chat_v11_correct": 177,
-  "v11_lift_over_v10": 2,
-  "v11_lift_over_codex": 0,
+  "agent_chat_v11_correct": 178,
+  "v11_lift_over_v10": 3,
+  "v11_lift_over_codex": 1,
   "per_domain": {
     "Physics": {
-      "STAY-RIGHT": 35,
-      "STAY-WRONG": 1
+      "STAY-RIGHT": 47,
+      "STAY-WRONG": 1,
+      "FIX": 1
     },
     "Chemistry": {
-      "STAY-RIGHT": 36,
-      "BREAK": 1,
-      "STAY-WRONG": 4,
-      "FIX": 2
+      "STAY-RIGHT": 56,
+      "BREAK": 2,
+      "STAY-WRONG": 7,
+      "FIX": 3
     },
     "Biology": {
-      "STAY-RIGHT": 6,
-      "STAY-WRONG": 3,
+      "STAY-RIGHT": 10,
+      "STAY-WRONG": 4,
       "FIX": 1
     }
   }

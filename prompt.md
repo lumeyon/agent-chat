@@ -277,7 +277,21 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
-## NL48 — v1.1 fix scaling to ALL 198 questions (in flight, 75/195 = 38% done)
+## NL48 — v1.1 fix scaling to ALL 198 questions (in flight, 132/195 = 68% done)
+
+**HEADLINE: agent-chat v1.1 currently 178/198 = 89.9% — BEATING BOTH single-model baselines for the first time on GPQA Diamond** (codex 89.4%, claude 88.9%; v1.1 lift over codex = +1, over claude = +2).
+
+**Outcomes at 132/195:** 5 FIX, 2 BREAK, 113 STAY-RIGHT, 12 STAY-WRONG. Net +3.
+
+**Two BREAK cases reveal OPPOSITE v1.1 failure modes** (both Chemistry/Organic, both peer=keystone):
+- `recDDxpS9s8cwkqfq`: v1.1 OVER-DEFENSIVE — orion refused a valid critique that v1.0 had correctly accepted (B→C → kept B wrong). Reasoning: "no claim validly demonstrates my draft is wrong, I defend the original reasoning."
+- `recihePFulRgNKsIn`: v1.1 OVER-EAGER — orion flipped where v1.0 had correctly stayed (B→D, expected B). The VALID/INVALID rebuttal step led orion to convince itself a claim was valid when it wasn't.
+
+So v1.1 has its own bug surface. The aggregate is still net-positive (+3) but it's not "free safety" — there's a real tradeoff. Suggests v1.2 redesign should distinguish "weak critique → defend draft" from "strong critique → engage" more sharply. Maybe: "If you mark all critique claims INVALID, ALSO list the strongest specific argument for your draft and ensure it's stronger than the critique's strongest point. Tie goes to the critique."
+
+Per-domain: Biology +1 (1 fix), Chemistry +1 (3 fix, 2 break — all the action), Physics +1 (1 fix — surprising given saturation). Mean elapsed 43s; 63 questions remain (~45 min).
+
+## NL48 — v1.1 fix scaling to ALL 198 questions (earlier checkpoint at 75/195 = 38% done)
 
 Background runner pid 475845 launched: `experiments/residual/src/run_v11_full.py` re-runs ONLY the revise step on all 195 valid agent-chat entries (those with both draft + critique recorded) using the v1.1 prompt change. Reuses existing draft + critique to keep cost at 1 LLM call per question (vs 3 for full re-run). Mean elapsed 25s; ETA ~50 more minutes.
 
