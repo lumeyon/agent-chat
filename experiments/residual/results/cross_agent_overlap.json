@@ -1,0 +1,110 @@
+[
+  {
+    "query_id": "recD8oX1KevFbl7bL",
+    "found_in": [
+      {
+        "agent": "codex",
+        "cluster_id": 3
+      },
+      {
+        "agent": "claude",
+        "cluster_id": 0
+      },
+      {
+        "agent": "agent_chat",
+        "cluster_id": 1
+      }
+    ]
+  },
+  {
+    "query_id": "rec6sE2CRtD4drtHg",
+    "found_in": [
+      {
+        "agent": "codex",
+        "cluster_id": 1
+      },
+      {
+        "agent": "claude",
+        "cluster_id": 1
+      }
+    ]
+  },
+  {
+    "query_id": "rec06pnAkLOr2t2mp",
+    "found_in": [
+      {
+        "agent": "codex",
+        "cluster_id": 2
+      },
+      {
+        "agent": "agent_chat",
+        "cluster_id": 1
+      }
+    ]
+  },
+  {
+    "query_id": "recnjViFrqlZNL3fY",
+    "found_in": [
+      {
+        "agent": "codex",
+        "cluster_id": 3
+      },
+      {
+        "agent": "claude",
+        "cluster_id": 0
+      }
+    ]
+  },
+  {
+    "query_id": "recYt8xx80OTyDsL0",
+    "found_in": [
+      {
+        "agent": "codex",
+        "cluster_id": 3
+      },
+      {
+        "agent": "claude",
+        "cluster_id": 1
+      }
+    ]
+  },
+  {
+    "query_id": "recnTTKdBzfuoZ7w7",
+    "found_in": [
+      {
+        "agent": "claude",
+        "cluster_id": 1
+      },
+      {
+        "agent": "agent_chat",
+        "cluster_id": 2
+      }
+    ]
+  },
+  {
+    "query_id": "rec4L69T0Y1AS4AFS",
+    "found_in": [
+      {
+        "agent": "claude",
+        "cluster_id": 1
+      },
+      {
+        "agent": "agent_chat",
+        "cluster_id": 1
+      }
+    ]
+  },
+  {
+    "query_id": "recmkvk6EFAmqyMxR",
+    "found_in": [
+      {
+        "agent": "claude",
+        "cluster_id": 2
+      },
+      {
+        "agent": "agent_chat",
+        "cluster_id": 2
+      }
+    ]
+  }
+]
