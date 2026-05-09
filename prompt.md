@@ -306,7 +306,25 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 - `recDDxpS9s8cwkqfq`: OVER-DEFENSIVE — refused a valid critique that v1.0 correctly accepted (B→C → kept B wrong)
 - `recihePFulRgNKsIn`: OVER-EAGER — flipped where v1.0 correctly stayed (B→D, expected B)
 
-So v1.1 trades soft-pushback for two new modes. v1.2 design hypothesis to test next: "If you mark all critique claims INVALID, ALSO list the strongest specific argument for your draft and ensure it's stronger than the critique's strongest point. Tie goes to the critique." Aims to force over-defensive case to verify, and over-eager case to weigh both sides.
+So v1.1 trades soft-pushback for two new modes.
+
+## NL49 — v1.2 hypothesis REFUTED
+
+Tested v1.2 prompt change on the 8 cases that flipped under v1.1 (6 FIX + 2 BREAK). v1.2 added: "list strongest specific argument for draft, compare head-to-head, tie goes to critique."
+
+Result:
+| outcome | n |
+|---|---|
+| v12-FIXES-v11 | 1 (the over-defensive `recDDxpS9s8cwkqfq` repaired ✓) |
+| **v12-BREAKS-v11** | **4 (LOST 4 of v1.1's 6 FIX cases)** |
+| BOTH-CORRECT | 2 |
+| BOTH-WRONG | 1 |
+
+**Net delta -3 on the 8-case subset.** "Tie goes to the critique" made orion too eager to flip — fixed the over-defensive case but caused 4 over-eager flips on previously-correct critiques.
+
+**Conclusion: v1.1 is the production variant. v1.2 hypothesis refuted.** Saved a full 195-question sweep by testing on the 8-case decisive subset first.
+
+Lesson: the substrate-prescribed v1.1 fix is empirically the local optimum on this benchmark. More elaborate prompt changes don't necessarily help and can swing too far in the other direction. The simplest version of the fix (just VALID/INVALID rebuttal) was the right level of intervention.
 
 
 
