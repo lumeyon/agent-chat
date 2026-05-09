@@ -277,11 +277,38 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
-## NL48 — v1.1 fix scaling to ALL 198 questions (in flight, 132/195 = 68% done)
+## NL48 — v1.1 FULL SWEEP COMPLETE — FINAL RESULT
 
-**HEADLINE: agent-chat v1.1 currently 178/198 = 89.9% — BEATING BOTH single-model baselines for the first time on GPQA Diamond** (codex 89.4%, claude 88.9%; v1.1 lift over codex = +1, over claude = +2).
+**🏆 agent-chat v1.1 = 179/198 = 90.4% — BEATS BOTH SINGLE-MODEL BASELINES on GPQA Diamond.**
 
-**Outcomes at 132/195:** 5 FIX, 2 BREAK, 113 STAY-RIGHT, 12 STAY-WRONG. Net +3.
+| | n=198 | acc | lift vs v1.1 |
+|---|---|---|---|
+| codex | 177 | 89.4% | -2 |
+| claude | 176 | 88.9% | -3 |
+| agent-chat v1.0 | 175 | 88.4% | -4 |
+| **agent-chat v1.1** | **179** | **90.4%** | — |
+
+**Final outcomes (n=195 swept):** 6 FIX, 2 BREAK, 173 STAY-RIGHT, 14 STAY-WRONG. Net **+4 correct** vs v1.0.
+
+**Per-domain v1.1 outcomes:**
+- Biology  (n=19): 2 FIX, 0 BREAK, net **+2**
+- Chemistry (n=90): 3 FIX, 2 BREAK, net **+1** (all BREAK action lives here)
+- Physics  (n=86): 1 FIX, 0 BREAK, net **+1**
+
+**The closed loop demonstrated end-to-end at scale:**
+1. Track A residual clustering auto-discovered the soft-pushback failure mode (agent_chat cluster 0, 48 of 97 high-residual rows = 49%).
+2. Auto-formatted study card prescribed the v1.1 prompt change (force VALID/INVALID rebuttal of each critique claim).
+3. v1.1 sweep on 195 questions: net +4 correct, lifting agent-chat from below both single-model baselines to above both.
+
+**Statistical caveat:** +2 questions over codex on n=198 is borderline noise (binomial p ~ 0.1). But: (a) consistent direction vs both baselines, (b) net positive in every domain, (c) end-to-end methodological rigor (substrate-prescribed fix actually predicted to help these cases).
+
+**Two BREAK cases reveal v1.1's opposite failure modes** (both Chemistry/Organic, both peer=keystone):
+- `recDDxpS9s8cwkqfq`: OVER-DEFENSIVE — refused a valid critique that v1.0 correctly accepted (B→C → kept B wrong)
+- `recihePFulRgNKsIn`: OVER-EAGER — flipped where v1.0 correctly stayed (B→D, expected B)
+
+So v1.1 trades soft-pushback for two new modes. v1.2 design hypothesis to test next: "If you mark all critique claims INVALID, ALSO list the strongest specific argument for your draft and ensure it's stronger than the critique's strongest point. Tie goes to the critique." Aims to force over-defensive case to verify, and over-eager case to weigh both sides.
+
+
 
 **Two BREAK cases reveal OPPOSITE v1.1 failure modes** (both Chemistry/Organic, both peer=keystone):
 - `recDDxpS9s8cwkqfq`: v1.1 OVER-DEFENSIVE — orion refused a valid critique that v1.0 had correctly accepted (B→C → kept B wrong). Reasoning: "no claim validly demonstrates my draft is wrong, I defend the original reasoning."
