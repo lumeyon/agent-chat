@@ -1,0 +1,41 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "calibration_n": 25,
+  "k_values": [
+    1,
+    4,
+    16
+  ],
+  "prompts": [
+    "Write one creative metaphor connecting quantum mechanics to art.",
+    "Imagine an unconventional use of a paperclip and describe it briefly.",
+    "Name three things people get wrong about black holes.",
+    "Suggest a research direction that combines biology and information theory."
+  ],
+  "greedy_reference": [
+    "Quantum mechanics, with its wavelike and probabilistic nature, can be likened to the brushstrokes of an abstract painter. Just as a painter uses a palette of colors to create a vivid, yet unpredictable scene, quantum mechanics uses particles and waves to create a reality that is both beautiful and mysterious. The act of observation itself can alter the state of a particle, much like a painter",
+    "A paperclip can be used in an unconventional way to create a simple yet effective tool for securing small objects. For example, you can use a paperclip to secure a small item, such as a pen or a pencil, to a book or a desk. This can be useful for keeping the item in place while you are working or studying. Additionally, a paperclip can be used to create a",
+    "1. Black holes are not black: While black holes are often depicted as completely black, they actually emit a small amount of radiation called Hawking radiation, which is invisible to the naked eye. This radiation is so weak that it's difficult to detect, but it's still there.\n\n2. Black holes are not infinitely dense: While it's true that black holes have an infinite density at their sing",
+    "One research direction that combines biology and information theory is the study of biological information processing. This involves understanding how biological systems, such as cells and organisms, process and transmit information. This can include studying how genetic information is encoded and decoded, how proteins are synthesized and regulated, and how neural signals are transmitted and processed in the brain.\n\nOne specific area of research in this field is the study of information processing"
+  ],
+  "residual_per_k": {
+    "1": [
+      "Quantum mechanics is like painting a picture with light, where particles don't exist in one place at a time but move like ghosts between multiple dimensions, painting a blur of colors and textures.",
+      "One unconventional use of a paperclip could be as a makeshift fishing hook. By bending the paperclip into a hook shape, one could insert the hook into a rod or rod-like object and fish for small insects or larvae in water. This method can be both simple and efficient for fishing in areas where traditional fishing gear may not be available or practical.",
+      "There are several misconceptions about black holes, and here are three of the most common misunderstandings:\n\n1. **Everything falls into a black hole**: This is incorrect. Once something crosses the event horizon, it cannot escape, but it does not necessarily fall into the black hole. In fact, a black hole does not attract everything that falls into it. It doesn't have a gravitational pull that draws",
+      "A suggested research direction that combines biology and information theory is the study of DNA data compression algorithms. Information theory, which is a branch of mathematics and computer science, deals with the quantification of information, and it can be applied to biological data such as DNA sequences. DNA data compression algorithms can be used to reduce the storage space required for DNA sequencing data, making it easier to store, transmit, and"
+    ],
+    "4": [
+      "Quantum mechanics is like a kaleidoscope, where the smallest particles in the universe interact in enigmatic ways, creating stunning patterns that challenge our understanding of reality. Just as a kaleidoscope transforms simple shapes into complex and beautiful patterns, the quantum world transforms seemingly simple particles into mysterious and intricate structures that reveal the deepest mysteries of the universe.",
+      "One unconventional use of a paperclip could be as a makeshift fishing hook for small aquatic creatures like frogs or tadpoles in a pond or lake. The paperclip could be shaped into a hook-like structure, and then inserted into the pond water, with the bait could be placed in the hook to lure the target aquatic animal.",
+      "There are several misconceptions people tend to have about black holes. Here are three common misunderstandings:\n\n1. **Everything falls into a black hole**: The reality is that anything that falls into a black hole is almost immediately vaporized by the extreme temperatures and pressures inside. The boundary beyond which even light cannot escape, called the event horizon, is where the process of evaporation begins. The \"everything",
+      "One suggested research direction that combines biology and information theory is the study of how genetic information is transmitted and processed within cells. This could involve exploring the molecular mechanisms of gene expression and regulation, the transmission of genetic material across generations, and how cells communicate and coordinate their functions.\n\nOne specific area of research could be studying the ways that genetic information is encoded in DNA sequences, and how different molecules and proteins interact"
+    ],
+    "16": [
+      "Quantum mechanics is like a brushstroke in an abstract masterpiece, swirling and darting across the canvas of the universe with an unerring precision and whimsical abandon, where the conventional rules of linear progression are replaced by the fluid, often unpredictable dance of particles and forces, each stroke imbued with a thread of fate and chance, delicately linking the discrete to the continuous, and the mundane to the",
+      "One unconventional use of a paperclip could be as a makeshift hair tie for a long hairdo or braid. Simply looped around your hair in a circular motion, the paperclip would secure the strands in place and add a playful twist to your hair accessory collection.",
+      "There are several misconceptions and misunderstandings about black holes. Here are three common ones:\n\n1. **They Emit No Radiation**: A common misconception is that black holes do not emit any radiation. This is incorrect. The surface of a black hole, known as the event horizon, is not perfectly transparent, and it can interact with particles passing near it. This interaction can cause the formation of jets,",
+      "One suggested research direction that combines biology and information theory is the study of how complex biological systems process and transmit information. This includes exploring the molecular mechanisms that underlie the transmission of genetic material, the communication networks in cells, and the processing of sensory information in organisms.\n\nAnother direction could be the development of computational models that simulate the behavior of biological systems. This could involve creating simulations of complex biological networks and"
+    ]
+  }
+}

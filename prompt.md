@@ -277,6 +277,28 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## NL44 — dual-audience export + Track B k-sweep
+
+**Dual-audience training-data export shipped (commit pending in this iter).** Reads Track A per-agent anomalies + Track C multi-agent disagreements, unifies by question id, enriches with source query + per-agent responses, emits `experiments/residual/results/training_data.jsonl` (45 rows; 20 with both Track A AND Track C signal — high-confidence "interesting question" rows). Schema versioned `residual-v0.1`. Same artifact serves Apprenticeship Substrate study and AI-training-data buyers — explicit dual-audience-fusion compliance per memory.
+
+**Track B k-sweep ran on k ∈ {1, 4, 16}.** Residual completions diverge from greedy in a parameter-controllable way:
+
+> "Creative metaphor for quantum mechanics":
+> - greedy: stock "brushstrokes of an abstract painter"
+> - k=1: "ghosts between multiple dimensions"
+> - k=4: "kaleidoscope, smallest particles, enigmatic ways"
+> - k=16: "swirling and darting across the canvas of the universe with an unerring precision and whimsical abandon"
+>
+> "Unconventional use of a paperclip":
+> - greedy: "secure a small item to a book" (meandering)
+> - k=1: "makeshift fishing hook"
+> - k=4: "fishing hook for small aquatic creatures like frogs or tadpoles"
+> - k=16: "makeshift hair tie for a long hairdo or braid"
+
+As k grows, the substrate produces completions that are more creative, more specific, and more committed to unusual answers. The "creative exploration outside the agents' RL training distribution" claim is empirically validated.
+
+Tests: 23 passing + 1 opt-in LLM integration = 24 total in experiments/residual/tests.
+
 ## NL43 — agent-chat re-run COMPLETE; tracks refreshed on full data
 
 Agent-chat run ended at 198/198, 175 correct = **88.4%**. Final 3-way:

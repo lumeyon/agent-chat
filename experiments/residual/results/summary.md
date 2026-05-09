@@ -133,3 +133,41 @@ matrix shape [194, 1188], per-agent dim 396, k=5
     - claude: n_codeblocks(+13.52), response_len(+1.06), n_certainty_words(-0.60)
     - codex: response_len(-1.95), letter_D(-0.43), n_hedge_words(-0.32)
     - agent_chat: response_len(-1.10), n_certainty_words(-0.64), letter_D(-0.42)
+## Track B — k-sweep (Qwen2.5-1.5B-Instruct)
+
+calibration n=25, k values: [1, 4, 16]
+
+
+### Prompt: Write one creative metaphor connecting quantum mechanics to art.
+
+- **greedy** (k=N/A): Quantum mechanics, with its wavelike and probabilistic nature, can be likened to the brushstrokes of an abstract painter. Just as a painter uses a palette of colors to create a vivid, yet unpredictabl
+- **k=1**: Quantum mechanics is like painting a picture with light, where particles don't exist in one place at a time but move like ghosts between multiple dimensions, painting a blur of colors and textures.
+- **k=4**: Quantum mechanics is like a kaleidoscope, where the smallest particles in the universe interact in enigmatic ways, creating stunning patterns that challenge our understanding of reality. Just as a kal
+- **k=16**: Quantum mechanics is like a brushstroke in an abstract masterpiece, swirling and darting across the canvas of the universe with an unerring precision and whimsical abandon, where the conventional rule
+
+### Prompt: Imagine an unconventional use of a paperclip and describe it briefly.
+
+- **greedy** (k=N/A): A paperclip can be used in an unconventional way to create a simple yet effective tool for securing small objects. For example, you can use a paperclip to secure a small item, such as a pen or a penci
+- **k=1**: One unconventional use of a paperclip could be as a makeshift fishing hook. By bending the paperclip into a hook shape, one could insert the hook into a rod or rod-like object and fish for small insec
+- **k=4**: One unconventional use of a paperclip could be as a makeshift fishing hook for small aquatic creatures like frogs or tadpoles in a pond or lake. The paperclip could be shaped into a hook-like structur
+- **k=16**: One unconventional use of a paperclip could be as a makeshift hair tie for a long hairdo or braid. Simply looped around your hair in a circular motion, the paperclip would secure the strands in place 
+
+### Prompt: Name three things people get wrong about black holes.
+
+- **greedy** (k=N/A): 1. Black holes are not black: While black holes are often depicted as completely black, they actually emit a small amount of radiation called Hawking radiation, which is invisible to the naked eye. Th
+- **k=1**: There are several misconceptions about black holes, and here are three of the most common misunderstandings:
+
+1. **Everything falls into a black hole**: This is incorrect. Once something crosses the e
+- **k=4**: There are several misconceptions people tend to have about black holes. Here are three common misunderstandings:
+
+1. **Everything falls into a black hole**: The reality is that anything that falls int
+- **k=16**: There are several misconceptions and misunderstandings about black holes. Here are three common ones:
+
+1. **They Emit No Radiation**: A common misconception is that black holes do not emit any radiati
+
+### Prompt: Suggest a research direction that combines biology and information theory.
+
+- **greedy** (k=N/A): One research direction that combines biology and information theory is the study of biological information processing. This involves understanding how biological systems, such as cells and organisms, 
+- **k=1**: A suggested research direction that combines biology and information theory is the study of DNA data compression algorithms. Information theory, which is a branch of mathematics and computer science, 
+- **k=4**: One suggested research direction that combines biology and information theory is the study of how genetic information is transmitted and processed within cells. This could involve exploring the molecu
+- **k=16**: One suggested research direction that combines biology and information theory is the study of how complex biological systems process and transmit information. This includes exploring the molecular mec
