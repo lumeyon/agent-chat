@@ -133,3 +133,70 @@ matrix shape [190, 1188], per-agent dim 396, k=5
     - agent_chat: n_self_correction(-0.44), n_certainty_words(-0.36), n_questions(-0.31)
     - codex: n_latex(-0.54), n_hedge_words(-0.28), letter_D(-0.07)
     - claude: n_latex(-0.40), letter_unknown(+0.18), n_certainty_words(-0.17)
+## Track B — generative residual sampler (Qwen2.5-1.5B-Instruct)
+
+calibration n=25, basis k=8, vocab=151936
+
+
+### Prompt: Write one creative metaphor connecting quantum mechanics to art.
+
+- **greedy**: Quantum mechanics, with its wavelike and probabilistic nature, can be likened to the brushstrokes of an abstract painter. Just as a painter uses a palette of colors to create a vivid, yet unpredictable scene, quantum mechanics uses particles and waves to create a reality that is both beautiful and m
+- **temperature 0.8**: Quantum mechanics is like a jazz musician improvising on a sheet of music. Just as a jazz musician never quite knows the notes they'll play until they play them, a quantum system is a mystery until it’s observed. The dance of particles is unpredictable and fleeting, like a jazz solo that evaporates 
+- **residual-projected**: Quantum mechanics is like a brushstroke in an abstract masterpiece, swirling and darting across the canvas of the cosmos with an unerring precision and whimsical unpredictability. The act of observation alters the very nature of the system it probes, just as a sudden snapshot can erase the very esse
+
+### Prompt: Imagine an unconventional use of a paperclip and describe it briefly.
+
+- **greedy**: A paperclip can be used in an unconventional way to create a simple yet effective tool for securing small objects. For example, you can use a paperclip to secure a small item, such as a pen or a pencil, to a book or a desk. This can be useful for keeping the item in place while you are working or st
+- **temperature 0.8**: Sure! Here's a creative and unconventional use of a paperclip:
+
+Imagine you're a chef preparing a gourmet meal. As you're busy chopping vegetables and preparing the main course, you realize you've accidentally left your spatula at the table. The last thing you need is to get the entire kitchen messy
+- **residual-projected**: One unconventional use of a paperclip could be as a makeshift hair tie for a long hairdo or as a decorative fastener on a piece of clothing.
+
+### Prompt: Name three things people get wrong about black holes.
+
+- **greedy**: 1. Black holes are not black: While black holes are often depicted as completely black, they actually emit a small amount of radiation called Hawking radiation, which is invisible to the naked eye. This radiation is so weak that it's difficult to detect, but it's still there.
+
+2. Black holes are not
+- **temperature 0.8**: There are several misconceptions about black holes, some of which can be quite prevalent:
+
+1. Black holes are always growing: This is not correct. Black holes do not magically grow in size. They only grow when matter falls into them, increasing the mass and thus the gravity. After a certain point, t
+- **residual-projected**: There are several misconceptions people tend to have about black holes, but here are three of the most common misperceptions:
+
+1. The event horizon is the boundary that separates the outside from the inside of a black hole. This is a misunderstanding because the event horizon is not a physical bound
+
+### Prompt: Suggest a research direction that combines biology and information theory.
+
+- **greedy**: One research direction that combines biology and information theory is the study of biological information processing. This involves understanding how biological systems, such as cells and organisms, process and transmit information. This can include studying how genetic information is encoded and d
+- **temperature 0.8**: One research direction that combines biology and information theory could be the study of biological pattern recognition and information processing. This could include the analysis of how biological systems use information to recognize patterns, such as how the brain recognizes faces or how immune c
+- **residual-projected**: One suggested research direction that combines biology and information theory is the study of how biological systems process and transmit information. This could involve exploring the complex networks of molecules and cells within organisms that exchange information through chemical signaling pathwa
+
+### Prompt: Describe how you would explain photosynthesis to a 5-year-old.
+
+- **greedy**: Photosynthesis is a process that plants use to make their own food. It's like a recipe that plants follow to grow and stay healthy. Here's how it works:
+
+1. **Sunlight**: Plants need sunlight to make food. The sun gives them energy.
+
+2. **Water**: Plants also need water from the ground. Water helps 
+- **temperature 0.8**: Sure, I'd be happy to explain photosynthesis to a 5-year-old in a way they can understand. 
+
+Photosynthesis is the process by which plants make their own food using sunlight. You can think of it like a recipe for plants to create their own food. The sun's energy is like the power of the chef, and th
+- **residual-projected**: Sure! Photosynthesis is like a magical process plants use to grow and produce food for themselves. It's kind of like a solar-powered lunch-making machine!
+The sun beams down its bright rays, and plants soak them up through their leaves. This energy-rich light energy then sparks a chemical reaction i
+
+### Prompt: What is one underappreciated property of the number zero?
+
+- **greedy**: One underappreciated property of the number zero is its role in representing the absence of quantity or the concept of nothingness. In mathematics, zero is a fundamental concept that allows for the development of arithmetic operations such as addition, subtraction, multiplication, and division. It i
+- **temperature 0.8**: One underappreciated property of the number zero is its role in positional numeral systems, particularly in the decimal (base-10) and other positional numeral systems. Zero is crucial because it allows for the concept of place value, where the position of a digit in a number determines its value. Wi
+- **residual-projected**: One underappreciated property of the number zero is its role as a placeholder in positional numeral systems such as the decimal system (base 10). This property is crucial for representing very large and very small numbers efficiently. Without it, we would not be able to express the concept of a "zer
+
+### Prompt: Suggest an unusual analogy for how memory works.
+
+- **greedy**: Memory is like a digital camera. Just as a camera captures a moment in time and stores it as a digital image, memory stores and retrieves information as a digital file. The camera's memory card is like the computer's RAM, which holds the most recent data. The camera's lens is like the computer's CPU
+- **temperature 0.8**: Memory is like a digital photo album, where each memory is a photo that captures a specific moment or experience. When you want to recall a memory, you search through the album just like you would with a digital photo album, using keywords or descriptions to find the most relevant photo. The more yo
+- **residual-projected**: One unusual analogy for how memory works is to think of it as a digital camera. In this analogy, the memory in a computer or smartphone is like a camera memory card, where data is stored in small units called bytes. The more memory you have, the more photos you can take and store, just like having a
+
+### Prompt: Name a question that physicists are still arguing about.
+
+- **greedy**: One of the most significant and ongoing debates in physics is the nature of dark matter and dark energy. Dark matter is a type of matter that does not emit, absorb, or reflect light, making it invisible to telescopes. It is thought to make up about 27% of the universe's total mass-energy content, bu
+- **temperature 0.8**: One of the most famous and enduring debates in physics is the question of whether the universe is infinite or finite. This debate has been ongoing for over a century and has led to significant advances in our understanding of cosmology and the nature of the universe.
+- **residual-projected**: A question that has been a point of debate in the field of quantum mechanics is the interpretation of quantum mechanics. The interpretation of quantum mechanics is the process of understanding how the mathematical structure of the theory gives rise to the meaning and implications of the theory. The 
