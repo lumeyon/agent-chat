@@ -171,3 +171,48 @@ calibration n=25, k values: [1, 4, 16]
 - **k=1**: A suggested research direction that combines biology and information theory is the study of DNA data compression algorithms. Information theory, which is a branch of mathematics and computer science, 
 - **k=4**: One suggested research direction that combines biology and information theory is the study of how genetic information is transmitted and processed within cells. This could involve exploring the molecu
 - **k=16**: One suggested research direction that combines biology and information theory is the study of how complex biological systems process and transmit information. This includes exploring the molecular mec
+## Anomaly clusters (per-agent k-means on residuals)
+
+
+### codex clusters (k_lowrank=5, n_clusters=4)
+
+- **cluster 0** (n=33): n_latex(+0.87), n_self_correction(-0.47), n_codeblocks(+0.57), n_hedge_words(-0.40)
+    - `recWzUUYBN0NuXO2k` [Chemistry/Chemistry (general)]: 'Initial moles acetic acid:\n\n```text\n0.02000 L * 0.050 M = 0.00100 mol\n```\n\nAfter dilution, total aci'
+    - `recPzW1WqRnPs57D6` [Physics/Quantum Mechanics]: 'After the new field is along `+Y`, the Hamiltonian is\n\n```text\nH = -γ B S_y\n```\n\nThe initial `+Z` sp'
+- **cluster 1** (n=44): response_len(+0.58), n_codeblocks(-0.47), n_self_correction(-0.02), n_hedge_words(-0.42)
+    - `rec6sE2CRtD4drtHg` [Physics/High-energy particle physics]: 'The pseudo-Goldstone mass comes from the one-loop Coleman-Weinberg correction along the flat directi'
+    - `recyl3usDqb7ruXJx` [Chemistry/Organic Chemistry]: 'mCPBA epoxidation preserves alkene geometry, then acid-catalyzed epoxide opening gives anti dihydrox'
+- **cluster 2** (n=1): n_certainty_words(+10.92), letter_C(-3.36), response_len(-2.14), n_hedge_words(-1.57)
+    - `rec06pnAkLOr2t2mp` [Physics/Physics (general)]: 'Using the energy-time uncertainty relation,\n\n\\[\n\\Delta E \\sim \\frac{\\hbar}{\\tau}\n\\]\n\nFor the shorter'
+- **cluster 3** (n=21): n_hedge_words(+2.42), response_len(-0.65), n_latex(-0.33), n_codeblocks(-0.45)
+    - `recnjViFrqlZNL3fY` [Physics/Physics (general)]: 'Lyman-alpha is emitted/absorbed at rest wavelength \\(1216\\ \\text{Å}\\). For ground-based optical dete'
+    - `recYt8xx80OTyDsL0` [Biology/Molecular Biology]: 'Fluorescent Peyer patches indicate antigen exposure in gut-associated lymphoid tissue. The prolifera'
+
+### claude clusters (k_lowrank=5, n_clusters=4)
+
+- **cluster 0** (n=72): response_len(+0.14), n_self_correction(-0.40), n_questions(-0.01), letter_unknown(-0.19)
+    - `recVE8cUNHpHZIAvL` [Physics/Astrophysics]: 'Looking at this problem:\n\n**Solar neutrino sources by branch:**\n- pp-I: pp neutrinos (continuous, en'
+    - `recD8oX1KevFbl7bL` [Biology/Genetics]: 'Looking at each mutant by translating the start of the coding sequence:\n\n**Original:** ATG-TTT-CTC-G'
+- **cluster 1** (n=15): n_certainty_words(+2.69), letter_unknown(+1.29), n_self_correction(+1.05), letter_A(-0.14)
+    - `rec6sE2CRtD4drtHg` [Physics/High-energy particle physics]: 'Looking at this problem, I need to identify the Coleman-Weinberg radiative correction to a pseudo-Go'
+    - `recnTTKdBzfuoZ7w7` [Biology/Molecular Biology]: 'Looking at this question, I need to identify which DNA sequence will best produce human p53 in E. co'
+- **cluster 2** (n=10): n_latex(+3.38), letter_D(+0.65), response_len(-0.29), n_self_correction(-0.33)
+    - `recmkvk6EFAmqyMxR` [Physics/Relativistic Mechanics]: 'Looking at this problem, I need to find the Lorentz factor where 2/3 of particles reach the detector'
+    - `recOYsaYs6RmtlTDy` [Physics/Quantum Mechanics]: 'Looking at this problem:\n\n**Fundamental state**: v=0, J=0. Selection rules for rovibrational transit'
+- **cluster 3** (n=1): n_codeblocks(+11.32), letter_D(-2.43), n_certainty_words(-2.30), response_len(-2.06)
+    - `recnGEpF1srQpaqWq` [Chemistry/Organic Chemistry]: 'Looking at this problem, I need to recognize that heating a 1,5-diene triggers a **Cope rearrangemen'
+
+### agent_chat clusters (k_lowrank=5, n_clusters=4)
+
+- **cluster 0** (n=48): n_self_correction(+0.44), n_certainty_words(-0.71), response_len(+0.24), n_latex(+0.12)
+    - `recLSzwBUS3olCjhl` [Chemistry/Chemistry (general)]: 'Looking at the NMR data again:\n\n- **7.0 ppm (1H, d, J = 16.0 Hz)**: vinylic H on the carbon bonded t'
+    - `recPL4ZPpVYxgMu57` [Physics/High-energy particle physics]: 'The peer critique actually reinforces my original answer. Let me reconsider:\n\n1. **Lorentz symmetry*'
+- **cluster 1** (n=40): n_certainty_words(+1.31), letter_unknown(+0.34), n_hedge_words(+0.02), n_self_correction(-0.30)
+    - `rec47oNPXudlTIk4y` [Chemistry/Chemistry (general)]: "Looking at this problem again with the peer's endorsement:\n\nThe question asks about a dual catalyst "
+    - `recD8oX1KevFbl7bL` [Biology/Genetics]: 'Looking at this question carefully:\n\n**Intact:** ATG-TTT-CTC-GCT-GGT-ACT-TCT-GTG-GAT...\n\n**Mutant 1:'
+- **cluster 2** (n=5): n_questions(+4.68), n_hedge_words(-0.87), n_self_correction(-0.87), response_len(-1.24)
+    - `recDDxpS9s8cwkqfq` [Chemistry/Organic Chemistry]: 'Reconsidering the critique:\n\n**The key question: what does "emits" mean here?**\n\nFor a textile dye, '
+    - `recmkvk6EFAmqyMxR` [Physics/Relativistic Mechanics]: "Looking at this problem again with the peer's endorsement.\n\nThe decay survival probability for ultra"
+- **cluster 3** (n=4): n_latex(+4.86), letter_A(+1.86), letter_D(-1.30), n_self_correction(+0.15)
+    - `recyPffUDqC2k7ZZO` [Physics/Quantum Mechanics]: "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2"
+    - `recywRj5a8EEjj2Ib` [Physics/Physics (general)]: 'The peer critique confirms my reasoning. Let me verify once more:\n\n**Energy conservation:** At turni'

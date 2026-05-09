@@ -1,0 +1,234 @@
+{
+  "agent": "codex",
+  "k_lowrank": 5,
+  "n_clusters": 4,
+  "n_total_rows": 198,
+  "n_high_residual": 99,
+  "residual_norm_sq_threshold": 1.8367942571640015,
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "n_members": 33,
+      "signature": [
+        {
+          "feature": "n_latex",
+          "mean_abs": 0.8652658462524414,
+          "mean_signed": 0.8652658462524414
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.6833876371383667,
+          "mean_signed": -0.4682680666446686
+        },
+        {
+          "feature": "n_codeblocks",
+          "mean_abs": 0.6464537382125854,
+          "mean_signed": 0.5680293440818787
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 0.49929279088974,
+          "mean_signed": -0.39857742190361023
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "recWzUUYBN0NuXO2k",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 24.291419982910156,
+          "response_excerpt": "Initial moles acetic acid:\n\n```text\n0.02000 L * 0.050 M = 0.00100 mol\n```\n\nAfter dilution, total acid moles are unchanged. Equivalence requires:\n\n```text\n0.00100 mol / 0.100 M = 0.01000 L = 10.00 mL N"
+        },
+        {
+          "id": "recPzW1WqRnPs57D6",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 16.728418350219727,
+          "response_excerpt": "After the new field is along `+Y`, the Hamiltonian is\n\n```text\nH = -\u03b3 B S_y\n```\n\nThe initial `+Z` spin state is a superposition of the two `S_y` eigenstates, whose energy separation is\n\n```text\n\u0394E = \u03b3"
+        },
+        {
+          "id": "rec1oj2DveQWl9Rpw",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 14.762666702270508,
+          "response_excerpt": "Moles of `Fe(OH)3`:\n\n```text\n0.100 g / 106.9 g mol^-1 = 9.36e-4 mol\n```\n\nStoichiometric acid needed:\n\n```text\nFe(OH)3 + 3H+ -> Fe3+ + 3H2O\n3(9.36e-4) = 2.81e-3 mol H+\n```\n\nIn `0.100 L`, `[Fe3+] \u2248 9.36"
+        },
+        {
+          "id": "recG1ljJQcVy6CbSl",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 14.53726577758789,
+          "response_excerpt": "For \\(A_y=\\frac{h}{4\\pi}\\begin{pmatrix}0&-i\\\\ i&0\\end{pmatrix}\\), the matrix is proportional to \\(\\sigma_y\\), whose eigenvalues are \\(\\pm 1\\). So the eigenvalues of \\(A_y\\) are real: \\(\\pm \\frac{h}{4\\"
+        },
+        {
+          "id": "recRTiyaRymerDJ4y",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 8.647716522216797,
+          "response_excerpt": "For equal albedo around the same star, equilibrium temperature scales as:\n\n\\(T \\propto a^{-1/2}\\)\n\nUsing Kepler\u2019s third law:\n\n\\(a \\propto P^{2/3}\\)\n\nSo:\n\n\\(T \\propto P^{-1/3}\\)\n\nPlanet_4 has period ra"
+        }
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "n_members": 44,
+      "signature": [
+        {
+          "feature": "response_len",
+          "mean_abs": 0.5983559489250183,
+          "mean_signed": 0.5824859738349915
+        },
+        {
+          "feature": "n_codeblocks",
+          "mean_abs": 0.5624608397483826,
+          "mean_signed": -0.46926385164260864
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.5594805479049683,
+          "mean_signed": -0.01519217249006033
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 0.4971937835216522,
+          "mean_signed": -0.42165234684944153
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "rec6sE2CRtD4drtHg",
+          "domain": "Physics",
+          "subdomain": "High-energy particle physics",
+          "residual_norm_sq": 54.23490524291992,
+          "response_excerpt": "The pseudo-Goldstone mass comes from the one-loop Coleman-Weinberg correction along the flat direction. It must scale as\n\n\\[\nM_{h_2}^2 \\propto \\frac{1}{8\\pi^2(x^2+v^2)}\n\\]\n\nwith positive bosonic mass-"
+        },
+        {
+          "id": "recyl3usDqb7ruXJx",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 9.03524398803711,
+          "response_excerpt": "mCPBA epoxidation preserves alkene geometry, then acid-catalyzed epoxide opening gives anti dihydroxylation overall.\n\nFor symmetric oct-4-ene:\n\n- Reaction 1, `(E)-oct-4-ene`: anti dihydroxylation give"
+        },
+        {
+          "id": "recUc29lMDBEvurYo",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 6.038715362548828,
+          "response_excerpt": "For minimum energy, the 12 outer charges arrange on the sphere as an icosahedron.\n\nTotal energy:\n\n\\[\nU = kq^2\\left(\\sum_{\\text{outer pairs}}\\frac{1}{r_{ij}} + \\sum_{\\text{center-outer}}\\frac{1}{2}\\rig"
+        },
+        {
+          "id": "recb2M22zaD3tL6Qc",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 5.5074286460876465,
+          "response_excerpt": "FTIR: broad ~3000 cm\u207b\u00b9 plus strong ~1700 cm\u207b\u00b9 indicates a carboxylic acid, which all choices contain.\n\nThe key evidence is the \u00b9H NMR splitting:\n\n- A **doublet of triplets of quartets** requires coupl"
+        },
+        {
+          "id": "recLB0EkQ54bYVhnd",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 5.451284408569336,
+          "response_excerpt": "The fission releases\n\n\\[\nQ = (1 - 0.99)Mc^2 = 0.01(300\\ \\text{GeV}) = 3\\ \\text{GeV}.\n\\]\n\nThe fragment masses are in a 2:1 ratio, so:\n\n\\[\nm_1c^2 = 198\\ \\text{GeV}, \\quad m_2c^2 = 99\\ \\text{GeV}.\n\\]\n\nRe"
+        }
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "n_members": 1,
+      "signature": [
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 10.924102783203125,
+          "mean_signed": 10.924102783203125
+        },
+        {
+          "feature": "letter_C",
+          "mean_abs": 3.358976364135742,
+          "mean_signed": -3.358976364135742
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 2.1391382217407227,
+          "mean_signed": -2.1391382217407227
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 1.56997549533844,
+          "mean_signed": -1.56997549533844
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "rec06pnAkLOr2t2mp",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 145.4143829345703,
+          "response_excerpt": "Using the energy-time uncertainty relation,\n\n\\[\n\\Delta E \\sim \\frac{\\hbar}{\\tau}\n\\]\n\nFor the shorter lifetime, \\(\\tau = 10^{-9}\\,\\text{s}\\):\n\n\\[\n\\Delta E \\sim \\frac{6.58 \\times 10^{-16}\\,\\text{eV s}}{"
+        }
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "n_members": 21,
+      "signature": [
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 2.4232659339904785,
+          "mean_signed": 2.4232659339904785
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 0.6482707262039185,
+          "mean_signed": -0.6482707262039185
+        },
+        {
+          "feature": "n_latex",
+          "mean_abs": 0.524560272693634,
+          "mean_signed": -0.33069729804992676
+        },
+        {
+          "feature": "n_codeblocks",
+          "mean_abs": 0.47655072808265686,
+          "mean_signed": -0.4541037976741791
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "recnjViFrqlZNL3fY",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 13.977880477905273,
+          "response_excerpt": "Lyman-alpha is emitted/absorbed at rest wavelength \\(1216\\ \\text{\u00c5}\\). For ground-based optical detection, it must be redshifted to roughly the optical cutoff, about \\(3500\\ \\text{\u00c5}\\).\n\n\\[\n1216(1+z) "
+        },
+        {
+          "id": "recYt8xx80OTyDsL0",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 12.516732215881348,
+          "response_excerpt": "Fluorescent Peyer patches indicate antigen exposure in gut-associated lymphoid tissue. The proliferating cells are likely activated B cells in germinal centers.\n\nHigh variability specifically in the v"
+        },
+        {
+          "id": "rec9W28HgpEUeUN8k",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 12.063363075256348,
+          "response_excerpt": "For `phi = -pi/4`, the state is the odd cat state:\n\n`|psi> \u221d |alpha> - |-alpha>`\n\nSince `rho = |psi><psi|` is pure:\n\n`Tr(rho ln rho) = 0`\n\nSo the non-Gaussianity is just the entropy of the reference G"
+        },
+        {
+          "id": "recD8oX1KevFbl7bL",
+          "domain": "Biology",
+          "subdomain": "Genetics",
+          "residual_norm_sq": 11.92039680480957,
+          "response_excerpt": "Reading from the start codon:\n\n- Intact: `ATG TTT CTC GCT...`\n- Mutant 2: `ATG TTC TAA GCT...`\n\nMutant 2 introduces `TAA`, a premature stop codon very early in the coding sequence. That is the most li"
+        },
+        {
+          "id": "recINGR1z01Fh1Z3A",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 10.684486389160156,
+          "response_excerpt": "In LTE, the excitation populations follow the Boltzmann factor:\n\n\\[\nn \\propto e^{-\\Delta E/kT}\n\\]\n\nIf star 1 has twice the excitation population of star 2:\n\n\\[\n2 = \\frac{e^{-\\Delta E/kT_1}}{e^{-\\Delta"
+        }
+      ]
+    }
+  ]
+}

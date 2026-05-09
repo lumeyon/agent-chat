@@ -1,0 +1,234 @@
+{
+  "agent": "claude",
+  "k_lowrank": 5,
+  "n_clusters": 4,
+  "n_total_rows": 197,
+  "n_high_residual": 98,
+  "residual_norm_sq_threshold": 2.256420850753784,
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "n_members": 72,
+      "signature": [
+        {
+          "feature": "response_len",
+          "mean_abs": 0.6212728023529053,
+          "mean_signed": 0.1435326486825943
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.530938446521759,
+          "mean_signed": -0.39515647292137146
+        },
+        {
+          "feature": "n_questions",
+          "mean_abs": 0.5235073566436768,
+          "mean_signed": -0.007333452347666025
+        },
+        {
+          "feature": "letter_unknown",
+          "mean_abs": 0.5064780116081238,
+          "mean_signed": -0.18635410070419312
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "recVE8cUNHpHZIAvL",
+          "domain": "Physics",
+          "subdomain": "Astrophysics",
+          "residual_norm_sq": 54.716129302978516,
+          "response_excerpt": "Looking at this problem:\n\n**Solar neutrino sources by branch:**\n- pp-I: pp neutrinos (continuous, endpoint ~420 keV) \u2014 below both bands\n- pp-II: \u2077Be neutrinos (lines at **861 keV** and 384 keV), pep a"
+        },
+        {
+          "id": "recD8oX1KevFbl7bL",
+          "domain": "Biology",
+          "subdomain": "Genetics",
+          "residual_norm_sq": 39.73118591308594,
+          "response_excerpt": "Looking at each mutant by translating the start of the coding sequence:\n\n**Original:** ATG-TTT-CTC-GCT-GGT-ACT-TCT-GTG-GAT-GAA-CAT-ATT-TAT-TGT-CGT...\n\u2192 Met-Phe-Leu-Ala-Gly-Thr-Ser-Val-Asp-Glu-His-Ile-"
+        },
+        {
+          "id": "recnjViFrqlZNL3fY",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 9.181074142456055,
+          "response_excerpt": "Looking at this problem:\n\nLyman alpha rest wavelength: 1216 \u00c5\n\nGround-based optical telescopes are limited by atmospheric UV cutoff at roughly ~3500 \u00c5 (atmosphere blocks shorter wavelengths).\n\nFor Ly\u03b1"
+        },
+        {
+          "id": "recZdZxsN0AxDx0pB",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 7.118114948272705,
+          "response_excerpt": "Looking at this carefully:\n\n**Check the slope/efficiency consistency:**\n- Between each 10-fold dilution, Ct differences are ~3.3 cycles (e.g., 34.2 \u2192 30.9 \u2192 27.6 \u2192 24.3 \u2192 21.0). This is consistent wit"
+        },
+        {
+          "id": "rectlyG9pCAAuWhoB",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 6.008392810821533,
+          "response_excerpt": "Looking at this problem:\n\n**Diels-Alder reaction setup:** 5-fluorocyclopentadiene (the F is on the sp\u00b3 C5) reacts with maleic anhydride to give a norbornene-fused anhydride, where C5 of the diene beco"
+        }
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "n_members": 15,
+      "signature": [
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 2.6885955333709717,
+          "mean_signed": 2.6885955333709717
+        },
+        {
+          "feature": "letter_unknown",
+          "mean_abs": 1.2903445959091187,
+          "mean_signed": 1.2903445959091187
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 1.0481895208358765,
+          "mean_signed": 1.0457056760787964
+        },
+        {
+          "feature": "letter_A",
+          "mean_abs": 0.901058554649353,
+          "mean_signed": -0.14239482581615448
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "rec6sE2CRtD4drtHg",
+          "domain": "Physics",
+          "subdomain": "High-energy particle physics",
+          "residual_norm_sq": 46.38991165161133,
+          "response_excerpt": "Looking at this problem, I need to identify the Coleman-Weinberg radiative correction to a pseudo-Goldstone boson mass.\n\nThe standard form is:\n$$M^2 \\sim \\frac{1}{8\\pi^2 f^2} \\sum_i (\\pm) M_i^4$$\n\nwhe"
+        },
+        {
+          "id": "recnTTKdBzfuoZ7w7",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 43.98716354370117,
+          "response_excerpt": "Looking at this question, I need to identify which DNA sequence will best produce human p53 in E. coli BL21 *quickly*. This is a codon optimization question \u2014 E. coli BL21 has rare codons that slow/st"
+        },
+        {
+          "id": "recYt8xx80OTyDsL0",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 23.928382873535156,
+          "response_excerpt": "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different appro"
+        },
+        {
+          "id": "rec4L69T0Y1AS4AFS",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 23.927001953125,
+          "response_excerpt": "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different appro"
+        },
+        {
+          "id": "recTs7qzfJs6kfLUK",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 23.92522621154785,
+          "response_excerpt": "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different appro"
+        }
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "n_members": 10,
+      "signature": [
+        {
+          "feature": "n_latex",
+          "mean_abs": 3.3792309761047363,
+          "mean_signed": 3.3792309761047363
+        },
+        {
+          "feature": "letter_D",
+          "mean_abs": 0.6450700759887695,
+          "mean_signed": 0.6450700759887695
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 0.4716469347476959,
+          "mean_signed": -0.28991493582725525
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.4053712785243988,
+          "mean_signed": -0.3277161717414856
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "recmkvk6EFAmqyMxR",
+          "domain": "Physics",
+          "subdomain": "Relativistic Mechanics",
+          "residual_norm_sq": 62.688720703125,
+          "response_excerpt": "Looking at this problem, I need to find the Lorentz factor where 2/3 of particles reach the detector walls.\n\n**Setting up the decay equation:**\n\nThe fraction of particles surviving to distance R is:\n$"
+        },
+        {
+          "id": "recOYsaYs6RmtlTDy",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 24.596323013305664,
+          "response_excerpt": "Looking at this problem:\n\n**Fundamental state**: v=0, J=0. Selection rules for rovibrational transitions: \u0394v=+1, \u0394J=\u00b11. From J=0, only \u0394J=+1 is allowed, so the lowest-energy next state is (v=1, J=1).\n"
+        },
+        {
+          "id": "recatj4YXzbOaq3Ar",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 24.1747989654541,
+          "response_excerpt": "The operator $\\vec{\\sigma}\\cdot\\vec{n}$ has eigenvalues $\\pm 1$ (since $(\\vec{\\sigma}\\cdot\\vec{n})^2 = I$ for a unit vector $\\vec{n}$). Multiplying by $\\varepsilon$ gives eigenvalues $\\pm\\varepsilon$."
+        },
+        {
+          "id": "recN4DY9Q5V03glmQ",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 15.781230926513672,
+          "response_excerpt": "Looking at this problem, I need to find the imaginary part of the forward scattering amplitude using the partial wave expansion:\n\n$$\\text{Im } f(0) = \\frac{1}{k}\\sum_{l=0}^{4}(2l+1)\\sin^2(\\delta_l)$$\n"
+        },
+        {
+          "id": "rec2UlKqC6RFHdcro",
+          "domain": "Physics",
+          "subdomain": "High-energy particle physics",
+          "residual_norm_sq": 13.85325813293457,
+          "response_excerpt": "Looking at this problem, I need to find the threshold energy for \u03b3\u03b3 \u2192 e\u207ae\u207b pair production.\n\n**Threshold condition:**\nFor two photons with energies E_\u03b3 and E_CMB colliding head-on (most favorable case"
+        }
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "n_members": 1,
+      "signature": [
+        {
+          "feature": "n_codeblocks",
+          "mean_abs": 11.32089900970459,
+          "mean_signed": 11.32089900970459
+        },
+        {
+          "feature": "letter_D",
+          "mean_abs": 2.4296789169311523,
+          "mean_signed": -2.4296789169311523
+        },
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 2.299891710281372,
+          "mean_signed": -2.299891710281372
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 2.062570571899414,
+          "mean_signed": -2.062570571899414
+        }
+      ],
+      "exemplars": [
+        {
+          "id": "recnGEpF1srQpaqWq",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 151.45333862304688,
+          "response_excerpt": "Looking at this problem, I need to recognize that heating a 1,5-diene triggers a **Cope rearrangement** ([3,3]-sigmatropic shift).\n\n## Step 1: Draw 5-butylnona-2,6-diene\n\n```\nCH\u2083-CH=CH-CH\u2082-CH(C\u2084H\u2089)-CH"
+        }
+      ]
+    }
+  ]
+}
