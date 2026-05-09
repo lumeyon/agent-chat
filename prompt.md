@@ -56,23 +56,28 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 
 **NL38 (mid-flight):** ✅ extract.ts pulled into its own module + 25 unit tests + rescore.ts harness for post-hoc re-parsing of saved responses. Run-baseline.ts now imports the canonical extractor. Sanity: rescore on partial baselines = 0 deltas (old + new extractors agree on every observed shape). **Still pending in NL38: wait for both baselines to finish, run `rescore.ts` (no-op expected; defensive), run `score.ts`, report final aggregates per model + per-domain + confusion matrix.**
 
-**NL39 — agent-chat condition runner:**
-- New file: `benchmarks/gpqa-diamond/src/run-agent-chat.ts`. Same shape as run-baseline.ts (resumable, JSONL output), but each problem fires 3 LLM calls:
-  1. **Draft**: orion (claude) sees question + choices; produces an initial reasoning + answer using the SAME prompt template baselines use.
-  2. **Critique**: codex peer (rotation by question_id hash: lumeyon → keystone → carina) sees the question + claude's draft + a critique prompt: "review the reasoning for errors; argue for a different choice if you disagree; otherwise endorse".
-  3. **Revise**: orion (claude) sees the original question + its draft + the codex critique; produces a final answer with reasoning. Final letter extracted via the same extract.ts.
-- Per-problem captures (in `results/agent-chat.jsonl`): `id`, `domain`, `claude_draft_response`, `claude_draft_letter`, `codex_critique_response`, `peer` (which codex agent), `claude_revised_response`, `answer_extracted` (= revised letter), `answer_expected`, `correct`, `elapsed_ms_total`, `elapsed_ms_per_call`, `error?`. JOINs by `id` against both baselines.
-- Cost per problem: 2 claude calls (~10s each) + 1 codex call (~18s) ≈ 38s × 198 ≈ ~2h wall clock. Token cost ~$15-25.
-- **Heterogeneity rule:** the codex peer is hash-deterministic per question_id, never claude. Same logic as `pickPredictorPeer` in NL35's auto-study-turn-consumer.ts; reuse if convenient.
-- **Critique prompt design** (load-bearing): the critique should NOT see the answer key. It sees the question + claude's draft response and is asked to find errors / push back. Prompt template TBD; needs a thin pilot before the full run.
+**NL39 — agent-chat condition runner:** ✅ SHIPPED + SMOKED.
+- `benchmarks/gpqa-diamond/src/run-agent-chat.ts`. Same flag shape as run-baseline.ts (resumable, --retry-timeouts, --timeout-ms default 1_200_000 = 20 min/call). Per problem fires 3 LLM calls:
+  1. **Draft** — claude (orion) sees question + 4 choices → CoT + `Answer: X`.
+  2. **Critique** — codex (peer chosen by `hash(question_id) % 3` from [lumeyon, keystone, carina], heterogeneity-first) sees question + draft. Critic does NOT see the answer key.
+  3. **Revise** — claude (orion) sees question + draft + critique → final `Answer: X`. Final letter = revised answer.
+- Per-question captures (`results/agent-chat.jsonl`): `id`, `domain`, `subdomain`, `peer`, `claude_draft_response`, `claude_draft_letter`, `codex_critique_response`, `claude_revised_response`, `answer_extracted`, `answer_expected`, `correct`, `elapsed_ms` (total) + per-call elapsed, `prompt_chars_*`, `error?`.
+- Failure handling: draft-fail records the entry & skips. Critique-fail keeps claude's draft as the final (don't penalize agent-chat below claude-alone for codex hiccups). Revise-fail falls back to draft letter.
+- Smoke (1 question, Physics-general): draft 6.9s → carina critique (endorsed C) 12.7s → revise 9.6s → C ✓. Total 29s end-to-end.
+- **Will NOT fire the full 198 until codex first-pass + both retry passes are settled** to avoid CPU/LLM-rate contention during the comparison run.
 
-**NL40 — agent-chat full run + 3-way comparison:**
-- Run all 198 through `run-agent-chat.ts`.
-- Build a `compare.ts` that JOINs codex.jsonl + claude.jsonl + agent-chat.jsonl by `id` and emits:
-  - Aggregate accuracy: codex %, claude %, agent-chat %.
-  - **Paired wins**: questions agent-chat got right that codex/claude alone missed; the reverse — questions where agent-chat lost ground vs. each baseline.
+**NL40 — sequence (gated on background runs):**
+1. **Wait for codex first-pass to finish** (currently 162/198 ≈ 82%; ETA ~20-30 min on 240s budget; some timeouts will land in there).
+2. **Run codex retry**: `bun run-baseline.ts --model codex --retry-timeouts --timeout-ms 1200000 --out results/codex.jsonl` in background. Parallels what claude retry is doing now.
+3. **Wait for claude retry to finish** (started NL38, 9 timeouts re-running with 20-min budget; ETA varies 30-90 min depending on actual think time).
+4. **Wait for codex retry to finish** (number of timeouts TBD until first-pass done).
+5. **Final baseline scores**: `score.ts` on each.
+6. **Kick off agent-chat full run**: `bun run-agent-chat.ts --timeout-ms 1200000 --out results/agent-chat.jsonl` in background. ~30s/Q baseline × 198 ≈ 100 min wall on the easy path; worst case much longer with timeouts.
+7. **3-way comparison**: build `compare.ts` that JOINs codex/claude/agent-chat results by id and emits:
+  - Aggregate accuracy.
+  - **Paired wins**: questions agent-chat got right that codex/claude alone missed; the reverse.
   - Per-domain breakdown.
-  - **Diagnostic detail** for disagreement cases: the question text, all three responses side-by-side, who was right.
+  - Diagnostic side-by-side for disagreement cases.
 
 **NL41+ — analysis + iteration:**
 - If agent-chat ≥ max(baselines) by >3%: characterize where the gain came from. Which domains? Which prompt patterns? Did the codex critique consistently catch a class of error claude-alone missed?
