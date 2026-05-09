@@ -1,345 +1,317 @@
-# RL Router for Heterogeneous Experts — Continuous-Learning Pivot (NL41+)
+# Quantum-Inspired Residual Exploration — 100% pivot from expert-selection (NL42+)
 
-> **Mission (NL41+):** Pivot from agent-chat orchestration (v1 demonstrated -1 vs claude on GPQA, failed
-> at the stated win condition) to a **learned router** π(e | x) over heterogeneous experts (codex,
-> claude, optionally agent-chat). The router demonstrates **continuous learning**: accuracy improves
-> measurably as a function of training samples, on the same GPQA Diamond data we already collected.
+> **Mission (NL42+):** Use the Tang-style ℓ₂-norm-sampling-from-low-rank-residuals kernel as a
+> primitive for **creative exploration outside the agents' RL-training distribution**, not as
+> a router for selecting between experts.
 >
-> This is the smallest end-to-end pilot of the broader vision: tree-of-knowledge experts with
-> dynamic memory + reward-driven routing + Hebbian edge plasticity. Boss's framing of the bigger
-> picture lives in `~/.claude/projects/-data-eyon-git-agent-chat/memory/` (Apprenticeship
-> Substrate, Inquiry Lattice, Lumeyon dual-audience fusion, quantum continuity).
+> The router framing (NL41) was the wrong direction. GPQA's empirical and ablation results
+> proved why: agents are deeply inside training distribution; the (task, expert) score matrix
+> has no informative residual; selection between equally-capable experts is bounded by the
+> sparse disagreement signal (~14/142 on GPQA).
+>
+> The right framing: Tang-residual sampling finds where models *depart* from training-
+> distribution behavior — the anomalies, the disagreements, the creative continuations.
+> These departures are simultaneously:
+>   - the highest-information training data for an Apprenticeship Substrate,
+>   - the highest-value AI-training-data product for Lumeyon's revenue path (dual-audience fusion),
+>   - the natural use of the existing petersen multi-agent topology (disagreement edges),
+>   - and the most defensible "quantum-inspired" story for the Lumeyon quantum pivot.
 
-## Why the pivot
+## What changed from NL41
 
-**Empirical:** at n=142 paired GPQA, oracle-router ceiling is **95.1%** vs codex_solo 88.7% (+6.3%
-headroom). A trivial domain-argmax router already hits 91.5% (+2.8% over codex). Agent-chat v1
-orchestration hits 87.3% (-1.4%). **Routing has measurably more headroom than orchestration on this
-benchmark, with strictly less compute (1 LLM call per question instead of 3).**
+**Killed:** the v0.1 RL router as a routing decision. The trained Q-network at
+`experiments/router/src/model.py` is no longer the goal artifact; the routing accuracy plot is
+no longer the headline metric.
 
-**Strategic:** every (task, expert_chosen, reward) triple the router emits is simultaneously:
-- training data for the router itself (immediate),
-- training data for a future fine-tuned expert (medium-term),
-- a row in the dataset Lumeyon sells to model-trainers (revenue path).
+**Carries forward (reused as substrate):**
+- `experiments/router/src/data.py` — GPQA triples loader (id, domain, query, codex_correct, claude_correct, agent_chat_correct).
+- `experiments/router/src/featurize.py` — BGE-small-en-v1.5 query embedder, GPU pipeline, HF_HOME=/data/cache/huggingface.
+- `experiments/router/src/eval.py` (selectively) — oracle ceiling, K-fold scaffolding, plotting.
+- The full `benchmarks/gpqa-diamond/` dataset including all baseline + agent-chat response prose.
+- TMPDIR=/data/tmp env, claude.json restored, GPU verified post-reboot.
 
-**Continuous-learning demo** is the forcing function: a rising accuracy curve as a function of
-training samples seen. A static-argmax baseline does not satisfy this; an online-updated learned
-policy does.
+**Deprecated (kept for diff history, not the build target):**
+- `experiments/router/src/train.py` — supervised + online training loops for the Q-router. Marked deprecated; superseded by track A/C residual analyzers.
+- `experiments/router/src/router.py` — production routing interface. Not used.
 
-## Hardware mandate
+## The kernel
 
-NVIDIA RTX 4090 on this box (24GB VRAM, ~330 TFLOPS FP16). For the v0.1 model (small MLP) the GPU is
-overkill but used regardless to stay aligned with the broader compute trajectory and to validate the
-training loop on cuda before scaling. The query embedder (sentence-transformers) genuinely benefits
-from GPU.
+Tang's ℓ₂-norm sampling on a residual matrix:
 
-**Per `~/.claude/CLAUDE.md`:** "When doing training or inference with the gpu and you are about to
-report that you are done and now waiting on the training or inference, always check that the GPU is
-actually being used with `nvidia-smi`." → every iteration that runs training MUST verify GPU
-utilization before reporting completion.
-
-**Also from CLAUDE.md:** "Please always do calibrations and training on the FULL datasets. Do not use
-`--max-size` or `--max-samples`." → train on all 198 questions, no subsetting. K-fold CV is fine
-because each fold trains on a contiguous subset; that's not subsetting in the prohibited sense.
-
-**Also from CLAUDE.md:** "When you debug an issue and believe you found a fix, first write the test
-(C++ or pytest) and then verify that it fails. Then fix the issue, and then verify the test now
-passes." → strict tests-first when fixing bugs. For new feature code, write the tests alongside the
-module so failures during refactor are visible.
-
-## Data on hand
-
-- `benchmarks/gpqa-diamond/data/problems.jsonl` — 198 problems with `{id, domain, subdomain, question, choices: {A,B,C,D}, answer}`.
-- `benchmarks/gpqa-diamond/results/codex.jsonl` — 198 baseline rows with `{id, correct, response, ...}`.
-- `benchmarks/gpqa-diamond/results/claude.jsonl` — 198 baseline rows.
-- `benchmarks/gpqa-diamond/results/agent-chat.jsonl` — 122 valid + 76 currently re-running (background pid 2232643). Final 198 once re-run completes.
-- `benchmarks/gpqa-diamond/src/compare.ts` — already JOINs and emits paired stats. Shareable via the same JSONL files.
-
-Each (id, expert) → outcome is **fully observed** (we have correct/incorrect for both experts on every question). This is full-information, not bandit. Training a Q-function `P(correct | query, expert)` is the principled choice; REINFORCE-style policy gradient is a wrapper we can add for the "RL framing" without losing the Q signal.
-
-**Domain mix** (computed from prior NL40 work, n=198): Physics 86, Chemistry 93, Biology 19. **Per-domain expert profile** (n=142 paired) to guide router design:
-
-| domain | codex acc | claude acc | only-codex | only-claude |
-|---|---|---|---|---|
-| Physics (n=53) | 98.1% | 98.1% | 0 | 0 |
-| Chemistry (n=74) | 81.1% | 86.5% | 5 | 9 |
-| Biology (n=15) | 93.3% | 60.0% | 5 | 0 |
-
-→ Physics has no router headroom. Biology is solved by the rule "always send to codex." Chemistry is the only domain where the router has to actually learn; 14 of 74 questions (19%) have one expert right and the other wrong.
-
-## v0.1 — minimum end-to-end RL router (target: 1-2 days)
-
-**Goal:** reproduce or beat the trivial domain-argmax router (91.5%) using a learned policy, AND demonstrate that accuracy rises with training samples.
-
-### v0.1 Project layout
-
-Create at top level (NOT under `benchmarks/`, since this is a separate experimental track that will outlive the GPQA-specific scaffolding):
-
-```
-experiments/router/
-  README.md                  # One paragraph: "see prompt.md for design; this is router v0.1"
-  src/
-    data.py                  # Load + JOIN problem + baseline files into training rows
-    featurize.py             # Embed queries, build feature vectors
-    model.py                 # PyTorch Q-function / policy
-    train.py                 # Training loop: supervised + online/REINFORCE variants
-    eval.py                  # K-fold CV, learning curve, oracle ceiling comparison
-    router.py                # Production interface: query → expert pick
-  tests/
-    test_data.py
-    test_featurize.py
-    test_model.py
-    test_train.py
-    test_eval.py
-  results/
-    learning_curve.csv       # Per training-size, per-fold accuracy
-    learning_curve.png       # Headline plot
-    final_metrics.json       # Aggregate result vs baselines + oracle
-  models/                    # Saved checkpoints (.pt)
-```
-
-### v0.1 Dependencies
-
-Already installed (verify): `torch`, `bun`. Probably need to install: `sentence-transformers`,
-`scikit-learn`, `matplotlib`, `pytest`, `numpy`. Check first with `pip list` (or whatever python env
-is in use here) and install only what's missing.
-
-```bash
-TMPDIR=/data/tmp python3 -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no-gpu')"
-```
-Expect: torch present, cuda available, device name = "NVIDIA GeForce RTX 4090".
-
-If cuda is NOT available, stop and report. The mission is GPU-validated; don't fall back to CPU silently.
-
-### v0.1 Step-by-step build order
-
-**Step 1 — Tests scaffold first.** Write all five `tests/test_*.py` files with stubs that import the modules and assert the expected interfaces (function names, return shapes). They will fail because the modules don't exist yet. That's the failing-test-first checkpoint. Run `TMPDIR=/data/tmp python -m pytest experiments/router/tests/ -x` and confirm all five fail with import errors.
-
-**Step 2 — `src/data.py`.** Function `load_triples()` returns a list of `{id, domain, subdomain, query: str, choices: dict, answer_letter: str, codex_correct: bool, claude_correct: bool, agent_chat_correct: bool | None}`. JOIN by id across the three result files; tolerate missing agent-chat entries (return None for those). Test: returns 198 rows; codex_correct count matches `score.ts` codex baseline (177/198 expected).
-
-**Step 3 — `src/featurize.py`.** Function `embed_queries(queries: list[str], device='cuda') -> torch.Tensor` returning shape (n, 384) using `BAAI/bge-small-en-v1.5` via `sentence-transformers`. Function `build_features(triples, embeddings) -> (X, y, meta)` returning:
-- X: torch.Tensor (n_rows × 2_experts, dim) where dim = 384 (embed) + 3 (domain one-hot) + 30+ (subdomain one-hot) + 2 (expert one-hot) ≈ 420ish
-- y: torch.Tensor (n_rows × 2,) of correct/incorrect per (question, expert)
-- meta: dict with feature column-name list, domain index, subdomain index for inverse lookup
-
-Test: feature dim is consistent across rows; embeddings device is cuda; all questions have non-NaN features.
-
-**Step 4 — `src/model.py`.** Class `RouterQNet(nn.Module)`:
 ```python
-class RouterQNet(nn.Module):
-    def __init__(self, in_dim: int, hidden: int = 128):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden), nn.ReLU(), nn.Dropout(0.1),
-            nn.Linear(hidden, hidden // 2), nn.ReLU(), nn.Dropout(0.1),
-            nn.Linear(hidden // 2, 1),
-        )
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x).squeeze(-1)  # logits for P(correct | x)
+def residual_sample(M: torch.Tensor, k: int, n_samples: int, seed: int = 0):
+    """Given M: (n_rows, d_features), keep top-k SVD components; sample
+    residual rows with probability ∝ ||R_i||²."""
+    U, S, V = torch.linalg.svd(M, full_matrices=False)
+    M_k = U[:, :k] @ torch.diag(S[:k]) @ V[:k, :]
+    R = M - M_k                                   # residual: what's NOT explained by top-k modes
+    norms_sq = (R ** 2).sum(dim=1)                # ℓ₂² per row
+    probs = norms_sq / norms_sq.sum()
+    g = torch.Generator().manual_seed(seed)
+    idx = torch.multinomial(probs, n_samples, replacement=False, generator=g)
+    return idx, R[idx], probs[idx]
 ```
-~75K params. Test: forward pass on dummy input returns shape (batch,), output is finite.
 
-**Step 5 — `src/train.py`.** Two training entry points:
+This 12-line kernel underlies all three tracks. The differences are what M is.
 
-(a) `train_supervised(X, y, n_epochs=200, lr=1e-3, weight_decay=1e-4, device='cuda')` — straight BCE supervised, returns trained model + train/val loss curves. This is the Q-function trainer. Use AdamW. Cosine LR schedule. Early stopping on val loss with patience=20.
+## Three tracks (A, B, C) — same kernel, different M
 
-(b) `train_online(triples, embedder, ordering_seed=0)` — streams the 198 questions in shuffled order, maintains running model, after each question: (i) infers Q-values for both experts on this query, (ii) picks expert (greedy w.r.t. Q OR ε-greedy with ε=0.1), (iii) observes reward, (iv) does ONE SGD step on the (query, expert) pair with the observed reward. Records rolling-window accuracy in 20-question windows. Returns the per-step accuracy trajectory.
+### Track A: Anomaly detector (cheapest; ship first)
 
-Test (a): on toy data with known signal, supervised training converges to >95% accuracy. Test (b): on the real 198-row data, the rolling-window accuracy at the END of the run is higher than at the START. This is the CONTINUOUS LEARNING TEST. If this test fails, the pivot's premise is wrong.
+**M:** rows = queries, cols = response features per agent. Build separate matrices per agent
+(M_codex, M_claude). Each row is one (query, agent) → response-feature vector.
 
-**Step 6 — `src/eval.py`.** Functions:
-- `kfold_eval(triples, k=5, n_seeds=5, train_sizes=[10,25,50,100,158])` — for each train_size, run k-fold CV with n_seeds shuffles, train supervised, report mean ± std accuracy on held-out fold. Output: `results/learning_curve.csv`.
-- `plot_learning_curve(csv_path, out_path)` — matplotlib: x = train_size, y = accuracy ± std band, with horizontal lines at codex_solo (88.7%), claude_solo (88.0%), agent_chat (87.3%), oracle (95.1%), domain_argmax (91.5%).
-- `oracle_ceiling(triples)` — sanity check that recomputes the 95.1% ceiling on the 198-row data; must match the prior NL40 number to within 1 question.
-- `final_metrics(triples, model)` — single-fold trained-on-all-but-test-fold accuracy, broken out by domain, vs all baselines. Output: `results/final_metrics.json`.
+**Response features** (extracted from existing baseline JSONL response prose, no new LLM calls):
 
-Test: oracle_ceiling returns 95.1% ± 0.5% (sanity).
+| feature | extractor | rationale |
+|---|---|---|
+| `response_emb` | BGE-small-en on response text | dense semantic |
+| `response_len` | char count | proxy for reasoning depth |
+| `n_latex` | regex `\$[^$]+\$` and `\\\(...\\\)` | math-heavy reasoning marker |
+| `n_codeblocks` | regex ``` | code-as-thought marker |
+| `n_hedge_words` | regex on `\b(possibly|maybe|uncertain|might|perhaps|approximately|roughly)\b` | confidence proxy |
+| `n_certainty_words` | regex on `\b(clearly|definitely|certainly|undoubtedly|obviously)\b` | inverse confidence proxy |
+| `n_self_correction` | regex on `\b(wait|actually|reconsider|let me reconsider|on second thought)\b` | reasoning-reversal marker |
+| `n_questions` | count `?` | self-questioning |
+| `final_letter_oh` | one-hot of A/B/C/D | answer distribution |
+| `correct` | from baseline | label |
+| `elapsed_ms` | from baseline | timing |
 
-**Step 7 — `src/router.py`.** Production interface that loads a trained checkpoint and exposes `route(query: str) -> dict[expert, float]` returning P(correct | query, expert) per expert. Used by future production calls. v0.1 only needs the Python interface; CLI wrapper can wait.
+Numeric features are standardized (z-score). Embedding is normalized. Concatenated to ~400-dim
+feature vector per (query, agent).
 
-**Step 8 — Run the headline experiment.** Sequence:
-1. `nvidia-smi` to confirm GPU is idle and accessible.
-2. `python -m experiments.router.src.eval kfold` (or whatever invocation) → writes learning_curve.csv + .png.
-3. `nvidia-smi` AGAIN during training (separate shell or before training finishes) to verify GPU utilization is non-zero. Per CLAUDE.md mandate.
-4. `python -m experiments.router.src.eval final` → writes final_metrics.json.
-5. Inspect the learning curve. **Pass criteria:** (a) router accuracy at train_size=158 > codex_solo (88.7%), (b) curve is monotone-rising (allowing for noise band), (c) oracle ceiling sanity check passes.
+**Low-rank approximation:** k chosen by elbow rule on singular values (typically k ∈ {3, 5, 8}).
 
-**Step 9 — Commit.** Commit the experiments/router/ directory with the data + plots. Update prompt.md with the actual numbers. Decide v0.2 priority based on the curve.
+**Output:** for each agent, a list of N=20 anomaly queries (highest residual ℓ²). For each:
+- the query text
+- the agent's response prose
+- the anomaly score (||R_i||²)
+- which features contributed most to the anomaly (top-3 abs-val components of R_i)
 
-### v0.1 Acceptance criteria (concrete)
+**Use:** these are the seeds for the Apprenticeship Substrate's "study material" — questions
+where the agent did something unusual that's worth teaching from.
+
+### Track C: Boundary scout / multi-agent disagreement amplifier (next)
+
+**M:** rows = queries, cols = stacked agent×feature. Each row is the concatenation of
+(codex's response feature vector, claude's response feature vector, agent-chat's response feature vector).
+
+**Low-rank consensus:** top-k singular components capture "what all three agents agree on for
+this kind of query."
+
+**Residual:** captures where one agent diverges from the consensus. ℓ₂-sample to find highest-
+divergence queries.
+
+**Decomposition of residual:** for each high-residual query, compute per-agent contribution to
+the divergence. This identifies WHICH agent is the outlier and on WHICH features.
+
+**Output:** ranked list of disagreement queries with per-agent divergence breakdown. These are
+the quintessential dual-audience triples — every row is a (query, agent_a_behavior,
+agent_b_behavior, divergence_signature) tuple suitable for AI-training-data buyers and for
+apprenticeship-substrate teaching.
+
+**Connection to existing agent-chat substrate:** the petersen graph already records ephemeral
+peer interactions per edge; the boundary scout's divergence triples ARE the kind of event
+edges should record. v0.3 of the original plan (Hebbian edge weights) is naturally subsumed
+here: edges that produce high-divergence queries get more "interesting" weight.
+
+### Track B: Generative residual sampler (most ambitious; defer until A + C demonstrate value)
+
+**Requires:** access to token-level logits from a model whose distribution we can sample from.
+Claude/Codex APIs do NOT expose logits. Local model on the 4090 (Llama-3.1-8B, Mistral-7B,
+Qwen2.5-7B) does.
+
+**M:** rows = generation step / context, cols = vocabulary distribution. At each step, the
+typical continuation distribution P(token | context) has a low-rank structure across similar
+contexts. Approximate top-k → residual = "atypical-but-non-zero" tokens. ℓ₂-sample from
+residual at temperature τ → next token.
+
+**Output:** a generation policy that produces continuations atypical of training-distribution
+mean while remaining grammatically/semantically coherent (because residual entries are still
+real probabilities, just in the orthogonal subspace).
+
+**Use:** a "creativity decoder" for downstream applications — given a prompt, produces
+multiple novel-but-grounded responses. Useful for synthetic-data generation, OOD probing,
+ideation.
+
+**Why deferred:** Track B requires standing up local-model inference infra (vLLM or HF
+generate loop with logit hooks), which is a 1-2 day investment. A and C show value on data we
+already have; B should follow only if A + C confirm the residual-exploration premise has
+signal.
+
+## v0.1 build plan — Track A (target: ~1-2 days, this and next /loop iter)
+
+### v0.1 layout
+
+```
+experiments/residual/
+  README.md                  # one-paragraph: see prompt.md, this is residual-explore v0.1
+  src/
+    kernel.py                # the 12-line residual_sample primitive + tests
+    response_features.py     # extract feature vector from a response (regex + embedder)
+    matrix.py                # build per-agent M from triples + features
+    detect.py                # full anomaly pipeline: load → featurize → residual_sample → report
+    explain.py               # given a high-residual row, report top-3 features driving anomaly
+  tests/
+    test_kernel.py           # unit tests on synthetic data
+    test_response_features.py
+    test_matrix.py
+    test_detect.py
+  results/
+    anomalies_codex.json     # top-20 anomaly queries for codex with explanations
+    anomalies_claude.json    # same for claude
+    anomalies_agent_chat.json
+    summary.md               # human-readable digest: what kinds of queries are anomalous?
+  models/
+    (saved SVD components for reuse if needed)
+```
+
+### v0.1 step-by-step
+
+**Step 1 — TESTS-FIRST.** Write `test_kernel.py` with a synthetic scenario:
+- Build a known matrix M of rank-2 + planted-anomaly rows (5 of 50 rows have anomalous high-norm noise).
+- Run `residual_sample(M, k=2, n_samples=5)`.
+- Assert: at least 4 of 5 returned indices are the planted-anomaly rows.
+- Run `pytest -x` → confirm fails (kernel.py doesn't exist).
+
+**Step 2 — `src/kernel.py`.** Implement the 12-line `residual_sample`. Test passes.
+
+**Step 3 — TESTS-FIRST for `response_features.py`.** Test that:
+- Each regex extracts expected counts on a fixture response string.
+- The full feature vector has documented dim and finite values.
+- Embeddings are unit-norm.
+
+**Step 4 — `src/response_features.py`.** Implement extractors. Test passes.
+
+**Step 5 — `src/matrix.py`.** Function `build_per_agent_matrix(triples, agent_name)` returns
+(n_questions × feature_dim) torch.Tensor. Standardize numeric columns. Concatenate embedding
++ scalar features.
+
+**Step 6 — `src/detect.py`.** Glue:
+1. Load triples from existing `experiments/router/src/data.py::load_triples`.
+2. For each agent in {codex, claude, agent_chat}:
+3.   Build M.
+4.   Run `residual_sample(M, k, n_samples=20)`.
+5.   For each returned index, call `explain.py` to identify driving features.
+6.   Write to `results/anomalies_<agent>.json`.
+
+**Step 7 — `src/explain.py`.** Given (R_i, feature_names), return top-3 features by |R_i[j]|
+with sign and z-score-relative-to-typical, plus the agent's response prose excerpt.
+
+**Step 8 — Run the headline experiment.**
+- `nvidia-smi` before to confirm GPU available.
+- `python -m experiments.residual.src.detect`
+- `nvidia-smi` during to confirm utilization (CLAUDE.md mandate).
+- Inspect `summary.md`. Acceptance: top-20 anomaly queries are HUMAN-INTERPRETABLE — i.e., we can
+  read the response prose and see WHY it was anomalous (very long, high-hedging, self-correction-
+  heavy, refusal-adjacent, etc.).
+
+**Step 9 — Cross-agent overlap analysis.** Are the same questions anomalous for multiple agents?
+If yes, those are HARD queries (substrate-independent). If no, the anomalies are agent-specific
+(substrate-dependent). Both are useful signal.
+
+**Step 10 — Commit + report.**
+
+### v0.1 acceptance criteria
 
 | metric | target | rationale |
 |---|---|---|
-| Test suite | all green | tests-first mandate |
-| GPU utilized | nvidia-smi shows >0% during training | CLAUDE.md mandate |
+| Test suite | all green | tests-first mandate (CLAUDE.md) |
+| GPU utilized | `nvidia-smi` ≥ 10% during embedder runs | CLAUDE.md mandate |
 | Trained on full 198 | yes | CLAUDE.md mandate (no max-samples) |
-| Router @ n=158 | ≥ 89% (matches codex) | beat the strongest single-model baseline |
-| Learning curve | monotone-rising, with std band visible | continuous-learning claim |
-| Oracle sanity | 95.1% ± 0.5% | reproducibility check on prior numbers |
-| Code lines | <500 across src/ | per CLAUDE.md "don't over-engineer" |
+| Top-N anomaly recall on synthetic | ≥ 80% recall on planted-anomaly rows | kernel correctness |
+| Human-interpretable anomalies | ≥ 14/20 anomalies have a clearly identifiable "why" when read | substrate produces meaningful signal |
+| Code lines | <500 across src/ | per "don't over-engineer" |
 
-If router @ n=158 is BELOW codex_solo, that's a v0.1 fail. Don't claim continuous learning if the destination is below a static baseline. Investigate: insufficient features? embedder too weak? insufficient regularization? Iterate on featurization before declaring the architecture wrong.
+If anomalies are NOT interpretable (random-looking), the feature set is the bug. Iterate on
+features before iterating on the kernel.
 
-### v0.1 build status (NL41 — SHIPPED)
+## v0.2 — Track C (target: 1 week after v0.1)
 
-- ✅ All 5 test files written first; **18/18 tests pass** (5:24 on CPU).
-- ✅ All 5 src modules: data.py, featurize.py, model.py, train.py (supervised + online with replay buffer), eval.py (oracle, domain-argmax, kfold curve, plotting), router.py (production interface).
-- ✅ Embedder = BAAI/bge-small-en-v1.5 (384-dim), HF_HOME=/data/cache/huggingface so model cache lives on /data not /.
-- ✅ GPU verified during training: **21% util, 1067 MiB VRAM** on the 4090 (CLAUDE.md mandate satisfied).
-- ✅ Trained on full n=198 (CLAUDE.md mandate, no max-samples).
-- ✅ Code: ~410 lines across src/ (under 500-line ceiling).
-- ✅ Headline plot + CSV + final_metrics.json written to `experiments/router/results/`.
-
-### v0.1 honest result (n=198 paired, 5-fold × 5-seed kfold)
+After v0.1 ships, extend to multi-agent:
 
 ```
-oracle ceiling     188/198 = 94.9%   (perfect router upper bound)
-domain-argmax      180/198 = 90.9%   (zero learnable params)
-codex alone        177/198 = 89.4%
-claude alone       176/198 = 88.9%
-
-learned router (mean ± std over 25 fold/seed runs):
-  train_size=10:   88.6% ± 4.8%
-  train_size=25:   89.2% ± 4.5%
-  train_size=50:   89.1% ± 3.9%
-  train_size=100:  87.7% ± 5.0%
-  train_size=158:  88.4% ± 3.7%
+experiments/residual/src/boundary.py
 ```
 
-**The curve is FLAT within noise.** Learned router clusters at 88-89% regardless of training-set size. Above codex_solo by ~0% (within noise), below domain-argmax by ~2.5%. **Continuous learning behavior is NOT demonstrated on this benchmark.**
+- M_multi: (n_questions, feature_dim_codex + feature_dim_claude + feature_dim_agent_chat).
+- Top-k consensus subtract; residual decomposed per-agent.
+- Output: ranked disagreement queries with per-agent divergence signatures.
+- Link to petersen graph: each disagreement entry is an "edge event" — record into the
+  agent-chat substrate's CONVO.md per edge. The Hebbian-edge-weights idea is repurposed: edges
+  with high cumulative ℓ²-norm-residual get prioritized in future routing.
 
-Plot: `experiments/router/results/learning_curve.png` (rendered with horizontal reference lines at oracle, domain-argmax, codex_solo, claude_solo).
+## v0.3 — Track B (deferred until A + C land)
 
-### v0.1 verdict + recommended pivot
+Local-model logit access via vLLM or HF transformers. Llama-3.1-8B-Instruct on the 4090
+(fits in 16GB FP16, leaves 8GB for activation cache). Build a generation hook that:
+1. At each step, capture full vocab logits.
+2. Maintain a running window of recent contexts and their logit distributions.
+3. Compute low-rank approximation across the window.
+4. Sample next token ∝ residual_softmax(current_logits − low_rank_projection).
 
-**What v0.1 proves:** the substrate works end-to-end. PyTorch + sentence-transformers on cuda, full-info Q-function training, kfold evaluation, learning-curve plotting, oracle-ceiling sanity check, all bolted together with passing tests. The plumbing is real.
+This is the fundamentally novel piece — and its success criterion is qualitative + downstream
+(does the resulting generation produce more diverse, useful synthetic data?).
 
-**What v0.1 cannot prove on GPQA:** continuous learning. Diagnosis is unambiguous — only ~14 of 142 paired questions have disagreement between codex and claude (5 only-codex + 9 only-claude). The other 128 questions, both experts give the same letter. A 384-dim embedder cannot learn signal from 14 differentiable training points; even strong regularization only collapses to "always pick codex" behavior.
-
-**This is exactly stopping condition #3:** "Continuous-learning curve does not rise → either generate more triples or pivot benchmark."
-
-**Recommended pivot — ranked benchmarks where codex and claude likely disagree more:**
-
-| benchmark | size | expected disagree % | why |
-|---|---|---|---|
-| HumanEval | 164 | 30-40% | codex dominates code; claude noticeably weaker. Easy to set up. |
-| MBPP | 974 | 25-35% | similar to HumanEval but bigger. Better statistics. |
-| SWE-bench Verified | 500 | 40-60% | codex very strong on agentic-code; claude varies. Best disagreement candidate but each task is expensive (~$1+ per attempt). |
-| MATH / AIME | 5K / 30 | 20-30% | claude often stronger on long-form math; codex sometimes shortcuts. AIME 2024-2025 is expensive ($$). |
-| HLE | 3K | 30-40% | humanity's last exam; less saturated than GPQA. Mixed format. |
-| Custom code-vs-reasoning split | n=200 | 50%+ | mix HumanEval (codex wins) + GPQA-Bio (claude weak) to engineer disagreement. Cheapest way to demonstrate the router. |
-
-**My read:** start with **HumanEval (164 problems, easy to instrument)**. Reuses the same pattern (run codex baseline, run claude baseline, generate triples, train router). Expected outcome: ~30%+ disagreement rate, oracle ceiling above any single model by 8-15%, learned router has actual signal to learn. If router beats max(codex_solo, claude_solo) on HumanEval, the continuous-learning claim is REAL. If still flat, the substrate concept needs deeper redesign.
-
-Cost: ~1 day of work to instrument + run. Codex tends to be very fast on HumanEval (<10s/Q typical), claude similar. ~$0 LLM cost on existing accounts.
-
-### v0.2 + v0.3 status
-
-Deferred until v0.1 is repeated on a non-saturated benchmark. v0.2 (episodic memory) and v0.3 (Hebbian edges) only add value if v0.1 can demonstrate any signal in the first place. On GPQA there's nothing for them to amplify.
-
-### v0.1 ablation (NL41, post-headline) — confirms saturation
-
-Train router on different feature subsets, n=158 train, 5-fold × 5-seed CV (held-out routing accuracy):
-
-| feature set | n_feat | acc | std |
-|---|---|---|---|
-| embed_only (384-dim BGE) | 386 | 88.51% | 3.56% |
-| **domain_only** | **5** | **89.54%** | 5.37% |
-| domain+subdomain | 18 | 89.54% | 4.58% |
-| all (embed+domain+subdomain) | 402 | 88.72% | 4.23% |
-
-**Domain features alone (5 bits: 3 domain one-hot + 2 expert one-hot) match or beat the full 402-dim model.** The 384-dim semantic embedding adds **negative or zero signal** on GPQA. Subdomain (~13 finer bins) adds nothing beyond domain. The "router" is essentially learning a 3-line argmax decision over (Physics, Chemistry, Biology), which is the trivial domain-argmax rule.
-
-**Implication for benchmark choice:** the right benchmark has questions where, *within* a domain, content nuances predict which expert is better. GPQA doesn't have that — within Physics, claude=codex=98%; within Chemistry, both at 81-86%; within Biology, codex always better. A denser-disagreement benchmark must produce within-domain disagreement that an embedder can pick up on.
-
-### Agent-chat re-run status (NL41 carryover, in flight)
-
-Background pid 40707 is alive but hitting **20-min DRAFT timeouts on ~50% of remaining questions** (claude SIGTERM at 1200s with empty stdout). Pattern: hard organic-chemistry questions where claude_alone took 8-14 min on its retry pass; on this re-run claude is hanging (or thinking past) the 20-min budget. Productive throughput ~45s/Q on the working ones; ETA worst case ~9 hours if the 50% timeout rate holds for all 49 remaining.
-
-Two failure modes seen:
-- `claude draft cli exited 143` — SIGTERM at full 20-min budget, empty response.
-- successful 38-46s questions that complete normally.
-
-Action: leave running. The completed-on-first-pass 145 questions plus ~20 of the 53 re-run questions will give us ~165 of 198 final agent-chat data points. The remaining ~33 timeout-failures are recorded with `error` field; we'll exclude them from final paired comparison the same way we excluded the 76 disk-fill polluted rows.
-
-### Stopping condition reached → benchmark pivot is the next move
-
-Stopping condition #3 from this prompt was: "Continuous-learning curve does not rise → either generate more triples or pivot benchmark." We've definitively reached this on GPQA via two independent measurements:
-1. Headline kfold curve flat at 88-89% across train sizes 10-158.
-2. Ablation showing 384-dim embedder adds nothing over 5-bit domain encoding.
-
-The substrate (`experiments/router/`) is reusable as-is on any benchmark that produces (query, codex_correct, claude_correct) triples. Boss has not yet authorized which benchmark to pivot to. Pending direction.
-
-## v0.2 — episodic memory (target: 1 week after v0.1)
-
-**Goal:** add per-expert episodic memory; show that retrieval-augmented features lift the router's accuracy further.
-
-After v0.1's router picks expert e for query x, retrieve K=5 most-similar prior triples where expert e was used and inject their outcomes as features into the router (NOT into the LLM — we're not re-calling the LLM for v0.2).
-
-Mechanism:
-- Per-expert FAISS index over query embeddings of historically-routed-to-expert questions.
-- New query → top-K similar prior questions → mean(prior_correct) and std as additional features → re-train router with the augmented feature space.
-- Test: router with episodic features beats router without by >1% on held-out fold.
-
-If v0.2 doesn't lift over v0.1: the embedder is the bottleneck. Try a larger encoder (`BAAI/bge-large-en-v1.5`, 1024 dim) before declaring memory useless.
-
-## v0.3 — Hebbian edges + multi-expert (target: 3 weeks)
-
-**Goal:** add agent-chat as a third expert; learn edge weights w(drafter→critic | domain) instead of the existing hash-based peer pick.
-
-Mechanism:
-- Treat the petersen graph edges as routing parameters. Initialize uniform.
-- For each agent-chat question: drafter is fixed (orion=claude). Sample peer ∝ exp(w(orion→peer | domain) / τ).
-- After outcome observed, Hebbian-style update: w(orion→peer) += η × reward_signal × (1 if peer was selected else 0).
-- Compare: hash-based peer selection (current) vs learned-edge-weighted selection.
-
-Reuses the existing agent-chat substrate; doesn't require new LLM calls if we evaluate over the existing 122-198 agent-chat triples.
-
-## v0.4+ — out of scope until v0.1-3 deliver
-
-Per the boss's 10-direction sketch: retrieval-augmented per-expert specialization (mid-term), reward-weighted memory growth (mid-term), recursive expert teaching (mid-term), expert spawning (aspirational), market dynamics (aspirational). NOT building yet. The Tang ℓ₂-norm sampling machinery is also deferred — at 2-3 experts it's overkill. Implement when the lattice has 10+ heterogeneous expert nodes.
-
-## Stability discipline (from boss's vision sec. 9)
-
-GPQA's reward is ground-truth (correct/incorrect). Reward hacking is bounded — answer keys exist. Continuous learning on bounded reward is stable in practice; the pathologies (mode collapse, reward hacking, runaway specialization) become real on FUZZY reward (user satisfaction, novelty bonuses, predicted compression). **Stay on bounded-reward benchmarks until the substrate is proven, THEN graduate.**
-
-Mitigations to bake in even on bounded reward:
-- KL constraint to a baseline policy (uniform 50/50 over experts) — prevents the router from collapsing too hard onto one expert if the early data is unbalanced.
-- Periodic eval on fixed held-out fold — catch silent regression.
-- Save checkpoints every N updates so we can roll back if the policy gets worse.
-
-## Inviolable rules (carried from prior NL iterations)
+## Inviolable rules (carried forward)
 
 1. **TESTS-FIRST when fixing bugs.** Strict per CLAUDE.md.
-2. **Train on FULL 198.** No `--max-size`/`--max-samples`. K-fold CV uses contiguous subsets, that's allowed.
-3. **GPU verification.** `nvidia-smi` must show non-zero utilization during training; verify before reporting "done."
-4. **Reproducibility.** Seeded shuffles. Saved checkpoints. CSV outputs that can be re-plotted.
-5. **PAIRED comparison.** Router accuracy reported on the same 198 ids as codex/claude baselines; use compare.ts-style JOIN.
-6. **Don't over-engineer v0.1.** Single-feature-set, single-model, no premature abstractions for v0.2/v0.3 hooks.
-7. **Search before writing.** Per CLAUDE.md: grep/find/ls before creating new files; check `experiments/`, `benchmarks/`, top-level for any pre-existing router work. None expected, but verify.
-8. **TMPDIR=/data/tmp** for all shell scratch. Per saved feedback memory; root partition has been chronically near-full.
+2. **Train / process on FULL datasets.** No `--max-size`/`--max-samples`.
+3. **GPU verification.** `nvidia-smi` must show non-zero utilization during compute; verify.
+4. **Reproducibility.** Seeded SVD/multinomial samples. Saved residual components.
+5. **TMPDIR=/data/tmp** for all shell scratch.
+6. **HF_HOME=/data/cache/huggingface** for HuggingFace model cache.
+7. **Search before writing.** grep/find/ls before creating new files.
+8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
+   the multi-agent decomposition for v0.1 — that's v0.2's job.
 
-## Carryover from NL40 (still in flight)
+## Carryover state (live as of NL41 ablation)
 
-- **Agent-chat v1 re-run** is alive in background (pid 2232643). 16/76 done at last check; ETA ~10:00 local. When it finishes, run `bun benchmarks/gpqa-diamond/src/compare.ts` for the FINAL paired numbers on all 198 ids. Use those final agent-chat-as-third-expert numbers as the v0.3 reference point.
-- **compare.ts** at `benchmarks/gpqa-diamond/src/compare.ts` — JOINs three result files, drops disk-fill polluted rows. Reuse for any GPQA-related comparison going forward.
-- **Disk recovery** complete: claude.json restored, TMPDIR=/data/tmp set globally in `~/.claude/settings.json` env block. Boss has launched a separate claude session to investigate the root-cause disk-fill pattern; track that work via memory if/when it lands.
+- **Agent-chat re-run** (pid 40707): alive, hitting 20-min DRAFT timeouts on ~50% of
+  remaining questions. Worst-case ETA 9 hours from NL41 (boss directs whether to keep waiting).
+  Final 198-row agent-chat data feeds Track A's M_agent_chat once complete.
+- **`experiments/router/`** v0.1 substrate: lives, test suite green, GPU-validated. Reuse the
+  data loader + featurize.py embedder; deprecate train.py + router.py + the Q-net model.
+- **claude.json restored;** TMPDIR set globally in `~/.claude/settings.json` env block.
+- **Disk:** `/` at ~9.5G free as of last check (down from 7G at recovery). Watch for fill again.
+- **GPU:** 4090 alive post-reboot, verified during last training run (21% util, 1067 MiB).
 
 ## Stopping conditions
 
-1. **v0.1 acceptance criteria all green** → ship the v0.1 paper-grade plot + final_metrics.json, decide v0.2 priority based on the curve shape.
-2. **v0.1 router @ n=158 below codex_solo** → architecture or featurization is wrong. Investigate; do NOT proceed to v0.2 until v0.1 lands.
-3. **Oracle ceiling on 198-row data drops below 90%** → indicates the GPQA benchmark is too saturated to discriminate any router. Pivot to a less-saturated benchmark (HLE, ARC-AGI-2, or a code-vs-reasoning split where the two experts genuinely diverge).
-4. **Continuous-learning curve does not rise** → the data is too small or too saturated to demonstrate online learning. Either generate more triples (run the same 198 questions multiple times to capture stochastic variation) or pivot benchmark.
+1. **v0.1 anomalies are not human-interpretable.** Feature set is wrong. Iterate features
+   (try response embedding alone; try richer reasoning markers; try cross-question features).
+2. **v0.1 ships AND v0.2 cross-agent residual reveals SAME high-residual queries that GPQA
+   single-model baselines also got wrong.** Then we're just rediscovering "hard questions" —
+   not novel signal. Pivot to a less-saturated benchmark BEFORE building Track B.
+3. **v0.1 + v0.2 ship and reveal genuinely surprising queries / disagreement patterns** that
+   we wouldn't have found by hand. Then proceed to Track B and start treating the residual
+   pipeline as a first-class substrate alongside the petersen graph.
+4. **GPU goes back into header-type-7f or analogous failure.** Don't fight environmental
+   issues silently; report to boss.
 
 ## Cadence
 
-This mission is `/loop`-driven: each iter runs as much as can fit in one turn, commits, updates prompt.md, schedules a heartbeat. The agent-chat re-run finishing is a Monitor-driven event; the router build is foreground compute. Use background tasks for the GPQA re-run only.
+This is `/loop`-driven the same way prior missions were. Each iter: do as much as fits in
+one turn, commit, update prompt.md with what's next, schedule heartbeat. Foreground compute
+for the residual pipeline (it's all CPU/single-GPU, no agentic LLM calls). Background only
+for the agent-chat re-run still in flight.
 
 ## Lessons learned (carryforward)
 
-- **Heterogeneity is real and free.** codex and claude have measurably different error patterns, even on 2 experts. The router doesn't need exotic infrastructure to extract value — even a 3-line domain-argmax beats both single-model baselines on this data.
-- **Saturation is the silent killer of orchestration value.** GPQA at 88-89% has no Physics headroom (98% all three) and tiny n in Biology (15). The router's value is bounded by oracle ceiling - max(baselines), which on saturated benchmarks is small even when "correctly" learned. Pick benchmarks where the oracle gap is larger.
-- **Full-information beats bandit when available.** We observe both expert outcomes per question, so supervised Q-function training is correct; pretending otherwise wastes signal.
-- **Mid-flight verdicts can flip.** The 58% v1 verdict said -2 net vs claude; the 122-Q (61%) verdict said +1 net flip ledger. Don't commit to a redesign motivation until the full dataset is in.
-- **Disk-fill failure mode (NL40):** the claude CLI's atomic write of `~/.claude.json` truncates to 0 bytes if `/` is at 100% during the rename. Defensive: TMPDIR=/data/tmp now set globally; durable fix would be symlinking `~/.claude.json` onto `/data`.
+- **GPQA is too saturated to discriminate orchestration OR routing.** Both empirical and
+  ablation evidence. Residual exploration sidesteps the saturation by looking inside the
+  response, not at the score.
+- **Heterogeneity at the model-output level still exists** even when accuracy converges.
+  Different agents produce different prose, different reasoning styles, different timing.
+  The boundary scout (track C) will quantify this.
+- **The substrate concept is "extract residual signal," not "fuse outputs."** Agent-chat
+  v1's failure was trying to fuse outputs of equally-capable agents — there's nothing to fuse.
+  The residual sampler aggregates information without forcing consensus.
+- **Tests-first catches design errors early.** The router's "continuous-learning curve rises"
+  test failed → led to the saturation diagnosis → led to this pivot. Without that failing
+  test, we'd have shipped a misleading curve.
+- **Mid-flight verdicts can flip.** Both NL40 and NL41 produced verdicts that softened on
+  closer inspection. Don't commit the architecture story until the final dataset is in.
+- **Disk-fill failure mode (NL40):** atomic write of `~/.claude.json` truncates if `/` fills.
+  TMPDIR redirect helps but doesn't fix — durable fix is symlinking `~/.claude.json` onto
+  `/data`. Boss's separate session investigating root cause; track if/when that lands.
