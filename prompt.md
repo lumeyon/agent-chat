@@ -26,6 +26,7 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 - `benchmarks/gpqa-diamond/src/extract.test.ts` (NL38) — 25 unit tests covering all common LLM response shapes + edge cases. All pass.
 - `benchmarks/gpqa-diamond/src/rescore.ts` (NL38) — re-applies the canonical extractor to a saved results.jsonl. Useful for any results files written before extract.ts existed; cheap pure-text re-parse, no LLM cost.
 - `benchmarks/gpqa-diamond/src/score.ts` — per-domain accuracy, confusion table.
+- `benchmarks/gpqa-diamond/src/compare.ts` (NL40) — JOINs the three result files by id, drops disk-fill polluted rows, emits paired accuracy + paired wins (fix/break/net) + per-domain breakdown + flip ledger. Optional `--show-flips` and `--show-disagreements` for diagnostic side-by-side.
 
 **Per-question data captured for every condition** (in `results/<model>.jsonl`):
 - `id`, `domain`, `subdomain`, `prompt_chars`, `response` (full prose), `answer_extracted`, `answer_expected`, `correct`, `elapsed_ms`, `error?`.
@@ -42,25 +43,60 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 
 **agent-chat full run KICKED OFF** (background task `bzvxotsja`): 198 problems × 3 calls each (draft + codex critique + revise) × 20-min/call budget. Worst case 60 min/Q × 198 = 198 hours; realistic on smoke is ~30s/Q happy path = ~100 min wall total. Monitor `bmdicli6y` armed for # done / DRAFT-FAIL / CRIT-FAIL / FATAL events.
 
-**v1 verdict (forming at 58%, will refine at completion):** agent-chat v1 LOSES to both single-model baselines.
+**v1 PARTIAL verdict (n=122 valid; n=76 corrupted by disk-fill incident — see below).** On the unpolluted 122-question subset, paired (full output via `bun benchmarks/gpqa-diamond/src/compare.ts`):
 
-| | n=115 | acc | net vs agent-chat |
+| | n=122 | acc | net vs agent-chat |
 |---|---|---|---|
-| codex | 102/115 | 88.7% | +5 |
-| claude | 99/115 | 86.1% | +2 |
-| agent-chat | 97/115 | **84.3%** | — |
+| codex | 108/122 | 88.5% | +4 |
+| claude | 105/122 | 86.1% | +1 |
+| agent-chat | 104/122 | **85.2%** | — |
 
-Mechanism diagnosis: of 5 flips so far, 2 were fixes (substrate caught a real claude error) and 3 were breaks (codex critique convinced claude to flip away from a correct answer). The "critique sees claude's draft first" pattern anchors codex on claude's framing — when codex_alone disagrees with claude_alone, agent-chat tends to converge on claude's wrong answer rather than codex's right one. Anchoring net cost: ~1 question. Plus ~1 from stochastic claude-draft variance vs claude-baseline. Combined: -2 vs claude.
+**Per-domain (paired, n=122):**
 
-**Right next move (whenever boss directs):** stop v1, design v2 that DOES NOT show codex claude's draft until codex has answered independently. v2 = parallel-answers + judge-vote (claude answers, codex answers, then a judge agent picks the best). 4 calls per question instead of 3. Should preserve codex's independence and let the substrate aggregate rather than corrupt.
+| domain | codex | claude | agent-chat | n |
+|---|---|---|---|---|
+| Physics | 97.8% | 97.8% | 95.6% | 45 |
+| Chemistry | 81.0% | 84.1% | 82.5% | 63 |
+| Biology | 92.9% | 57.1% | 64.3% | 14 |
 
-If v2 doesn't beat codex_alone either, the honest conclusion is: GPQA Diamond is too saturated at 89% for orchestration of two equally-capable single-model agents to add value. We'd need to test on a less-saturated benchmark (HLE, ARC-AGI-2) where the two models' error patterns are more diverse.
+Flip ledger (draft → revised, valid subset): **7 flips total — 4 fix, 3 break, +1 net.** Notable: **ALL 7 flips are Chemistry questions.** Physics and Biology are essentially flip-free. The substrate effect is domain-localized, not general.
+
+Mechanism diagnosis (qualitative, from inspecting the 7 critique responses):
+- **4 FIX cases** — codex spots a SPECIFIC technical error in the draft (stereochemistry rules, enantiomer counting, complementary-color confusion) and corrects it with a citable counter-claim. Substrate adds value when the critique is concretely right.
+- **3 BREAK cases** — codex pushes back with confident-but-unproven assertions; orion folds without rebutting. Examples: codex claims "weakly justified" of a draft that was actually right; codex makes a wrong assertion about enolate geometry that orion accepts; codex misidentifies the error as "unit-driven answer selection". Pattern is **soft-pushback persuasion**, not anchoring (which would be the opposite — codex agreeing too readily with draft).
+
+This changes the redesign motivation. The current revise prompt already says "don't change reflexively." Insufficient. Two cheaper-than-v2 ideas to test before v2:
+- **v1.1 (prompt-eng):** make orion adversarial-by-default in the revise step. Force it to mark each critique claim VALID/INVALID with one-sentence reasoning before producing the final answer. Cost: zero new LLM calls.
+- **v1.2 (peer assertion):** require codex critic to mark its critique either ENDORSE / WEAK-OBJECTION / STRONG-OBJECTION (with citable claim). Orion ignores WEAK-OBJECTION; only flips on STRONG-OBJECTION with verifiable claim. Cost: extra structured output from peer.
+
+If v1.1+v1.2 don't move the needle, then v2 (parallel-then-judge, 4 calls) is justified. If they do, we keep the 3-call substrate and ship.
+
+**On the saturation hypothesis:** all three models on Physics paired n=45 are at 95.6-97.8%. There's nothing to lift. The ONLY domain where substrate has measurable opportunity is Chemistry (where flips happen) and Biology (where claude is uniquely weak — codex 92.9% vs claude 57.1% on n=14; substrate moved claude from 8/14→9/14 = small lift but still well short of codex_alone). On a less-saturated benchmark, substrate's opportunity surface would be larger.
+
+## DISK-FILL INCIDENT (2026-05-09 ~01:14 local)
+
+`/` partition reached 100% during the agent-chat run. claude CLI's atomic write to `/home/eyon/.claude.json` truncated the file to 0 bytes mid-write. Every claude call from q123-q198 then failed instantly with `JSON Parse error: Unexpected EOF` (~200ms each — fast-fail, not a timeout). Runner exited 0 with 76 polluted rows (`error` field starts with `claude draft cli exited 1: Configuration error`).
+
+**Backups exist** at `/data/eyon/.claude/backups/.claude.json.backup.1778299741015` (77,809 bytes, 2026-05-08 23:09). Restore failed because `/` is still 100% full — `cp` returned `No space left on device`.
+
+**State of the result file:** `agent-chat.jsonl` has 198 rows; 76 are polluted; 122 are valid.
+
+**Top space consumers on `/`:** `/usr` 31G, `/opt` 22G, `/var/lib` 19G (likely docker), `/home/eyon/.local` 4.0G, `/home/eyon/.vscode-server` 3.0G. (`.claude` itself is symlinked to `/data` — only `.claude.json` lives on `/`.)
+
+**Recovery plan (gated on boss disk approval):**
+1. Free disk on `/` (boss authorizes which: `apt-get clean`, `journalctl --vacuum-time=7d`, `docker prune`, etc.)
+2. `cp /data/eyon/.claude/backups/.claude.json.backup.1778299741015 /home/eyon/.claude.json` to restore.
+3. Strip the 76 polluted rows from agent-chat.jsonl (since the runner skips by id, this re-queues them).
+4. Re-run those 76 with the existing background runner. ETA ~6½ hours.
+5. Once complete, lock final v1 verdict on full 198-Q dataset.
+6. Decide v2 priority based on full result.
 
 **Fairness budget decision (NL38):** 20-min/call is THE budget across all conditions. agent-chat's per-call timeout matches the baselines' retry budget, so it can't be argued the comparison gave agent-chat unfair compute.
 
 **Operational state:**
-- Monitor armed (task `bodwykny5`): tails both log files, fires on `# done`/`FATAL`/`cli exited`/`Traceback`. Persistent for the session.
-- The /loop wakes itself on Monitor events OR every ~25-30 min as a heartbeat fallback.
+- agent-chat run completed (exit 0); monitor `bmdicli6y` stopped.
+- **BLOCKED on disk-fill recovery — awaiting boss authorization for cleanup.** No claude CLI calls will succeed until `/home/eyon/.claude.json` is restored, which requires free space on `/`.
+- The /loop will wake itself ~25 min as a fallback heartbeat to re-check (a) whether boss has authorized cleanup and (b) whether disk is now free.
 
 ## INVIOLABLE RULES
 
@@ -86,23 +122,23 @@ If v2 doesn't beat codex_alone either, the honest conclusion is: GPQA Diamond is
 - Smoke (1 question, Physics-general): draft 6.9s → carina critique (endorsed C) 12.7s → revise 9.6s → C ✓. Total 29s end-to-end.
 - **Will NOT fire the full 198 until codex first-pass + both retry passes are settled** to avoid CPU/LLM-rate contention during the comparison run.
 
-**NL40 — sequence (gated on background runs):**
-1. **Wait for codex first-pass to finish** (currently 162/198 ≈ 82%; ETA ~20-30 min on 240s budget; some timeouts will land in there).
-2. **Run codex retry**: `bun run-baseline.ts --model codex --retry-timeouts --timeout-ms 1200000 --out results/codex.jsonl` in background. Parallels what claude retry is doing now.
-3. **Wait for claude retry to finish** (started NL38, 9 timeouts re-running with 20-min budget; ETA varies 30-90 min depending on actual think time).
-4. **Wait for codex retry to finish** (number of timeouts TBD until first-pass done).
-5. **Final baseline scores**: `score.ts` on each.
-6. **Kick off agent-chat full run**: `bun run-agent-chat.ts --timeout-ms 1200000 --out results/agent-chat.jsonl` in background. ~30s/Q baseline × 198 ≈ 100 min wall on the easy path; worst case much longer with timeouts.
-7. **3-way comparison**: build `compare.ts` that JOINs codex/claude/agent-chat results by id and emits:
-  - Aggregate accuracy.
-  - **Paired wins**: questions agent-chat got right that codex/claude alone missed; the reverse.
-  - Per-domain breakdown.
-  - Diagnostic side-by-side for disagreement cases.
+**NL40 — disk recovery + agent-chat re-run (BLOCKED on boss approval):**
+1. **Boss authorizes disk cleanup.** Lowest-risk options: `sudo apt-get clean` (regenerable apt cache), `sudo journalctl --vacuum-time=7d` (old journals). Higher impact if needed: `docker system prune` (only if not mid-build), removing old `.claude.json.backup.*` files. Boss must say go on whichever path.
+2. Confirm `df -h /` shows free space.
+3. `cp /data/eyon/.claude/backups/.claude.json.backup.1778299741015 /home/eyon/.claude.json` to restore claude config.
+4. Smoke: `claude -p --output-format text 'Reply OK'` returns OK in <30s.
+5. Strip 76 polluted rows from agent-chat.jsonl via:
+   ```
+   python3 -c "import json,sys; lines=open('benchmarks/gpqa-diamond/results/agent-chat.jsonl').readlines(); open('benchmarks/gpqa-diamond/results/agent-chat.jsonl','w').writelines(l for l in lines if not json.loads(l).get('error','').startswith('claude draft cli exited 1: Configuration error'))"
+   ```
+6. Re-run: `bun benchmarks/gpqa-diamond/src/run-agent-chat.ts --timeout-ms 1200000 --out benchmarks/gpqa-diamond/results/agent-chat.jsonl 2>&1 | tee -a benchmarks/gpqa-diamond/results/agent-chat.log` in background. Resumable runner picks up the 76 missing ids. ETA ~6-8 hours on the corrupted-batch domain mix.
+7. Once all 198 done, lock final v1 verdict via `score.ts` + the 122-Q analysis script extended to 198 Q.
+8. **3-way comparison**: ✅ shipped at NL40 — `bun benchmarks/gpqa-diamond/src/compare.ts` (auto-drops disk-fill polluted rows, paired n; supports `--show-flips`, `--show-disagreements`). Re-run on the full 198 once recovery completes.
 
 **NL41+ — analysis + iteration:**
-- If agent-chat ≥ max(baselines) by >3%: characterize where the gain came from. Which domains? Which prompt patterns? Did the codex critique consistently catch a class of error claude-alone missed?
-- If agent-chat < max(baselines) by >3%: characterize the failure mode from the saved responses. Common patterns: critique misled orion to flip a correct answer; peer was overconfident in a wrong direction; orion over-weighted critique even when its own draft was right. Each failure mode suggests a specific redesign.
-- If within ±3%: design a follow-up experiment that increases substrate's role (e.g., reRankAnswers on multiple peer answers; LLM-as-judge replacing cosine grading from the autonomous-loop work).
+- If full-198 agent-chat ≥ max(baselines) by >3%: characterize where the gain came from. Which domains? Which prompt patterns? Did the codex critique consistently catch a class of error claude-alone missed?
+- If full-198 agent-chat < max(baselines) by >3%: characterize the failure mode from the saved responses. Common patterns: critique misled orion to flip a correct answer; peer was overconfident in a wrong direction; orion over-weighted critique even when its own draft was right. Each failure mode suggests a specific redesign.
+- If within ±3% (likely outcome based on n=122 partial): the honest answer is that GPQA Diamond is too saturated for orchestration of equally-capable single-model agents to lift. Pivot to a less-saturated benchmark (HLE, ARC-AGI-2, FrontierMath) where the two models' error patterns are more diverse and an orchestrator can aggregate. v2 redesign (parallel-then-judge instead of critique-after-draft) is still a useful experiment but the priority shifts to "find the right benchmark" first.
 
 ## STOPPING CONDITIONS
 
@@ -121,5 +157,7 @@ This mission isn't naturally /loop-driven the same way the audit loop was — ea
 - **Validate at API boundaries.** `extractAnswer` is the load-bearing parser between the LLM's prose and the score. Unit-test it on edge cases (bold "**Answer: A**", "Answer is C.", "(B)", chain-of-thought saying "Answer: D would be wrong because... [final] Answer: A").
 - **Per-question data is the audit trail.** Every condition writes one JSONL line per question with the FULL prose response + parsed letter + correct flag + elapsed. Three conditions JOIN cleanly by `id`. Lossless. Comparison tooling is straightforward when agent-chat lands; don't pre-build the comparison report before we have all three datasets — use the partial baselines to validate the JOIN shape, build the report once.
 - **Cumulative ledger (post-NL36):** 30 original peer findings fixed + 3 schema migrations + 3 wiring steps for the autonomous-loop substrate (A1, A2, A4). Substrate is hardened and tested but not yet VALIDATED to produce useful signal — that validation is the current mission.
+- **Disk-fill failure mode (NL40):** the claude CLI's atomic write of `~/.claude.json` truncates the file to 0 bytes if `/` is at 100% during the rename. Result: every subsequent claude call exits 1 in ~200ms with `JSON Parse error: Unexpected EOF`. The runner saw this as a draft-fail per question and kept marching, polluting 76 rows. Defensive ideas: a sentinel `claude -p --output-format text 'OK'` smoke before each batch of N questions; and/or a guard in `run-agent-chat.ts` that bails out if it sees 3 consecutive fast-fail drafts (<1s each with the same error string).
+- **Mid-flight verdicts can flip.** The 58% verdict said -2 net vs claude with anchoring as the mechanism. The 122-Q (61%) verdict said +1 net flip ledger and stochastic draft variance accounts for the rest — anchoring isn't clearly the bug. Don't commit to a redesign motivation until the full dataset is in.
 
 ## NO speculative claims about agent-chat's lift before we measure. The point of running the baselines first is to know what we're measuring AGAINST.
