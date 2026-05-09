@@ -277,6 +277,22 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## NL48 — v1.1 fix scaling to ALL 198 questions (in flight)
+
+Background runner pid 475845 launched: `experiments/residual/src/run_v11_full.py` re-runs ONLY the revise step on all 195 valid agent-chat entries (those with both draft + critique recorded) using the v1.1 prompt change. Reuses existing draft + critique to keep cost at 1 LLM call per question (vs 3 for full re-run). ETA ~1.5-3 hours wall.
+
+Resumable via skip-completed-ids on the output file. Defensive: 3 consecutive sub-1s claude exits → bail out (the disk-fill failure mode pattern from NL40 turned into a circuit breaker).
+
+Monitor `b11a3hxoz` armed on `experiments/residual/results/v11_full.log`: notifies on FIX / BREAK / done / fatal / exited.
+
+**What this measures:** does the n=6 closed-loop result (50% fix, 0% break) hold at population scale? Even a 20% population fix rate with 0% break would lift agent-chat from 88.4% to 91.7%, beating both single-model baselines for the first time on this benchmark.
+
+When the run completes, post-process:
+- Aggregate: total fix / break / stay-right / stay-wrong counts
+- New paired accuracy comparison vs codex/claude baselines
+- Per-domain breakdown
+- Subgroup analysis: was fix rate higher among cluster-0 members specifically?
+
 ## NL47 — CLOSED LOOP VALIDATED: substrate-prescribed fix actually works
 
 The substrate's full value proposition demonstrated end-to-end:
