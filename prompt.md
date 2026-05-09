@@ -237,6 +237,39 @@ Cost: ~1 day of work to instrument + run. Codex tends to be very fast on HumanEv
 
 Deferred until v0.1 is repeated on a non-saturated benchmark. v0.2 (episodic memory) and v0.3 (Hebbian edges) only add value if v0.1 can demonstrate any signal in the first place. On GPQA there's nothing for them to amplify.
 
+### v0.1 ablation (NL41, post-headline) — confirms saturation
+
+Train router on different feature subsets, n=158 train, 5-fold × 5-seed CV (held-out routing accuracy):
+
+| feature set | n_feat | acc | std |
+|---|---|---|---|
+| embed_only (384-dim BGE) | 386 | 88.51% | 3.56% |
+| **domain_only** | **5** | **89.54%** | 5.37% |
+| domain+subdomain | 18 | 89.54% | 4.58% |
+| all (embed+domain+subdomain) | 402 | 88.72% | 4.23% |
+
+**Domain features alone (5 bits: 3 domain one-hot + 2 expert one-hot) match or beat the full 402-dim model.** The 384-dim semantic embedding adds **negative or zero signal** on GPQA. Subdomain (~13 finer bins) adds nothing beyond domain. The "router" is essentially learning a 3-line argmax decision over (Physics, Chemistry, Biology), which is the trivial domain-argmax rule.
+
+**Implication for benchmark choice:** the right benchmark has questions where, *within* a domain, content nuances predict which expert is better. GPQA doesn't have that — within Physics, claude=codex=98%; within Chemistry, both at 81-86%; within Biology, codex always better. A denser-disagreement benchmark must produce within-domain disagreement that an embedder can pick up on.
+
+### Agent-chat re-run status (NL41 carryover, in flight)
+
+Background pid 40707 is alive but hitting **20-min DRAFT timeouts on ~50% of remaining questions** (claude SIGTERM at 1200s with empty stdout). Pattern: hard organic-chemistry questions where claude_alone took 8-14 min on its retry pass; on this re-run claude is hanging (or thinking past) the 20-min budget. Productive throughput ~45s/Q on the working ones; ETA worst case ~9 hours if the 50% timeout rate holds for all 49 remaining.
+
+Two failure modes seen:
+- `claude draft cli exited 143` — SIGTERM at full 20-min budget, empty response.
+- successful 38-46s questions that complete normally.
+
+Action: leave running. The completed-on-first-pass 145 questions plus ~20 of the 53 re-run questions will give us ~165 of 198 final agent-chat data points. The remaining ~33 timeout-failures are recorded with `error` field; we'll exclude them from final paired comparison the same way we excluded the 76 disk-fill polluted rows.
+
+### Stopping condition reached → benchmark pivot is the next move
+
+Stopping condition #3 from this prompt was: "Continuous-learning curve does not rise → either generate more triples or pivot benchmark." We've definitively reached this on GPQA via two independent measurements:
+1. Headline kfold curve flat at 88-89% across train sizes 10-158.
+2. Ablation showing 384-dim embedder adds nothing over 5-bit domain encoding.
+
+The substrate (`experiments/router/`) is reusable as-is on any benchmark that produces (query, codex_correct, claude_correct) triples. Boss has not yet authorized which benchmark to pivot to. Pending direction.
+
 ## v0.2 — episodic memory (target: 1 week after v0.1)
 
 **Goal:** add per-expert episodic memory; show that retrieval-augmented features lift the router's accuracy further.
