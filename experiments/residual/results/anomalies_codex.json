@@ -1,0 +1,652 @@
+{
+  "agent": "codex",
+  "k_lowrank": 5,
+  "n_samples": 20,
+  "total_valid_rows": 198,
+  "matrix_shape": [
+    198,
+    396
+  ],
+  "anomalies": [
+    {
+      "rank": 1,
+      "id": "recJZ3QEfRKjYw9a7",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 2.360059286334547,
+      "sample_prob": 0.0027907714247703552,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.712079048156738,
+          "max_single_dim": 0.3422306478023529
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.6937999725341797,
+          "signed_residual": 0.6937999725341797
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.5843815207481384,
+          "signed_residual": -0.5843815207481384
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 0.5229775905609131,
+          "signed_residual": -0.5229775905609131
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: cyclohexanone was treated with bromine, forming product 1.\n1 was heated with sodium hydroxide, forming product 2.\n2 was treated with thionyl chloride and pyridine, forming 3.\n3 was treated with Lithium tri-tert-butoxyaluminum hydride, forming product ",
+      "response_excerpt": "Cyclohexanone first undergoes alpha-bromination to give 2-bromocyclohexanone.\n\nHeating that alpha-bromoketone with NaOH gives a Favorskii rearrangement: ring contraction to cyclopentanecarboxylic acid. SOCl2/pyridine converts this to the acid chloride, and lithium tri-tert-butoxyaluminum hydride reduces the acid chloride selectively to the aldehyde: cyclopentanecarbaldehyde.\n\nFor cyclopentanecarbaldehyde:\n\n- aldehyde H: 1 type\n- ring carbon bearing CHO: 1 H type\n- C2/C5 methylene H\u2019s: 2 distinct types\n- C3/C4 methylene H\u2019s: 2 distinct types\n\nTotal chemically distinct H types = 6.\n\nAnswer: B"
+    },
+    {
+      "rank": 2,
+      "id": "rec6sE2CRtD4drtHg",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "anomaly_score": 54.266655592891766,
+      "sample_prob": 0.06417035311460495,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.984766960144043,
+          "max_single_dim": 0.3552602529525757
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 5.133718490600586,
+          "signed_residual": 5.133718490600586
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 3.6534225940704346,
+          "signed_residual": -3.6534225940704346
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 2.498812198638916,
+          "signed_residual": -2.498812198638916
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Consider the extension of the Standard Model given by the following Lagrangian\n\n\\mathcal{L}\\subset i\\bar{N}_{R}\\gamma^{\\mu}\\partial_{\\mu}N_{R}+\\frac{1}{2}\\left(\\partial^{\\mu}\\phi\\right)^{2}+\\left|D^{\\mu}S\\right|^{2}-\\frac{y_{i}}{2}\\phi\\bar{N}",
+      "response_excerpt": "The pseudo-Goldstone mass comes from the one-loop Coleman-Weinberg correction along the flat direction. It must scale as\n\n\\[\nM_{h_2}^2 \\propto \\frac{1}{8\\pi^2(x^2+v^2)}\n\\]\n\nwith positive bosonic mass-fourth contributions and negative fermionic ones. The full particle content contributing includes \\(h_1\\), \\(W\\), \\(Z\\), top quark, inert scalars \\(H^\\pm,H^0,A^0\\), and singlet fermions \\(N_i\\). This matches choice A.\n\nAnswer: A"
+    },
+    {
+      "rank": 3,
+      "id": "reczQ4I0VpENdMtIj",
+      "domain": "Biology",
+      "subdomain": "Genetics",
+      "anomaly_score": 9.739343646606414,
+      "sample_prob": 0.011516778729856014,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.11717414855957,
+          "max_single_dim": 0.3726106882095337
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 2.6667332649230957,
+          "signed_residual": 2.6667332649230957
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.2135581970214844,
+          "signed_residual": -1.2135581970214844
+        },
+        {
+          "feature": "letter_B",
+          "abs_residual": 0.3044220209121704,
+          "signed_residual": 0.3044220209121704
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Genetics\n\nQuestion: In an inactive state, a transcription factor subunit awaits an activation signal from the membrane phosphorylation cascade. Upon phosphorylation on the Ser residues in the transactivation domain, it dimerizes, shuttles into the nucleus, and serves in gene transc",
+      "response_excerpt": "A dominant-negative dimerization-domain mutation most likely produces a mutant subunit that interferes with the wild-type subunit, causing functional loss despite one normal allele. Among the choices, that corresponds best to loss of the wild-type allele\u2019s protein function.\n\nAnswer: D"
+    },
+    {
+      "rank": 4,
+      "id": "recNuT2oSnO86bxOx",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.2960415916686543,
+      "sample_prob": 0.0015325701097026467,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.793893814086914,
+          "max_single_dim": 0.3508402705192566
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.3050801455974579,
+          "signed_residual": -0.3050801455974579
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.2983595132827759,
+          "signed_residual": 0.2983595132827759
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.21699349582195282,
+          "signed_residual": 0.21699349582195282
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: benzene is treated with HNO3 and H2SO4, forming product 1.\nproduct 1 is treated with Br2 and iron powder, forming product 2.\nproduct 2 is stirred with Pd/C under a hydrogen atmosphere, forming product 3.\nProduct 3 is treated with NaNO2 and HBF4, formi",
+      "response_excerpt": "Nitration gives nitrobenzene. Bromination of nitrobenzene occurs meta to the nitro group, giving 3-bromonitrobenzene. Hydrogenation reduces `NO2` to `NH2`, giving 3-bromoaniline.\n\n`NaNO2/HBF4` converts the aniline into the diazonium tetrafluoroborate. Heating forms an aryl radical/cation equivalent that couples with anisole, which directs electrophilic substitution mainly para to methoxy. Final product is therefore `3-bromo-4'-methoxy-1,1'-biphenyl`.\n\nAnswer: B"
+    },
+    {
+      "rank": 5,
+      "id": "recb2M22zaD3tL6Qc",
+      "domain": "Chemistry",
+      "subdomain": "Chemistry (general)",
+      "anomaly_score": 5.514909197827592,
+      "sample_prob": 0.006521384231746197,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.182319641113281,
+          "max_single_dim": 0.379648357629776
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 1.348109483718872,
+          "signed_residual": -1.348109483718872
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.963234543800354,
+          "signed_residual": 0.963234543800354
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.9430001974105835,
+          "signed_residual": 0.9430001974105835
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: You have prepared an unknown compound. To identify the product, you have used the following characterisation techniques: FTIR and 1H NMR. The FTIR spectrum shows a very broad absorption peak at 3000 wavenumbers. A strong absorption peak is also obse",
+      "response_excerpt": "FTIR: broad ~3000 cm\u207b\u00b9 plus strong ~1700 cm\u207b\u00b9 indicates a carboxylic acid, which all choices contain.\n\nThe key evidence is the \u00b9H NMR splitting:\n\n- A **doublet of triplets of quartets** requires coupling to:\n  - 1 neighboring H\n  - 2 equivalent Hs\n  - 3 equivalent Hs\n\n- A **doublet of triplets of triplets** requires coupling to:\n  - 1 neighboring H\n  - 2 equivalent Hs\n  - another 2 equivalent Hs\n\nOnly **CH3C(H)(C2H5)C(H)(C2H5)CH2COOH** has one methine coupled to CH3, CH2, and CH, and the other methine coupled to CH, CH2, and CH2.\n\nAnswer: A"
+    },
+    {
+      "rank": 6,
+      "id": "recHVUd2DkoKfedJZ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 3.427821953496789,
+      "sample_prob": 0.0040534017607569695,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.820297241210938,
+          "max_single_dim": 0.3454074263572693
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.7824003100395203,
+          "signed_residual": -0.7824003100395203
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 0.7174677848815918,
+          "signed_residual": -0.7174677848815918
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.7153033018112183,
+          "signed_residual": 0.7153033018112183
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Enamine reactions include nucleophilic substitutions, electrophilic additions, and the condensation of secondary amines with carbonyl compounds to generate enamines. Enamine reactions are useful techniques for creating complex compounds with specified",
+      "response_excerpt": "Deprotonation with `LDA` in `DME` forms the enamine, ethyl iodide alkylates the alpha carbon, and acidic hydrolysis regenerates the ketone. Ethylation gives the symmetrical ketone `heptan-4-one`.\n\nAnswer: A"
+    },
+    {
+      "rank": 7,
+      "id": "recLrRirj7iXoB0rU",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 8.325781145721578,
+      "sample_prob": 0.009845241904258728,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.30789566040039,
+          "max_single_dim": 0.3857271373271942
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 2.2915215492248535,
+          "signed_residual": 2.2915215492248535
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.1227633953094482,
+          "signed_residual": -1.1227633953094482
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.800155758857727,
+          "signed_residual": -0.800155758857727
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: The |3,0,0\\rangle state in the standard notation |n,l,m\\rangle of the H -atom in the non-relativistic theory decays to the state |1,0,0\\rangle via two dipole transition. The transition route and the corresponding probability are (use latex),\n\n(A) |3,0,0",
+      "response_excerpt": "For electric dipole transitions, \\(\\Delta l=\\pm 1\\) and \\(\\Delta m=0,\\pm 1\\). Thus\n\n\\[\n|3,0,0\\rangle \\to |2,1,m\\rangle \\to |1,0,0\\rangle\n\\]\n\nis allowed for \\(m=-1,0,1\\). With no preferred direction, the three magnetic substates are equally likely, so each route has probability\n\n\\[\n\\frac{1}{3}.\n\\]\n\nAmong the choices, the correct route-probability pair is\n\n\\[\n|3,0,0\\rangle\\rightarrow |2,1,0\\rangle\\rightarrow |1,0,0\\rangle,\\qquad \\frac{1}{3}.\n\\]\n\nAnswer: C"
+    },
+    {
+      "rank": 8,
+      "id": "recqLRu4BcJvlSANc",
+      "domain": "Chemistry",
+      "subdomain": "Chemistry (general)",
+      "anomaly_score": 1.2896576891956926,
+      "sample_prob": 0.0015250209253281355,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.281925201416016,
+          "max_single_dim": 0.3875390589237213
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.37509655952453613,
+          "signed_residual": -0.37509655952453613
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.22444398701190948,
+          "signed_residual": 0.22444398701190948
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.19598795473575592,
+          "signed_residual": -0.19598795473575592
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: A chemical reaction for the synthesis of a product containing H+ ion was proceeding at room temperature and pH 1.  Accidentally an unknown substance was fallen into the running reaction making the rate of the reaction slower for the product formatio",
+      "response_excerpt": "The solution went from pH 1 to pH 4, meaning the H+ concentration decreased greatly. Since the product formation involves H+ ions, reducing their concentration can slow the reaction. The heat from the exothermic event would usually increase rate, so it is not the best explanation for the observed slowdown.\n\nAnswer: C"
+    },
+    {
+      "rank": 9,
+      "id": "recdya6FuYraBU5Rh",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 4.594469983069359,
+      "sample_prob": 0.005432962905615568,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.4388427734375,
+          "max_single_dim": 0.38728266954421997
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 1.225391149520874,
+          "signed_residual": -1.225391149520874
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.9193040132522583,
+          "signed_residual": 0.9193040132522583
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.6946607828140259,
+          "signed_residual": 0.6946607828140259
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Astronomers are searching for exoplanets around two stars with exactly the same masses. Using the RV method, they detected one planet around each star, both with masses similar to that of Neptune. The stars themselves have masses similar to that of our ",
+      "response_excerpt": "For the same spectral line, the Doppler wavelength shift is proportional to the star\u2019s radial velocity amplitude:\n\n\\[\n\\Delta \\lambda \\propto K\n\\]\n\nSo:\n\n\\[\n\\frac{K_2}{K_1}=\\frac{7}{5}=1.4\n\\]\n\nFor circular RV orbits with the same stellar masses and similar planet masses:\n\n\\[\nK \\propto P^{-1/3}\n\\]\n\nTherefore:\n\n\\[\n\\frac{P_2}{P_1}=\\left(\\frac{K_1}{K_2}\\right)^3\n=\\left(\\frac{5}{7}\\right)^3\n\\approx 0.36\n\\]\n\nPlanet #2 has a shorter period, about 0.36 times that of planet #1.\n\nAnswer: A"
+    },
+    {
+      "rank": 10,
+      "id": "recINGR1z01Fh1Z3A",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 10.679449274847741,
+      "sample_prob": 0.01262845378369093,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.93239688873291,
+          "max_single_dim": 0.3796437382698059
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 2.2605841159820557,
+          "signed_residual": 2.2605841159820557
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 1.254588007926941,
+          "signed_residual": -1.254588007926941
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.087172269821167,
+          "signed_residual": -1.087172269821167
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Two stars are being studied. It has been observed that iron atoms in the photosphere of star_1 are twice as excited in a specific energy level when compared to the iron atoms in star_2. In fact, the energy difference between the considered energy levels",
+      "response_excerpt": "In LTE, the excitation populations follow the Boltzmann factor:\n\n\\[\nn \\propto e^{-\\Delta E/kT}\n\\]\n\nIf star 1 has twice the excitation population of star 2:\n\n\\[\n2 = \\frac{e^{-\\Delta E/kT_1}}{e^{-\\Delta E/kT_2}}\n= e^{(\\Delta E/k)(1/T_2 - 1/T_1)}\n\\]\n\nTaking the natural log:\n\n\\[\n\\ln(2)=\\frac{\\Delta E}{k}\\frac{T_1-T_2}{T_1T_2}\n\\]\n\nGiven \\(\\Delta E \\approx 1.38 \\times 10^{-23}\\,\\text{J}\\), which is approximately \\(k\\), so \\(\\Delta E/k \\approx 1\\). Therefore:\n\n\\[\n\\ln(2)=\\frac{T_1-T_2}{T_1T_2}\n\\]\n\nAnswer: A"
+    },
+    {
+      "rank": 11,
+      "id": "rec06pnAkLOr2t2mp",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 145.34460067487453,
+      "sample_prob": 0.17187008261680603,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.825754165649414,
+          "max_single_dim": 0.36698004603385925
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 10.919947624206543,
+          "signed_residual": 10.919947624206543
+        },
+        {
+          "feature": "letter_C",
+          "abs_residual": 3.361001491546631,
+          "signed_residual": -3.361001491546631
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 2.1461615562438965,
+          "signed_residual": -2.1461615562438965
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Two quantum states with energies E1 and E2 have a lifetime of 10^-9 sec and 10^-8 sec, respectively. We want to clearly distinguish these two energy levels. Which one of the following options could be their energy difference so that they can be clearly ",
+      "response_excerpt": "Using the energy-time uncertainty relation,\n\n\\[\n\\Delta E \\sim \\frac{\\hbar}{\\tau}\n\\]\n\nFor the shorter lifetime, \\(\\tau = 10^{-9}\\,\\text{s}\\):\n\n\\[\n\\Delta E \\sim \\frac{6.58 \\times 10^{-16}\\,\\text{eV s}}{10^{-9}\\,\\text{s}}\n= 6.58 \\times 10^{-7}\\,\\text{eV}\n\\]\n\nTo clearly resolve the two levels, their separation should be larger than this natural width. Among the options, only \\(10^{-4}\\,\\text{eV}\\) is comfortably larger.\n\nAnswer: C"
+    },
+    {
+      "rank": 12,
+      "id": "recPIzpnuYpB4yvmp",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 6.5943439900329395,
+      "sample_prob": 0.007797814439982176,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.980267524719238,
+          "max_single_dim": 0.30986541509628296
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.3385107517242432,
+          "signed_residual": -1.3385107517242432
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 1.249570369720459,
+          "signed_residual": 1.249570369720459
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 1.1007556915283203,
+          "signed_residual": -1.1007556915283203
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: The state of a system at time t is given by the column matrix having elements (-1, 2, 1), and the operators of two observables P and Q of the system are represented by two square matrices. The matrix corresponding to operator P has the elements in first",
+      "response_excerpt": "Normalize the initial state:\n\\[\n|\\psi\\rangle=\\frac{1}{\\sqrt6}(-1,2,1)^T\n\\]\n\nFor operator \\(P\\), the eigenvector with eigenvalue \\(0\\) is:\n\\[\n|p_0\\rangle=\\frac{1}{\\sqrt2}(1,0,-1)^T\n\\]\n\nProbability of measuring \\(P=0\\):\n\\[\n|\\langle p_0|\\psi\\rangle|^2\n=\n\\left|\\frac{-1-1}{\\sqrt{12}}\\right|^2\n=\n\\frac{1}{3}\n\\]\n\nAfter this measurement, the state collapses to \\(|p_0\\rangle\\). For \\(Q=-1\\), the corresponding basis vector is \\((0,0,1)^T\\). Its probability in \\(|p_0\\rangle\\) is:\n\\[\n\\left|-\\frac{1}{\\sqrt2}\\right|^2=\\frac{1}{2}\n\\]\n\nSo the sequential probability is:\n\\[\n\\frac{1}{3}\\cdot \\frac{1}{2}=\\frac{1}{"
+    },
+    {
+      "rank": 13,
+      "id": "recRhwQwHijW0gCLo",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 8.582014157242668,
+      "sample_prob": 0.010148236528038979,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.134918212890625,
+          "max_single_dim": 0.35439983010292053
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.9084511995315552,
+          "signed_residual": -1.9084511995315552
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 1.5847073793411255,
+          "signed_residual": 1.5847073793411255
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.7547975778579712,
+          "signed_residual": 0.7547975778579712
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: The study of quantum mechanics deals with a lot of matrices. Consider the following matrices. \n\nW = (0, 0, 1; 0, 1, 0; 1, 0, 0), \nX = (i, -1, 2i; 1, 0, 1;  2i, -1, -i),\nY = (0.5, 0.1, 0.2; 0.1, 0.25, 0.1; 0.2, 0.1, 0.25)\nZ - (3, 2i, 5; -2i, -2, -4i; 5, ",
+      "response_excerpt": "A quantum state must be a Hermitian positive semidefinite matrix with trace 1.\n\nHere, \\(X^\\dagger = -X\\), so \\(e^X\\) is unitary and \\(e^{-X} = (e^X)^\\dagger\\). Matrix \\(Y\\) is Hermitian, has trace \\(1\\), and is positive definite, so it is a valid density matrix. Therefore \\(e^X Y e^{-X}\\) is also a valid quantum state.\n\nAnswer: A"
+    },
+    {
+      "rank": 14,
+      "id": "rec527dNeEtWJrYNl",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "anomaly_score": 8.904063718445286,
+      "sample_prob": 0.01052906084805727,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.68432903289795,
+          "max_single_dim": 0.4084261953830719
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 2.560985803604126,
+          "signed_residual": 2.560985803604126
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.6744900345802307,
+          "signed_residual": -0.6744900345802307
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.6268950700759888,
+          "signed_residual": -0.6268950700759888
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: ChIP-seq on a PFA-fixed sample with an antibody to the IKAROS transcription factor in human B cells followed by next-generation sequencing and standard quality control, alignment and peak-calling steps produced ChIP peaks that disappeared when PFA+DSG f",
+      "response_excerpt": "PFA-only ChIP-seq can produce systematic false-positive \u201cphantom peaks\u201d when accessible, protein-rich chromatin is nonspecifically enriched. These artifacts are not random; they are especially associated with active regulatory chromatin, particularly active promoters, as described in the ChIP-seq phantom peak literature: https://academic.oup.com/nar/article/43/14/6959/2902865\n\nSo the disappearing IKAROS peaks are most likely at active promoters and enhancers.\n\nAnswer: B"
+    },
+    {
+      "rank": 15,
+      "id": "recclFbsjbaiVVnnV",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.3505444702930305,
+      "sample_prob": 0.001597019610926509,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.931381225585938,
+          "max_single_dim": 0.38936057686805725
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 0.5110279321670532,
+          "signed_residual": -0.5110279321670532
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.23895536363124847,
+          "signed_residual": 0.23895536363124847
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.19364596903324127,
+          "signed_residual": 0.19364596903324127
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Which sequence of reactions from the following options would lead to the high-yield synthesis of 1-(3-bromo-5-nitrophenyl)ethan-1-one, beginning with benzene?\n\n(A) i) HNO3/H2SO4 ; ii) Fe/HCl ; iii) CH3COCl/AlCl3 ; iv) Br2/FeBr3 ; v) HNO3/H2SO4 ; vi) N",
+      "response_excerpt": "The best route is to install the acetyl group first, since `COCH3` is meta-directing. Bromination then gives the meta-bromo acetophenone, and nitration occurs at the remaining meta position to the acyl group, giving the desired 3-bromo-5-nitroacetophenone. The later reduction/diazotization/deamination steps in option D are extraneous but restore the nitro-derived substituent pattern after using `NH2` as a removable directing group.\n\nAnswer: D"
+    },
+    {
+      "rank": 16,
+      "id": "recPzW1WqRnPs57D6",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 16.72886185979428,
+      "sample_prob": 0.019781891256570816,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.706998825073242,
+          "max_single_dim": 0.4365527629852295
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 2.687257766723633,
+          "signed_residual": 2.687257766723633
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 1.8415961265563965,
+          "signed_residual": -1.8415961265563965
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.3954721689224243,
+          "signed_residual": -1.3954721689224243
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: There is a spin 1/2 particle with magnetic moment mu (= gamma*Sz), aligned with a magnetic field pointing in the +Z direction. Suddenly, the magnetic field is turned off, and another one is turned on along the +Y direction; both fields have the same mag",
+      "response_excerpt": "After the new field is along `+Y`, the Hamiltonian is\n\n```text\nH = -\u03b3 B S_y\n```\n\nThe initial `+Z` spin state is a superposition of the two `S_y` eigenstates, whose energy separation is\n\n```text\n\u0394E = \u03b3 B \u210f\n```\n\nSo the oscillation angular frequency is\n\n```text\n\u03c9 = \u0394E / \u210f = \u03b3 B\n```\n\nAnswer: D"
+    },
+    {
+      "rank": 17,
+      "id": "recG1ljJQcVy6CbSl",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 14.513409082581404,
+      "sample_prob": 0.01716211624443531,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.332240104675293,
+          "max_single_dim": 0.3198891878128052
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 2.41959810256958,
+          "signed_residual": 2.41959810256958
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.786709189414978,
+          "signed_residual": -1.786709189414978
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.4804695844650269,
+          "signed_residual": -1.4804695844650269
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Consider the Y-component of the intrinsic angular momentum operator, A of a muon be represented by a 2\u00d72 matrix Ay satisfying the eigenvalue equation Ay(\u03c6) = a(\u03c6). Here, a is the eigenvalue, \u03c6 is the eigenfunction. The matrix operator has the form Ay = ",
+      "response_excerpt": "For \\(A_y=\\frac{h}{4\\pi}\\begin{pmatrix}0&-i\\\\ i&0\\end{pmatrix}\\), the matrix is proportional to \\(\\sigma_y\\), whose eigenvalues are \\(\\pm 1\\). So the eigenvalues of \\(A_y\\) are real: \\(\\pm \\frac{h}{4\\pi}\\).\n\nThe corresponding eigenvectors are proportional to \\(\\begin{pmatrix}1\\\\ i\\end{pmatrix}\\) and \\(\\begin{pmatrix}1\\\\ -i\\end{pmatrix}\\). A spin component eigenfunction can also be an eigenfunction of total angular momentum \\(A^2\\), but not of a different component like \\(A_z\\), since different components do not commute.\n\nAnswer: C"
+    },
+    {
+      "rank": 18,
+      "id": "recKcjTwONILZqHAX",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "anomaly_score": 1.6944849500333845,
+      "sample_prob": 0.0020037293434143066,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.320560455322266,
+          "max_single_dim": 0.3800490200519562
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.4399656057357788,
+          "signed_residual": 0.4399656057357788
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.4202151894569397,
+          "signed_residual": -0.4202151894569397
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 0.367365300655365,
+          "signed_residual": 0.367365300655365
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
+      "response_excerpt": "In four-dimensional QFT, each loop typically contributes a loop-suppression factor\n\n\\[\n\\frac{1}{16\\pi^2}=\\frac{1}{(4\\pi)^2}.\n\\]\n\nThe note contains\n\n\\[\n\\frac{1}{(4\\pi)^6}.\n\\]\n\nSo\n\n\\[\n(4\\pi)^{-6} = \\left((4\\pi)^{-2}\\right)^3,\n\\]\n\nwhich corresponds to 3 loops.\n\nAnswer: D"
+    },
+    {
+      "rank": 19,
+      "id": "recUBgVlkKzcRPDdK",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "anomaly_score": 1.2509537039346128,
+      "sample_prob": 0.0014792535221204162,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.5924711227417,
+          "max_single_dim": 0.3471902906894684
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.3205031156539917,
+          "signed_residual": 0.3205031156539917
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 0.2984550893306732,
+          "signed_residual": -0.2984550893306732
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 0.19666598737239838,
+          "signed_residual": 0.19666598737239838
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: You want to create a mouse embryonic chimera with induced pluripotent stem cells from somatic cells of various tissues. You are interested in the iPSCs fate in the embryo and their co-localization with apoptotic events. The iPSC cells are labeled with a",
+      "response_excerpt": "TUNEL-FITC marks apoptotic nuclei, while mRaspberry expressed from a promoter would usually appear as a diffuse cytoplasmic red fluorescent protein unless engineered with a localization tag. So the first basic observation is red cytoplasmic labeling of the injected iPSC-derived cells, not automatic colocalization with nuclear apoptosis signal.\n\nAnswer: D"
+    },
+    {
+      "rank": 20,
+      "id": "recEmTBhx2hgw6tPQ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.3288336970274486,
+      "sample_prob": 0.0015713468892499804,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.879892349243164,
+          "max_single_dim": 0.37599050998687744
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.40398919582366943,
+          "signed_residual": -0.40398919582366943
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.25059664249420166,
+          "signed_residual": 0.25059664249420166
+        },
+        {
+          "feature": "letter_C",
+          "abs_residual": 0.19274353981018066,
+          "signed_residual": 0.19274353981018066
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
+      "response_excerpt": "2,5-Dimethylthiophene is the diene, so the sulfur becomes the bridge in the bicyclic Diels-Alder adduct. That rules out the epoxy/benzo[c]thiophene options A and D.\n\nThe exo adduct has the anhydride moiety oriented away from the sulfur bridge, corresponding to the epithioisobenzofuran product with configuration `(3aR,4S,7R,7aS)`.\n\nAnswer: C"
+    }
+  ]
+}

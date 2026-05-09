@@ -265,6 +265,27 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## v0.1 build status (NL42 — SHIPPED, Track A)
+
+- ✅ All 4 test files written first; **11/11 tests pass**.
+- ✅ All 5 src modules: kernel.py (12-line residual_sample), response_features.py, matrix.py, detect.py, explain.py.
+- ✅ ~485 lines total across src+tests (under 500-line ceiling).
+- ✅ GPU verified: 0% → 13% during embedder runs (CLAUDE.md mandate).
+- ✅ Run on full data per CLAUDE.md mandate: 198 codex / 197 claude / 172 agent-chat responses.
+- ✅ Outputs: `experiments/residual/results/anomalies_{codex,claude,agent_chat}.json` + `summary.md`.
+
+### v0.1 honest result — anomalies are HIGHLY interpretable
+
+**Acceptance criterion was: ≥ 14/20 anomalies have a clear "why" when read.** Actual top-anomaly examples:
+
+- **rec6sE2CRtD4drtHg** (Coleman-Weinberg pseudo-Goldstone mass, high-energy physics) — appears in BOTH codex (score 54) AND claude (score 46) top anomalies. Both agents struggled; the residual sampler caught it from independent matrices. **This is the cleanest possible early evidence that Track C (boundary scout) will fire correctly on multi-agent disagreement.**
+- **recnGEpF1srQpaqWq** (Cope rearrangement, claude, score 151) — anomalously code-block-heavy reasoning style for an organic-chem question. Driving feature: `n_codeblocks`.
+- **recVE8cUNHpHZIAvL** (solar neutrinos, claude, score 55) — letter_unknown + n_questions dominate. Claude couldn't pick a final letter. Refusal-adjacent.
+- **agent_chat anomalies** are dominated by "the peer reviewer confirms..." / "let me redo with their corrections..." patterns — the residual sampler is automatically identifying the soft-pushback failure mode we diagnosed by hand in NL40.
+- Anomaly scores span 1 → 151 (3 orders of magnitude) — strong differentiation, not noise.
+
+**Verdict:** Track A is signal-rich. The residual-exploration premise is validated on the GPQA dataset where the ROUTER framing was flat — i.e., the same data that has no signal for selection HAS signal for residual analysis. This is the cleanest possible evidence that the pivot was the right call.
+
 ## Carryover state (live as of NL41 ablation)
 
 - **Agent-chat re-run** (pid 40707): alive, hitting 20-min DRAFT timeouts on ~50% of

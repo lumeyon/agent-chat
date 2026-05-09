@@ -1,0 +1,652 @@
+{
+  "agent": "claude",
+  "k_lowrank": 5,
+  "n_samples": 20,
+  "total_valid_rows": 197,
+  "matrix_shape": [
+    197,
+    396
+  ],
+  "anomalies": [
+    {
+      "rank": 1,
+      "id": "recZt4x514UQNnsgy",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 16.413399131663255,
+      "sample_prob": 0.014171955175697803,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.273674011230469,
+          "max_single_dim": 0.3550390899181366
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 3.5084924697875977,
+          "signed_residual": 3.5084924697875977
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 1.1096583604812622,
+          "signed_residual": 1.1096583604812622
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 0.7366980910301208,
+          "signed_residual": -0.7366980910301208
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the starting material(s) required to synthesize methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate.\n\n(A) Cyclohexene and methyl 2,3-dimethylenehexanoate\n(B) methyl (2E,8E,10E)-tetradeca-2,8,10-trienoate\n(C) 1-vinylcyclohex-1",
+      "response_excerpt": "Looking at the target: methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate is a *cis*- or *trans*-fused decalin with:\n- One double bond at C3\u2013C4 (the only unsaturated positions)\n- A methyl ester at C1\n- A propyl group at C2\n\nThis is a classic **intramolecular Diels\u2013Alder (IMDA)** product.\n\n**Disconnection (retro-IMDA):**\n- The C3=C4 double bond is the central bond of the diene.\n- Cleave the two new \u03c3-bonds: C1\u2013C8a and C2\u2013C3 (one ring junction\u2013ring junction, one diene-terminus to dienophile).\n- This regenerates a tether bearing a 1,3-diene and an \u03b1,\u03b2-unsaturated ester dienophil"
+    },
+    {
+      "rank": 2,
+      "id": "recUOePh79cp4T2Bg",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 14.154560540282546,
+      "sample_prob": 0.01222158595919609,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 10.885607719421387,
+          "max_single_dim": 0.3797212541103363
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 2.9677040576934814,
+          "signed_residual": 2.9677040576934814
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 1.4306048154830933,
+          "signed_residual": -1.4306048154830933
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 1.2235944271087646,
+          "signed_residual": 1.2235944271087646
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: The Cope rearrangement is a chemical reaction where a 1,5-diene molecule undergoes rearrangement, resulting in a change in the positions of its carbon-carbon double bonds. This rearrangement can be initiated by heat or light and is valuable for creati",
+      "response_excerpt": "Looking at this problem, I need to analyze two rearrangements.\n\n**Reaction A: PhCH\u2082-O-CH\u2082-CH=C(CH\u2083)\u2082 + BuLi, then H\u207a**\n\nThis is a [2,3]-Wittig / [1,2]-Wittig rearrangement on a benzyl prenyl ether:\n- BuLi deprotonates the benzylic position (most acidic): PhCH(\u207b)-O-CH\u2082-CH=CMe\u2082\n- A standard [2,3]-Wittig would form a bond at the \u03b3-carbon (CMe\u2082), but this requires forming a sterically hindered quaternary center adjacent to the gem-dimethyl group\n- With \u03b3,\u03b3-disubstitution, the [1,2]-Wittig pathway dominates: the prenyl group migrates intact from O to C\n- Product: **PhCH(OH)-CH\u2082-CH=C(CH\u2083)\u2082 = 4-methy"
+    },
+    {
+      "rank": 3,
+      "id": "recJZ3QEfRKjYw9a7",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.4700541478242144,
+      "sample_prob": 0.0012693009339272976,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.2874174118042,
+          "max_single_dim": 0.38199302554130554
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.5492336750030518,
+          "signed_residual": -0.5492336750030518
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.2902388572692871,
+          "signed_residual": 0.2902388572692871
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.24458827078342438,
+          "signed_residual": -0.24458827078342438
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: cyclohexanone was treated with bromine, forming product 1.\n1 was heated with sodium hydroxide, forming product 2.\n2 was treated with thionyl chloride and pyridine, forming 3.\n3 was treated with Lithium tri-tert-butoxyaluminum hydride, forming product ",
+      "response_excerpt": "Looking at this problem, I need to track the products through the reaction sequence:\n\n**Step 1:** Cyclohexanone + Br\u2082 \u2192 2-bromocyclohexanone (Product 1)\n**Step 2:** 2-bromocyclohexanone + NaOH (heat) \u2192 cyclopentanecarboxylic acid (Favorskii rearrangement \u2192 ring contraction) (Product 2)\n**Step 3:** Cyclopentanecarboxylic acid + SOCl\u2082/pyridine \u2192 cyclopentanecarbonyl chloride (Product 3)\n**Step 4:** Acid chloride + LiAlH(OtBu)\u2083 (Brown's reagent, partial reduction) \u2192 cyclopentanecarbaldehyde (Product 4)\n\n**Counting distinct H's in cyclopentanecarbaldehyde:**\n\nStructure: cyclopentane ring with \u2013CHO"
+    },
+    {
+      "rank": 4,
+      "id": "recVE8cUNHpHZIAvL",
+      "domain": "Physics",
+      "subdomain": "Astrophysics",
+      "anomaly_score": 54.65589387212185,
+      "sample_prob": 0.047191984951496124,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.220108985900879,
+          "max_single_dim": 0.3448082208633423
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 5.176779747009277,
+          "signed_residual": 5.176779747009277
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 2.835728406906128,
+          "signed_residual": -2.835728406906128
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 2.434173107147217,
+          "signed_residual": -2.434173107147217
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Very large number of neutrinos produced by the Sun reach the Earth (very large flux of neutrinos, defined as the number of neutrinos per cm^2, per second).\n\nLet us assume that, hypothetically, the pp-III branch suddenly stopped in the core of the Sun about 8",
+      "response_excerpt": "Looking at this problem:\n\n**Solar neutrino sources by branch:**\n- pp-I: pp neutrinos (continuous, endpoint ~420 keV) \u2014 below both bands\n- pp-II: \u2077Be neutrinos (lines at **861 keV** and 384 keV), pep at 1.44 MeV\n- pp-III: \u2078B neutrinos (continuous, endpoint ~15 MeV) \u2014 *stopped per problem*\n- CNO: \u00b9\u00b3N, \u00b9\u2075O continuous spectra (endpoints ~1.2 / 1.7 MeV)\n\n**With pp-III stopped, \u2078B is gone. What's left in each band?**\n\n**Band 1 (700\u2013800 keV):** No \u2077Be line here (it's at 861 keV, in band 2). pp neutrinos are too low. pep is too high. Only CNO contributes \u2014 roughly ~3\u00d710\u2077 cm\u207b\u00b2s\u207b\u00b9 per 100 keV bin.\n\n**Ba"
+    },
+    {
+      "rank": 5,
+      "id": "recb4cGsC6BJUCU3V",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 14.244437784532238,
+      "sample_prob": 0.01229919120669365,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.864133834838867,
+          "max_single_dim": 0.36019736528396606
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 3.309122323989868,
+          "signed_residual": 3.309122323989868
+        },
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 0.9980875253677368,
+          "signed_residual": -0.9980875253677368
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 0.6265777349472046,
+          "signed_residual": 0.6265777349472046
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Compound A (C3H6) undergoes bromination in the presence of carbon tetrachloride to form compound B. When compound B reacts with alcoholic KOH, it forms compound C. Passing compound C through a red-hot iron tube produces compound D. Compound D reacts w",
+      "response_excerpt": "Tracing the sequence:\n- **A** = propene (C\u2083H\u2086)\n- **B** = 1,2-dibromopropane (Br\u2082/CCl\u2084 addition)\n- **C** = propyne (double dehydrohalogenation by alc. KOH)\n- **D** = mesitylene / 1,3,5-trimethylbenzene (cyclotrimerization over red-hot Fe)\n- **E** = nitromesitylene (HNO\u2083/H\u2082SO\u2084)\n- **F** = mesidine / 2,4,6-trimethylaniline (Fe/HCl reduction)\n- **G** = diazonium salt (HNO\u2082)\n- **H** = 2,4,6-trimethylphenol / mesitol (NaOH/warm)\n\nChecking each statement:\n- **(A)** Aromatic amines like mesidine are classic dye intermediates. \u2713 True\n- **(B)** Mesitylene shows exactly two singlets in \u00b9H NMR: aromatic-H "
+    },
+    {
+      "rank": 6,
+      "id": "rec6sE2CRtD4drtHg",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "anomaly_score": 46.36677355587403,
+      "sample_prob": 0.040034838020801544,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.408388137817383,
+          "max_single_dim": 0.3934219479560852
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 5.583521366119385,
+          "signed_residual": 5.583521366119385
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 2.9998269081115723,
+          "signed_residual": -2.9998269081115723
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.549109697341919,
+          "signed_residual": -1.549109697341919
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Consider the extension of the Standard Model given by the following Lagrangian\n\n\\mathcal{L}\\subset i\\bar{N}_{R}\\gamma^{\\mu}\\partial_{\\mu}N_{R}+\\frac{1}{2}\\left(\\partial^{\\mu}\\phi\\right)^{2}+\\left|D^{\\mu}S\\right|^{2}-\\frac{y_{i}}{2}\\phi\\bar{N}",
+      "response_excerpt": "Looking at this problem, I need to identify the Coleman-Weinberg radiative correction to a pseudo-Goldstone boson mass.\n\nThe standard form is:\n$$M^2 \\sim \\frac{1}{8\\pi^2 f^2} \\sum_i (\\pm) M_i^4$$\n\nwhere:\n- **Bosons** (scalars, gauge bosons) contribute with **positive** sign\n- **Fermions** contribute with **negative** sign (due to fermion loop minus sign)\n- The prefactor is **1/f\u00b2** with f\u00b2 = x\u00b2 + v\u00b2 (the VEV scale), not f\u00b2 in numerator\n\nThe particle content contributing to the loop:\n- h\u2081 (SM-like Higgs scalar): **+**\n- W, Z gauge bosons: **+**\n- top quark t (heaviest fermion of SM): **\u2212**\n- H\u00b1"
+    },
+    {
+      "rank": 7,
+      "id": "recdya6FuYraBU5Rh",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 4.541233325067481,
+      "sample_prob": 0.003921074327081442,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.253113746643066,
+          "max_single_dim": 0.3554430603981018
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.9382998943328857,
+          "signed_residual": -0.9382998943328857
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.9213559627532959,
+          "signed_residual": 0.9213559627532959
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.6961228847503662,
+          "signed_residual": -0.6961228847503662
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Astronomers are searching for exoplanets around two stars with exactly the same masses. Using the RV method, they detected one planet around each star, both with masses similar to that of Neptune. The stars themselves have masses similar to that of our ",
+      "response_excerpt": "Using the RV method for circular orbits with equal star and planet masses:\n\nK \u221d \u0394\u03bb/\u03bb, and K \u221d P^(-1/3) (since K = (2\u03c0G M_p / (P M_star^(2/3)))^... with M_p, M_star fixed)\n\nSo K\u2081/K\u2082 = (P\u2082/P\u2081)^(1/3)\nP\u2082/P\u2081 = (K\u2081/K\u2082)\u00b3 = (5/7)\u00b3 = 125/343 \u2248 0.364\n\nAnswer: A"
+    },
+    {
+      "rank": 8,
+      "id": "recnGEpF1srQpaqWq",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 151.32651125866778,
+      "sample_prob": 0.13066111505031586,
+      "top_features": [
+        {
+          "feature": "n_codeblocks",
+          "abs_residual": 11.31411075592041,
+          "signed_residual": 11.31411075592041
+        },
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.272287368774414,
+          "max_single_dim": 0.33346447348594666
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 2.431480884552002,
+          "signed_residual": -2.431480884552002
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 2.3065285682678223,
+          "signed_residual": -2.3065285682678223
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Which of the following molecules is formed when 5-butylnona-2,6-diene is heated?\n\n(A) 5-ethyl-4-methyldeca-2,6-diene\n(B) 5-ethyl-4-methyldeca-2,6-diene\n(C) 5-ethylundeca-2,6-diene\n(D) 4-ethyl-3-methyldeca-1,5-diene",
+      "response_excerpt": "Looking at this problem, I need to recognize that heating a 1,5-diene triggers a **Cope rearrangement** ([3,3]-sigmatropic shift).\n\n## Step 1: Draw 5-butylnona-2,6-diene\n\n```\nCH\u2083-CH=CH-CH\u2082-CH(C\u2084H\u2089)-CH=CH-CH\u2082-CH\u2083\n 1    2   3   4    5      6   7   8   9\n```\nwhere C\u2084H\u2089 = -CH\u2082CH\u2082CH\u2082CH\u2083 (butyl on C5)\n\n## Step 2: Identify the 1,5-hexadiene system\n\nThe Cope-active framework uses C2=C3 and C6=C7, connected by the C4-C5 \u03c3 bond. Label them a=C2, b=C3, c=C4, d=C5, e=C6, f=C7.\n\n## Step 3: Apply Cope rearrangement\n\n- **Break** the C4-C5 \u03c3 bond (c-d)\n- **Form** a new C2-C7 \u03c3 bond (a-f)\n- **Shift** double bo"
+    },
+    {
+      "rank": 9,
+      "id": "recOYsaYs6RmtlTDy",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 24.582418327810046,
+      "sample_prob": 0.021225398406386375,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.26126766204834,
+          "max_single_dim": 0.36657941341400146
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 4.4317755699157715,
+          "signed_residual": 4.4317755699157715
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.5056341886520386,
+          "signed_residual": -1.5056341886520386
+        },
+        {
+          "feature": "letter_B",
+          "abs_residual": 0.6911638379096985,
+          "signed_residual": -0.6911638379096985
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Let there be a diatomic molecule, with elements X and Y, that can be modeled using the quantum rotation-vibration model (or non-rigid rotor model). If the molecule is in its fundamental state, what momentum should an absorbed photon have, in order for t",
+      "response_excerpt": "Looking at this problem:\n\n**Fundamental state**: v=0, J=0. Selection rules for rovibrational transitions: \u0394v=+1, \u0394J=\u00b11. From J=0, only \u0394J=+1 is allowed, so the lowest-energy next state is (v=1, J=1).\n\n**Energy of transition**:\n$$\\Delta E = \\hbar\\omega + \\frac{\\hbar^2}{2I}[J(J+1) - 0] = \\hbar\\omega + \\frac{\\hbar^2}{I}$$\n\n**Reduced mass**:\n$$\\mu = \\frac{20 \\cdot 2}{22} \\text{ amu} = 1.818 \\text{ amu} = 3.019 \\times 10^{-27} \\text{ kg}$$\n\n**Moment of inertia**:\n$$I = \\mu R^2 = 3.019 \\times 10^{-27} \\times (2 \\times 10^{-10})^2 = 1.208 \\times 10^{-46} \\text{ kg\u00b7m}^2$$\n\n**Vibrational term**:\n$$\\hba"
+    },
+    {
+      "rank": 10,
+      "id": "recNuT2oSnO86bxOx",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.396016236702863,
+      "sample_prob": 0.0012053735554218292,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.913247108459473,
+          "max_single_dim": 0.33731627464294434
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.45487695932388306,
+          "signed_residual": -0.45487695932388306
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.21951588988304138,
+          "signed_residual": 0.21951588988304138
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.21800139546394348,
+          "signed_residual": -0.21800139546394348
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: benzene is treated with HNO3 and H2SO4, forming product 1.\nproduct 1 is treated with Br2 and iron powder, forming product 2.\nproduct 2 is stirred with Pd/C under a hydrogen atmosphere, forming product 3.\nProduct 3 is treated with NaNO2 and HBF4, formi",
+      "response_excerpt": "Step 1: Benzene + HNO3/H2SO4 \u2192 **nitrobenzene** (product 1).\n\nStep 2: Nitrobenzene + Br2/Fe. The NO2 group is a meta-director, so bromine goes meta \u2192 **1-bromo-3-nitrobenzene** (product 2).\n\nStep 3: Pd/C, H2 reduces NO2 to NH2 \u2192 **3-bromoaniline** (product 3). (Aryl bromides aren't cleaved under mild Pd/C hydrogenation.)\n\nStep 4: NaNO2 + HBF4 diazotizes the amine \u2192 **3-bromobenzenediazonium tetrafluoroborate** (product 4).\n\nStep 5: Heating the diazonium salt in the presence of anisole = Gomberg-Bachmann\u2013type radical arylation. The 3-bromophenyl radical attacks anisole; the methoxy group direct"
+    },
+    {
+      "rank": 11,
+      "id": "recYt8xx80OTyDsL0",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "anomaly_score": 24.09669318158194,
+      "sample_prob": 0.020806001499295235,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.65119457244873,
+          "max_single_dim": 0.4288986027240753
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 3.497715950012207,
+          "signed_residual": 3.497715950012207
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.7364140748977661,
+          "signed_residual": 1.7364140748977661
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.4565279483795166,
+          "signed_residual": 1.4565279483795166
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: You tag the inner capsid proteins of rotavirus with a GFP and deliver them to mice via oral gavage. By in vivo imaging, you observe that some of the fluorescence was destroyed by the stomach acid, and some were entangled in the intestinal mucus before t",
+      "response_excerpt": "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different approach. If you are seeing this refusal repeatedly, try running /model claude-sonnet-4-20250514 to switch models.\n\nRequest ID: req_011CaqudUFMR1WDQgKfo5itF"
+    },
+    {
+      "rank": 12,
+      "id": "recV1nqYQvpII94oC",
+      "domain": "Physics",
+      "subdomain": "Electromagnetism and Photonics",
+      "anomaly_score": 17.71973230417734,
+      "sample_prob": 0.015299892984330654,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.468271255493164,
+          "max_single_dim": 0.3941233158111572
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 3.7113094329833984,
+          "signed_residual": 3.7113094329833984
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.0242016315460205,
+          "signed_residual": -1.0242016315460205
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 0.7097974419593811,
+          "signed_residual": -0.7097974419593811
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Electromagnetism and Photonics\n\nQuestion: Imagine a point charge q is moving with a trajectory $\\vec{s}(t)$, where t is time, with respect to the origin. Let $\\vec{r}$ be the field point, where the field is observed, with respect to the origin of the same reference frame, and  $\\ve",
+      "response_excerpt": "The Li\u00e9nard-Wiechert potentials for a moving point charge are:\n\nV(r,t) = (1/4\u03c0\u03b5\u2080) \u00b7 qc / (dc - **d**\u00b7**v**)\n\n**A**(r,t) = (\u03bc\u2080/4\u03c0) \u00b7 qc**v** / (dc - **d**\u00b7**v**) = **v**/c\u00b2 \u00b7 V\n\nwhere **d** is the vector from the retarded position to the field point, and **v** is the velocity at the retarded time.\n\nOption (C) matches this exactly.\n\nAnswer: C"
+    },
+    {
+      "rank": 13,
+      "id": "recnTTKdBzfuoZ7w7",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "anomaly_score": 43.947405093480484,
+      "sample_prob": 0.037945862859487534,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.713829040527344,
+          "max_single_dim": 0.3641810119152069
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 5.389423370361328,
+          "signed_residual": 5.389423370361328
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 3.031536102294922,
+          "signed_residual": -3.031536102294922
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 1.020678997039795,
+          "signed_residual": -1.020678997039795
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: Congratulations, you just landed your dream job at one of the top structural biology labs at Stanford University in California. Without further ado, the Principal Investigator explains that the priority of the moment is to produce in E. coli BL21 then p",
+      "response_excerpt": "Looking at this question, I need to identify which DNA sequence will best produce human p53 in E. coli BL21 *quickly*. This is a codon optimization question \u2014 E. coli BL21 has rare codons that slow/stall translation, particularly:\n- **AGA/AGG** for arginine (very rare)\n- **CCC** for proline (least preferred)\n- **CUA** for leucine, **AUA** for isoleucine\n\n**Step 1 \u2014 Check that each sequence actually encodes p53.**\n\nThe protein contains \"...VDSTPPPGTRVRAMAI...\" (three P's in a row).\n\n- Sequence A: `...TCC ACA CCC CCG CCC GGC ACC CGC GTC...` = S T **P P P** G T R V \u2713\n- Sequence B: `...TCC ACA CCC"
+    },
+    {
+      "rank": 14,
+      "id": "recHVUd2DkoKfedJZ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 3.6151169442832867,
+      "sample_prob": 0.0031214295886456966,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.0267972946167,
+          "max_single_dim": 0.3692866861820221
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.2322932481765747,
+          "signed_residual": -1.2322932481765747
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.837753176689148,
+          "signed_residual": 0.837753176689148
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.3904538154602051,
+          "signed_residual": -0.3904538154602051
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Enamine reactions include nucleophilic substitutions, electrophilic additions, and the condensation of secondary amines with carbonyl compounds to generate enamines. Enamine reactions are useful techniques for creating complex compounds with specified",
+      "response_excerpt": "Looking at this problem:\n\n**Starting material**: (E)-N-methyl-N-(pentan-2-ylidene)ethanaminium \u2014 an iminium salt derived from pentan-2-one (CH\u2083-CO-CH\u2082CH\u2082CH\u2083) and N-methylethanamine.\n\n**Mechanism (Stork-type alkylation via metalated enamine)**:\n1. **LDA in DME**: LDA (bulky base) deprotonates at the **less hindered \u03b1-carbon** (the methyl side, kinetic deprotonation) to generate the aza-enolate.\n2. **CH\u2083CH\u2082I**: Alkylation occurs at that less-hindered \u03b1-carbon, adding an ethyl group to the former methyl carbon \u2192 that carbon becomes -CH\u2082CH\u2082CH\u2083 (propyl).\n3. **H\u2083O\u207a**: Hydrolysis of the iminium regen"
+    },
+    {
+      "rank": 15,
+      "id": "reczUoM8JsxU6pYxr",
+      "domain": "Physics",
+      "subdomain": "Astrophysics",
+      "anomaly_score": 5.769062017863291,
+      "sample_prob": 0.0049812281504273415,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.592449188232422,
+          "max_single_dim": 0.3756192624568939
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 1.4237947463989258,
+          "signed_residual": 1.4237947463989258
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 1.1046340465545654,
+          "signed_residual": -1.1046340465545654
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.9575415253639221,
+          "signed_residual": -0.9575415253639221
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Observations of a quasar across the electromagnetic spectrum are being carried out. Focusing on the near infrared and optical spectrum, there is a peak at wavelength of about 790 nm, and at shorter wavelengths < 790 nm the flux drops significantly.\n\nIf we li",
+      "response_excerpt": "Looking at this problem, I need to identify what spectral feature gives a peak at 790 nm with flux dropping at shorter wavelengths.\n\n**Identifying the spectral feature:**\nThe signature \"peak with drop below\" is characteristic of the Lyman-alpha emission line of a quasar with the Lyman-alpha forest/break suppressing flux at shorter wavelengths. Rest-frame Lyman-\u03b1 is at 121.6 nm.\n\n**Calculating redshift:**\nz = (790/121.6) \u2212 1 \u2248 6.497 \u2212 1 \u2248 5.5\n\n**Comoving distance in flat \u039bCDM (H\u2080=70, \u03a9\u2098=0.3, \u03a9_\u039b=0.7):**\n\nD_C = (c/H\u2080) \u222b\u2080^z dz'/E(z'), where E(z) = \u221a(\u03a9\u2098(1+z)\u00b3 + \u03a9_\u039b)\n\nHubble distance: c/H\u2080 = 299,79"
+    },
+    {
+      "rank": 16,
+      "id": "recr3VHM4zYf6dMFY",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.5150354019693992,
+      "sample_prob": 0.0013081394135951996,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.659719467163086,
+          "max_single_dim": 0.3562793731689453
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.43415647745132446,
+          "signed_residual": -0.43415647745132446
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.32952919602394104,
+          "signed_residual": -0.32952919602394104
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.2677989900112152,
+          "signed_residual": 0.2677989900112152
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Two compounds A and B are treated separately with hydrochloric acid, sodium nitrite, and water. Through the mentioned treatment two different diketones are produced. Select the proper starting materials A and B for the reactions.\nA + (NaNO2, HCl, H2O)",
+      "response_excerpt": "The reaction with NaNO\u2082/HCl/H\u2082O on a ketone is the classic \u03b1-nitrosation (Claisen-type), where the \u03b1-CH\u2082 is converted to an \u03b1-oximino group, which then hydrolyzes to give a 1,2-diketone.\n\n- 4-isopropylcyclohexan-1-one \u2192 nitrosation at C2 \u2192 oxime \u2192 hydrolysis \u2192 4-isopropylcyclohexane-1,2-dione \u2713\n- 5-methylhexan-2-one (CH\u2083-CO-CH\u2082-CH\u2082-CH(CH\u2083)\u2082) \u2192 nitrosation at C3 (\u03b1-CH\u2082) \u2192 oxime \u2192 hydrolysis \u2192 5-methylhexane-2,3-dione \u2713\n\nDiols would not undergo this transformation cleanly to diketones with NaNO\u2082/HCl, so options involving diols (A, D) are wrong. Option C mixes a methoxy alcohol with a ketone \u2014 in"
+    },
+    {
+      "rank": 17,
+      "id": "recEmTBhx2hgw6tPQ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 2.732122088970087,
+      "sample_prob": 0.002359018661081791,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.084434509277344,
+          "max_single_dim": 0.3546568751335144
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.8032658696174622,
+          "signed_residual": 0.8032658696174622
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.5184831619262695,
+          "signed_residual": -0.5184831619262695
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.5120973587036133,
+          "signed_residual": -0.5120973587036133
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
+      "response_excerpt": "Looking at this [4+2] cycloaddition:\n\n**Identifying the diene and dienophile:**\n- 2,5-Dimethylthiophene = diene (contributes the **sulfur bridge**)\n- Furan-2,5-dione (maleic anhydride) = dienophile (contributes the anhydride/\"isobenzofuran-1,3-dione\" core)\n\n**Eliminating bridge type:**\nThe bridge atom comes from thiophene \u2192 must be **sulfur** \u2192 \"epithio\" prefix on an \"isobenzofuran-1,3-dione\" core.\n- (A) and (D) have \"epoxy...benzo[c]thiophene-1,3-dione\" \u2014 wrong skeleton (would imply O bridge with S in the dione ring). **Eliminated.**\n\n**Exo vs Endo (between B and C):**\nBoth are cis-fused (3a,"
+    },
+    {
+      "rank": 18,
+      "id": "reccOKzFNmyqeJ6ry",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 3.578730608315496,
+      "sample_prob": 0.0030900125857442617,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.617466926574707,
+          "max_single_dim": 0.3317343294620514
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.1830215454101562,
+          "signed_residual": -1.1830215454101562
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.8509101867675781,
+          "signed_residual": 0.8509101867675781
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.36237624287605286,
+          "signed_residual": -0.36237624287605286
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: A student performed an acid-catalyzed reaction of 3-methylpyrrolidine with compound A, the final product of the reaction is 1-(cyclohexylidenemethyl)-3-methylpyrrolidine. Select the suitable reagent (A) and catalyst (B) for the reaction.\n3-methylpyrro",
+      "response_excerpt": "The product 1-(cyclohexylidenemethyl)-3-methylpyrrolidine is an enamine: the pyrrolidine nitrogen is attached to =CH\u2013(cyclohexylidene), i.e., N\u2013CH=C(cyclohexane ring). This is the classic Stork enamine formed from a secondary amine + an aldehyde with loss of water.\n\n- The aldehyde must provide the =CH\u2013 carbon attached to a cyclohexylidene. That requires cyclohexanecarbaldehyde (C6H11\u2013CHO): condensation with the secondary amine gives the iminium, then loss of an \u03b1-H from the ring carbon forms the C=C into the ring \u2192 cyclohexylidene.\n- Vinylcyclohexane (an alkene) doesn't give enamines under aci"
+    },
+    {
+      "rank": 19,
+      "id": "recatj4YXzbOaq3Ar",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 24.180315138057495,
+      "sample_prob": 0.020878205075860023,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.127267837524414,
+          "max_single_dim": 0.39543214440345764
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 4.493612766265869,
+          "signed_residual": 4.493612766265869
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.2799631357192993,
+          "signed_residual": -1.2799631357192993
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 0.8382338881492615,
+          "signed_residual": 0.8382338881492615
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Consider a system with Hamiltonian operator $H = \\varepsilon \\vec{\\sigma}.\\vec{n}$. Here, $\\vec{n}$ is an arbitrary unit vector, $\\varepsilon $ is a constant of dimension energy, and components of $\\vec{\\sigma}$ are the Pauli spin matrices. What are the",
+      "response_excerpt": "The operator $\\vec{\\sigma}\\cdot\\vec{n}$ has eigenvalues $\\pm 1$ (since $(\\vec{\\sigma}\\cdot\\vec{n})^2 = I$ for a unit vector $\\vec{n}$). Multiplying by $\\varepsilon$ gives eigenvalues $\\pm\\varepsilon$.\n\nAnswer: B"
+    },
+    {
+      "rank": 20,
+      "id": "recD8oX1KevFbl7bL",
+      "domain": "Biology",
+      "subdomain": "Genetics",
+      "anomaly_score": 39.75584895628549,
+      "sample_prob": 0.03432672098278999,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.20796012878418,
+          "max_single_dim": 0.3597830533981323
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 4.346561431884766,
+          "signed_residual": 4.346561431884766
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 3.501901388168335,
+          "signed_residual": -3.501901388168335
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 2.6023664474487305,
+          "signed_residual": -2.6023664474487305
+        }
+      ],
+      "query_excerpt": "Domain: Biology / Genetics\n\nQuestion: You have an interesting drought-resistant cultivar of barley, which, unfortunately, contains an anti-nutritional compound. This compound makes it impossible to use this cultivar for food purposes. After an extensive investigation, you discover the gene responsib",
+      "response_excerpt": "Looking at each mutant by translating the start of the coding sequence:\n\n**Original:** ATG-TTT-CTC-GCT-GGT-ACT-TCT-GTG-GAT-GAA-CAT-ATT-TAT-TGT-CGT...\n\u2192 Met-Phe-Leu-Ala-Gly-Thr-Ser-Val-Asp-Glu-His-Ile-Tyr-Cys-Arg...\n\n**Mutant 1:** ATG-TTC-TAC-GCT-GGT-ACT-TCT-GTG-GAT-GAA-CAT-ATT-TAT-TGT-CGC...\n\u2192 Met-Phe-**Tyr**-Ala-Gly-Thr-Ser-Val-Asp-... (missense at codon 3; silent at end). Likely still functional protein.\n\n**Mutant 2:** ATG-TTC-**TAA**-GCT-GGT-ACT...\n\u2192 Met-Phe-**STOP**. Premature stop codon at codon 3 \u2192 severely truncated, non-functional protein. This would eliminate the enzyme.\n\n**Mutant 3:*"
+    }
+  ]
+}
