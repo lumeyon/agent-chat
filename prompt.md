@@ -31,12 +31,18 @@ The substrate-wiring loop (Phase A1-A4 shipped at NL34-NL36; A3+B+C+D+E deferred
 - `id`, `domain`, `subdomain`, `prompt_chars`, `response` (full prose), `answer_extracted`, `answer_expected`, `correct`, `elapsed_ms`, `error?`.
 - Three result files JOIN cleanly by `id` for paired comparison once agent-chat lands.
 
-**Background runs status (NL38 cont):**
-- Claude FIRST PASS COMPLETED: 173/198 = **87.4%**. 9 timeouts (240s SIGTERM, empty response) + 3 Usage Policy refusals (SARS-CoV-2-class biology questions, claude-canned refusal text). By domain: Physics 84/86 = 97.7%, Chemistry 78/93 = 83.9%, Biology 11/19 = 57.9% (skewed by refusals).
-- Claude RETRY in progress (background task `bgru2dp2g`): the 9 timeout questions re-running with **20-minute budget per question** (`--timeout-ms 1200000` + `--retry-timeouts` drops the failed entries first). Refusals NOT retried (rerunning same prompt yields same refusal). ETA: probably 30-90 min wall (depends on how many of the 9 actually need long thinking budgets vs. would have finished in 5-7 min if not killed at 240s).
-- Codex first pass STILL IN PROGRESS: 149/198 (75%); some timeouts in there too (count TBD on completion); will need its own --retry-timeouts pass with 20-min budget after first pass finishes.
+**Baselines LOCKED (post-retry, 20-min/Q budget on the timeout questions):**
 
-**Fairness budget decision (NL38):** the boss called for 20-min/question across all conditions. Reason: agent-chat will fire 3 LLM calls per question (claude draft + codex critique + claude revise), so its worst-case wall is 60 min/question. We accept that — it's the fair compute budget. Claude/codex baselines retry with the SAME 20-min budget on the questions where they originally timed out.
+| | Final | Physics | Chemistry | Biology | Notes |
+|---|---|---|---|---|---|
+| **codex** | **89.4%** (177/198) | 96.5% | 84.9% | 78.9% | 0 unrecovered errors; mean 46.0s |
+| **claude** | **88.9%** (176/198) | 97.7% | 87.1% | 57.9% | 1 error + 4 no-extracts (3 Usage Policy refusals on biology + 1 hard timeout); mean 47.1s |
+
+**Win bar for agent-chat: 89.4%** (codex's final). +3% noise floor → meaningful at ≥92%; +5% solid at ≥94%.
+
+**agent-chat full run KICKED OFF** (background task `bzvxotsja`): 198 problems × 3 calls each (draft + codex critique + revise) × 20-min/call budget. Worst case 60 min/Q × 198 = 198 hours; realistic on smoke is ~30s/Q happy path = ~100 min wall total. Monitor `bmdicli6y` armed for # done / DRAFT-FAIL / CRIT-FAIL / FATAL events.
+
+**Fairness budget decision (NL38):** 20-min/call is THE budget across all conditions. agent-chat's per-call timeout matches the baselines' retry budget, so it can't be argued the comparison gave agent-chat unfair compute.
 
 **Operational state:**
 - Monitor armed (task `bodwykny5`): tails both log files, fires on `# done`/`FATAL`/`cli exited`/`Traceback`. Persistent for the session.
