@@ -6,9 +6,9 @@
   ],
   "k_lowrank": 5,
   "n_samples": 20,
-  "n_valid_rows": 190,
+  "n_valid_rows": 194,
   "matrix_shape": [
-    190,
+    194,
     1188
   ],
   "per_agent_dim": 396,
@@ -18,75 +18,75 @@
       "id": "recJZ3QEfRKjYw9a7",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 6.465558773959458,
-      "sample_prob": 0.001762725180014968,
+      "total_divergence_sq": 6.5042678460850425,
+      "sample_prob": 0.0017340753693133593,
       "per_agent_divergence": [
         {
           "agent": "codex",
-          "divergence_sq": 3.247605085372925,
-          "embedding_div_sq": 0.962828516960144,
-          "scalar_div_sq": 2.2847766876220703,
+          "divergence_sq": 3.3145060539245605,
+          "embedding_div_sq": 0.959078848361969,
+          "scalar_div_sq": 2.3554275035858154,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 1.375131607055664,
-              "signed": 1.375131607055664
+              "abs": 1.4042024612426758,
+              "signed": 1.4042024612426758
             },
             {
               "feature": "n_latex",
-              "abs": 0.5336326360702515,
-              "signed": -0.5336326360702515
+              "abs": 0.5324380397796631,
+              "signed": -0.5324380397796631
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.288222074508667,
-              "signed": -0.288222074508667
+              "abs": 0.2702920436859131,
+              "signed": -0.2702920436859131
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 1.6287492513656616,
-          "embedding_div_sq": 0.9614138007164001,
-          "scalar_div_sq": 0.6673354506492615,
+          "divergence_sq": 1.6326048374176025,
+          "embedding_div_sq": 0.9572608470916748,
+          "scalar_div_sq": 0.6753440499305725,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 0.6450291872024536,
-              "signed": 0.6450291872024536
+              "abs": 0.6536951065063477,
+              "signed": 0.6536951065063477
             },
             {
               "feature": "n_latex",
-              "abs": 0.4023130536079407,
-              "signed": -0.4023130536079407
+              "abs": 0.3947182297706604,
+              "signed": -0.3947182297706604
             },
             {
-              "feature": "letter_unknown",
-              "abs": 0.17166034877300262,
-              "signed": 0.17166034877300262
+              "feature": "n_certainty_words",
+              "abs": 0.1749759316444397,
+              "signed": -0.1749759316444397
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 1.589202880859375,
-          "embedding_div_sq": 0.9576692581176758,
-          "scalar_div_sq": 0.6315336227416992,
+          "divergence_sq": 1.5571563243865967,
+          "embedding_div_sq": 0.9527648687362671,
+          "scalar_div_sq": 0.6043913960456848,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 0.445286363363266,
-              "signed": -0.445286363363266
+              "abs": 0.4086276590824127,
+              "signed": -0.4086276590824127
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.35465145111083984,
-              "signed": -0.35465145111083984
+              "abs": 0.35890671610832214,
+              "signed": -0.35890671610832214
             },
             {
               "feature": "response_len",
-              "abs": 0.33408209681510925,
-              "signed": -0.33408209681510925
+              "abs": 0.3281824588775635,
+              "signed": -0.3281824588775635
             }
           ]
         }
@@ -103,75 +103,75 @@
       "id": "recVE8cUNHpHZIAvL",
       "domain": "Physics",
       "subdomain": "Astrophysics",
-      "total_divergence_sq": 202.40349250831423,
-      "sample_prob": 0.055181898176670074,
+      "total_divergence_sq": 207.04620096169037,
+      "sample_prob": 0.05519971251487732,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 189.23143005371094,
-          "embedding_div_sq": 1.1299679279327393,
-          "scalar_div_sq": 188.10147094726562,
+          "divergence_sq": 193.37283325195312,
+          "embedding_div_sq": 1.1361356973648071,
+          "scalar_div_sq": 192.23667907714844,
           "top_scalar_features": [
             {
               "feature": "n_questions",
-              "abs": 12.887712478637695,
-              "signed": 12.887712478637695
+              "abs": 13.037461280822754,
+              "signed": 13.037461280822754
             },
             {
               "feature": "n_hedge_words",
-              "abs": 4.109344482421875,
-              "signed": 4.109344482421875
+              "abs": 4.1408915519714355,
+              "signed": 4.1408915519714355
             },
             {
               "feature": "letter_unknown",
-              "abs": 1.9610657691955566,
-              "signed": -1.9610657691955566
+              "abs": 1.967118740081787,
+              "signed": -1.967118740081787
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 10.050690650939941,
-          "embedding_div_sq": 1.1492401361465454,
-          "scalar_div_sq": 8.901449203491211,
+          "divergence_sq": 10.39090633392334,
+          "embedding_div_sq": 1.1543205976486206,
+          "scalar_div_sq": 9.23658561706543,
           "top_scalar_features": [
             {
               "feature": "letter_unknown",
-              "abs": 1.9610657691955566,
-              "signed": -1.9610657691955566
+              "abs": 1.9671188592910767,
+              "signed": -1.9671188592910767
             },
             {
               "feature": "n_hedge_words",
-              "abs": 1.6174876689910889,
-              "signed": -1.6174876689910889
+              "abs": 1.6504192352294922,
+              "signed": -1.6504192352294922
             },
             {
               "feature": "n_self_correction",
-              "abs": 1.0436381101608276,
-              "signed": -1.0436381101608276
+              "abs": 1.161747694015503,
+              "signed": -1.161747694015503
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 3.1213812828063965,
-          "embedding_div_sq": 1.0763839483261108,
-          "scalar_div_sq": 2.0449979305267334,
+          "divergence_sq": 3.282453775405884,
+          "embedding_div_sq": 1.0819973945617676,
+          "scalar_div_sq": 2.2004566192626953,
           "top_scalar_features": [
             {
               "feature": "n_hedge_words",
-              "abs": 1.0528548955917358,
-              "signed": -1.0528548955917358
+              "abs": 1.1591551303863525,
+              "signed": -1.1591551303863525
             },
             {
               "feature": "letter_C",
-              "abs": 0.614392876625061,
-              "signed": -0.614392876625061
+              "abs": 0.593888521194458,
+              "signed": -0.593888521194458
             },
             {
               "feature": "response_len",
-              "abs": 0.41827523708343506,
-              "signed": 0.41827523708343506
+              "abs": 0.3881129324436188,
+              "signed": 0.3881129324436188
             }
           ]
         }
@@ -188,75 +188,75 @@
       "id": "rec6sE2CRtD4drtHg",
       "domain": "Physics",
       "subdomain": "High-energy particle physics",
-      "total_divergence_sq": 224.45913432982343,
-      "sample_prob": 0.061194971203804016,
+      "total_divergence_sq": 228.43707040534446,
+      "sample_prob": 0.060902636498212814,
       "per_agent_divergence": [
         {
           "agent": "codex",
-          "divergence_sq": 153.47470092773438,
-          "embedding_div_sq": 0.8964235782623291,
-          "scalar_div_sq": 152.5782928466797,
+          "divergence_sq": 156.11314392089844,
+          "embedding_div_sq": 0.9030500054359436,
+          "scalar_div_sq": 155.2100830078125,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 11.777287483215332,
-              "signed": 11.777287483215332
+              "abs": 11.881433486938477,
+              "signed": 11.881433486938477
             },
             {
               "feature": "n_latex",
-              "abs": 2.6833927631378174,
-              "signed": 2.6833927631378174
+              "abs": 2.6936120986938477,
+              "signed": 2.6936120986938477
             },
             {
               "feature": "letter_A",
-              "abs": 1.945390224456787,
-              "signed": -1.945390224456787
+              "abs": 1.963655710220337,
+              "signed": -1.963655710220337
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 59.04086685180664,
-          "embedding_div_sq": 0.8483330607414246,
-          "scalar_div_sq": 58.192527770996094,
+          "divergence_sq": 60.025001525878906,
+          "embedding_div_sq": 0.8501673936843872,
+          "scalar_div_sq": 59.174835205078125,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 7.128701210021973,
-              "signed": 7.128701210021973
+              "abs": 7.178717613220215,
+              "signed": 7.178717613220215
             },
             {
               "feature": "letter_A",
-              "abs": 2.311232566833496,
-              "signed": -2.311232566833496
+              "abs": 2.338740348815918,
+              "signed": -2.338740348815918
             },
             {
               "feature": "response_len",
-              "abs": 0.7776481509208679,
-              "signed": -0.7776481509208679
+              "abs": 0.8640469312667847,
+              "signed": -0.8640469312667847
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 11.943479537963867,
-          "embedding_div_sq": 0.8531157374382019,
-          "scalar_div_sq": 11.090364456176758,
+          "divergence_sq": 12.298887252807617,
+          "embedding_div_sq": 0.8580417633056641,
+          "scalar_div_sq": 11.440845489501953,
           "top_scalar_features": [
             {
               "feature": "letter_A",
-              "abs": 2.23539137840271,
-              "signed": -2.23539137840271
+              "abs": 2.2597415447235107,
+              "signed": -2.2597415447235107
             },
             {
               "feature": "n_hedge_words",
-              "abs": 1.2277510166168213,
-              "signed": 1.2277510166168213
+              "abs": 1.196664810180664,
+              "signed": 1.196664810180664
             },
             {
               "feature": "n_questions",
-              "abs": 0.955431342124939,
-              "signed": -0.955431342124939
+              "abs": 0.995947539806366,
+              "signed": -0.995947539806366
             }
           ]
         }
@@ -273,75 +273,75 @@
       "id": "recUOePh79cp4T2Bg",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 23.41540632006604,
-      "sample_prob": 0.006383813917636871,
+      "total_divergence_sq": 23.578896993314856,
+      "sample_prob": 0.006286269519478083,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 13.3685941696167,
-          "embedding_div_sq": 0.7773084044456482,
-          "scalar_div_sq": 12.591286659240723,
+          "divergence_sq": 13.55032730102539,
+          "embedding_div_sq": 0.7830588817596436,
+          "scalar_div_sq": 12.767268180847168,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 3.392526626586914,
-              "signed": 3.392526626586914
+              "abs": 3.4144792556762695,
+              "signed": 3.4144792556762695
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.5913516283035278,
-              "signed": -0.5913516283035278
+              "abs": 0.6099369525909424,
+              "signed": -0.6099369525909424
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.5861982107162476,
-              "signed": -0.5861982107162476
+              "abs": 0.6050934791564941,
+              "signed": -0.6050934791564941
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 7.643447399139404,
-          "embedding_div_sq": 0.7848023176193237,
-          "scalar_div_sq": 6.858645439147949,
+          "divergence_sq": 7.589163780212402,
+          "embedding_div_sq": 0.7915781140327454,
+          "scalar_div_sq": 6.7975850105285645,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 1.62726891040802,
-              "signed": -1.62726891040802
+              "abs": 1.5856653451919556,
+              "signed": -1.5856653451919556
             },
             {
               "feature": "n_hedge_words",
-              "abs": 1.2163655757904053,
-              "signed": 1.2163655757904053
+              "abs": 1.207425832748413,
+              "signed": 1.207425832748413
             },
             {
               "feature": "n_certainty_words",
-              "abs": 1.128269910812378,
-              "signed": -1.128269910812378
+              "abs": 1.1561721563339233,
+              "signed": -1.1561721563339233
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 2.4033610820770264,
-          "embedding_div_sq": 0.8169366717338562,
-          "scalar_div_sq": 1.5864245891571045,
+          "divergence_sq": 2.4394030570983887,
+          "embedding_div_sq": 0.8235984444618225,
+          "scalar_div_sq": 1.6158045530319214,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 0.9942697286605835,
-              "signed": 0.9942697286605835
+              "abs": 0.9708446264266968,
+              "signed": 0.9708446264266968
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.6836767792701721,
-              "signed": -0.6836767792701721
+              "abs": 0.7351779937744141,
+              "signed": -0.7351779937744141
             },
             {
               "feature": "letter_A",
-              "abs": 0.2310773730278015,
-              "signed": 0.2310773730278015
+              "abs": 0.23017945885658264,
+              "signed": 0.23017945885658264
             }
           ]
         }
@@ -358,75 +358,75 @@
       "id": "recZt4x514UQNnsgy",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 24.90126364388948,
-      "sample_prob": 0.0067889089696109295,
+      "total_divergence_sq": 25.120570246650686,
+      "sample_prob": 0.006697291042655706,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 16.639602661132812,
-          "embedding_div_sq": 0.8129069805145264,
-          "scalar_div_sq": 15.826696395874023,
+          "divergence_sq": 16.849849700927734,
+          "embedding_div_sq": 0.8142910003662109,
+          "scalar_div_sq": 16.035560607910156,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 3.9113125801086426,
-              "signed": 3.9113125801086426
+              "abs": 3.933004379272461,
+              "signed": 3.933004379272461
             },
             {
               "feature": "letter_unknown",
-              "abs": 0.48583269119262695,
-              "signed": 0.48583269119262695
+              "abs": 0.49785318970680237,
+              "signed": 0.49785318970680237
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.29422736167907715,
-              "signed": -0.29422736167907715
+              "abs": 0.3156605064868927,
+              "signed": -0.3156605064868927
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 5.490536212921143,
-          "embedding_div_sq": 0.7957918047904968,
-          "scalar_div_sq": 4.69474458694458,
+          "divergence_sq": 5.450133800506592,
+          "embedding_div_sq": 0.7964916825294495,
+          "scalar_div_sq": 4.653641700744629,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 1.4176236391067505,
-              "signed": 1.4176236391067505
+              "abs": 1.4110361337661743,
+              "signed": 1.4110361337661743
             },
             {
               "feature": "n_self_correction",
-              "abs": 1.2058707475662231,
-              "signed": -1.2058707475662231
+              "abs": 1.1669094562530518,
+              "signed": -1.1669094562530518
             },
             {
               "feature": "n_questions",
-              "abs": 0.664210319519043,
-              "signed": -0.664210319519043
+              "abs": 0.6868523955345154,
+              "signed": -0.6868523955345154
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 2.771122455596924,
-          "embedding_div_sq": 0.8153824806213379,
-          "scalar_div_sq": 1.955739974975586,
+          "divergence_sq": 2.8205904960632324,
+          "embedding_div_sq": 0.816405177116394,
+          "scalar_div_sq": 2.004185199737549,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 1.2324838638305664,
-              "signed": 1.2324838638305664
+              "abs": 1.2447818517684937,
+              "signed": 1.2447818517684937
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.4087402820587158,
-              "signed": -0.4087402820587158
+              "abs": 0.431203156709671,
+              "signed": -0.431203156709671
             },
             {
               "feature": "letter_A",
-              "abs": 0.3146127462387085,
-              "signed": 0.3146127462387085
+              "abs": 0.3152708113193512,
+              "signed": 0.3152708113193512
             }
           ]
         }
@@ -440,78 +440,163 @@
     },
     {
       "rank": 6,
-      "id": "recf6ayQmL1SxKbvW",
-      "domain": "Biology",
-      "subdomain": "Molecular Biology",
-      "total_divergence_sq": 58.34921331148712,
-      "sample_prob": 0.015907928347587585,
+      "id": "reczzzihL7btBH7RO",
+      "domain": "Physics",
+      "subdomain": "Relativistic Mechanics",
+      "total_divergence_sq": 41.85396835566735,
+      "sample_prob": 0.011158511973917484,
       "per_agent_divergence": [
         {
-          "agent": "agent_chat",
-          "divergence_sq": 41.9908332824707,
-          "embedding_div_sq": 0.8335800170898438,
-          "scalar_div_sq": 41.15725326538086,
+          "agent": "claude",
+          "divergence_sq": 23.389728546142578,
+          "embedding_div_sq": 1.058568000793457,
+          "scalar_div_sq": 22.331161499023438,
           "top_scalar_features": [
             {
-              "feature": "n_questions",
-              "abs": 5.0869598388671875,
-              "signed": 5.0869598388671875
+              "feature": "n_certainty_words",
+              "abs": 3.490870475769043,
+              "signed": 3.490870475769043
             },
+            {
+              "feature": "n_latex",
+              "abs": 2.5512239933013916,
+              "signed": 2.5512239933013916
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.2448211908340454,
+              "signed": -1.2448211908340454
+            }
+          ]
+        },
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 10.395042419433594,
+          "embedding_div_sq": 0.9648504853248596,
+          "scalar_div_sq": 9.430191993713379,
+          "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 2.8400683403015137,
-              "signed": 2.8400683403015137
+              "abs": 2.5885844230651855,
+              "signed": 2.5885844230651855
             },
             {
-              "feature": "n_hedge_words",
-              "abs": 1.8801219463348389,
-              "signed": -1.8801219463348389
+              "feature": "n_certainty_words",
+              "abs": 0.9569199085235596,
+              "signed": 0.9569199085235596
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.8688068985939026,
+              "signed": -0.8688068985939026
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 9.89067268371582,
-          "embedding_div_sq": 1.0114212036132812,
-          "scalar_div_sq": 8.879250526428223,
+          "divergence_sq": 8.069198608398438,
+          "embedding_div_sq": 1.087822675704956,
+          "scalar_div_sq": 6.9813761711120605,
           "top_scalar_features": [
             {
               "feature": "n_hedge_words",
-              "abs": 2.216869592666626,
-              "signed": 2.216869592666626
-            },
-            {
-              "feature": "response_len",
-              "abs": 1.7193468809127808,
-              "signed": 1.7193468809127808
+              "abs": 2.3333747386932373,
+              "signed": 2.3333747386932373
             },
             {
               "feature": "n_latex",
-              "abs": 0.9451674222946167,
-              "signed": 0.9451674222946167
+              "abs": 0.8228563070297241,
+              "signed": 0.8228563070297241
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.7516857385635376,
+              "signed": 0.7516857385635376
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Relativistic Mechanics\n\nQuestion: While designing a high-resolution transmission electron microscope operating at an accelerating voltage of 1000 kV, Mike connected vacuum pumps to create an ultra-high vacuum state (< 10^-9 Torr) in the sample compartment, aiming to minimize the pr",
+      "responses": {
+        "codex": "For gas molecules colliding with each other, the usual kinetic-theory mean free path includes the `sqrt(2)` factor from mutual molecular motion.\n\nFor a high-energy electron beam moving through residual gas, the gas molecules are effectively stationary compared with the electron speed, so the scattering mean free path is larger under the usual same-cross-section assumption: roughly `\u03bb2 \u2248 sqrt(2) \u03bb1",
+        "claude": "Looking at this problem, I need to compare two mean free paths:\n- \u03bb1: gas molecules colliding with other gas molecules\n- \u03bb2: electrons (from the beam) scattering off gas molecules\n\n**For gas-gas collisions (\u03bb1):**\n$$\\lambda_1 = \\frac{kT}{\\sqrt{2} \\cdot \\pi d^2 \\cdot P}$$\n\nThe \u221a2 factor arises because both colliding gas molecules are in motion (Maxwell-Boltzmann distribution \u2192 relative velocity fac",
+        "agent_chat": "Looking at this critique, I need to assess whether the peer's objections actually defeat the answer C, or whether they're technically valid concerns that don't change the conclusion.\n\n**Evaluating the critique:**\n\n1. **Cross-section concern:** The peer is right that electron scattering cross-sections differ from gas-kinetic hard-sphere cross-sections in principle. However, this question is a stand"
+      }
+    },
+    {
+      "rank": 7,
+      "id": "recf6ayQmL1SxKbvW",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "total_divergence_sq": 57.90130343255464,
+      "sample_prob": 0.015436824411153793,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 41.71372604370117,
+          "embedding_div_sq": 0.8420108556747437,
+          "scalar_div_sq": 40.8717155456543,
+          "top_scalar_features": [
+            {
+              "feature": "n_questions",
+              "abs": 5.1321797370910645,
+              "signed": 5.1321797370910645
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 2.7168383598327637,
+              "signed": 2.7168383598327637
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 1.9032907485961914,
+              "signed": -1.9032907485961914
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 9.576820373535156,
+          "embedding_div_sq": 1.0151889324188232,
+          "scalar_div_sq": 8.56163215637207,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.151109218597412,
+              "signed": 2.151109218597412
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.7386879920959473,
+              "signed": 1.7386879920959473
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.8886476755142212,
+              "signed": 0.8886476755142212
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 6.46770715713501,
-          "embedding_div_sq": 0.9083737134933472,
-          "scalar_div_sq": 5.559333324432373,
+          "divergence_sq": 6.6107611656188965,
+          "embedding_div_sq": 0.9118717312812805,
+          "scalar_div_sq": 5.698888778686523,
           "top_scalar_features": [
             {
               "feature": "n_hedge_words",
-              "abs": 1.622684359550476,
-              "signed": 1.622684359550476
+              "abs": 1.632866621017456,
+              "signed": 1.632866621017456
             },
             {
               "feature": "response_len",
-              "abs": 1.1013851165771484,
-              "signed": -1.1013851165771484
+              "abs": 1.1303057670593262,
+              "signed": -1.1303057670593262
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.777992844581604,
-              "signed": -0.777992844581604
+              "abs": 0.81047123670578,
+              "signed": -0.81047123670578
             }
           ]
         }
@@ -524,164 +609,79 @@
       }
     },
     {
-      "rank": 7,
-      "id": "recyPffUDqC2k7ZZO",
-      "domain": "Physics",
-      "subdomain": "Quantum Mechanics",
-      "total_divergence_sq": 95.33213778106528,
-      "sample_prob": 0.025990698486566544,
-      "per_agent_divergence": [
-        {
-          "agent": "agent_chat",
-          "divergence_sq": 90.71936798095703,
-          "embedding_div_sq": 0.986713171005249,
-          "scalar_div_sq": 89.732666015625,
-          "top_scalar_features": [
-            {
-              "feature": "n_latex",
-              "abs": 9.396367073059082,
-              "signed": 9.396367073059082
-            },
-            {
-              "feature": "n_self_correction",
-              "abs": 0.5983341932296753,
-              "signed": 0.5983341932296753
-            },
-            {
-              "feature": "n_hedge_words",
-              "abs": 0.5476317405700684,
-              "signed": 0.5476317405700684
-            }
-          ]
-        },
-        {
-          "agent": "codex",
-          "divergence_sq": 2.631495475769043,
-          "embedding_div_sq": 0.9372378587722778,
-          "scalar_div_sq": 1.6942574977874756,
-          "top_scalar_features": [
-            {
-              "feature": "n_latex",
-              "abs": 0.8917321562767029,
-              "signed": -0.8917321562767029
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.6792401671409607,
-              "signed": 0.6792401671409607
-            },
-            {
-              "feature": "letter_D",
-              "abs": 0.4256943464279175,
-              "signed": -0.4256943464279175
-            }
-          ]
-        },
-        {
-          "agent": "claude",
-          "divergence_sq": 1.9812586307525635,
-          "embedding_div_sq": 0.9778503775596619,
-          "scalar_div_sq": 1.0034081935882568,
-          "top_scalar_features": [
-            {
-              "feature": "letter_D",
-              "abs": 0.5630587339401245,
-              "signed": -0.5630587339401245
-            },
-            {
-              "feature": "n_self_correction",
-              "abs": 0.5350160002708435,
-              "signed": 0.5350160002708435
-            },
-            {
-              "feature": "n_codeblocks",
-              "abs": 0.34525659680366516,
-              "signed": -0.34525659680366516
-            }
-          ]
-        }
-      ],
-      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Imagine an operator $\\vec{P}$ of a system have components $P_x, P_y$ and $P_z$. The matrix form of the  operator $P_x$ has components in the first row as $(0, \\hbar/\\sqrt{2}, 0)$, that in the second row as $(\\hbar/\\sqrt{2}, 0, \\hbar/\\sqrt{2})$ and that ",
-      "responses": {
-        "codex": "In the given normalized state,\n\\[\n|\\psi\\rangle=\\begin{pmatrix}-1/2\\\\ 1/\\sqrt2\\\\ -1/2\\end{pmatrix}\n\\]\nand\n\\[\nP_z=\\begin{pmatrix}\\hbar&0&0\\\\0&0&0\\\\0&0&-\\hbar\\end{pmatrix}.\n\\]\n\n\\[\n\\langle P_z\\rangle=\\frac14\\hbar+\\frac14(-\\hbar)=0\n\\]\n\nAlso,\n\\[\nP_z^2=\\begin{pmatrix}\\hbar^2&0&0\\\\0&0&0\\\\0&0&\\hbar^2\\end{pmatrix}\n\\]\nso\n\\[\n\\langle P_z^2\\rangle=\\frac14\\hbar^2+\\frac14\\hbar^2=\\frac{\\hbar^2}{2}.\n\\]\n\nTherefore,\n",
-        "claude": "State: \u03c8 = (-1/2, 1/\u221a2, -1/2), with |c\u2081|\u00b2 = 1/4, |c\u2082|\u00b2 = 1/2, |c\u2083|\u00b2 = 1/4.\n\nP_z is diagonal: eigenvalues \u210f, 0, -\u210f.\n\n\u27e8P_z\u27e9 = (1/4)(\u210f) + (1/2)(0) + (1/4)(-\u210f) = 0\n\n\u27e8P_z\u00b2\u27e9 = (1/4)(\u210f\u00b2) + 0 + (1/4)(\u210f\u00b2) = \u210f\u00b2/2\n\n\u0394P_z = \u221a(\u27e8P_z\u00b2\u27e9 - \u27e8P_z\u27e9\u00b2) = \u221a(\u210f\u00b2/2) = \u210f/\u221a2\n\nAnswer: D",
-        "agent_chat": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar) = 1/4$\n- $P(0) = 1/2$\n- $P(-\\hbar) = 1/4$\n\n$\\langle P_z \\rangle = (1/4)(\\hbar) + (1/2)(0) + (1/4)(-\\hbar) = 0$\n\n$\\langle P_z^2 \\rangle = (1/4)(\\hbar^2) + (1/2)(0) + (1/4)(\\hbar^2) = \\hbar^2/2$\n\n$(\\D"
-      }
-    },
-    {
       "rank": 8,
       "id": "recNuT2oSnO86bxOx",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 4.10121345485237,
-      "sample_prob": 0.0011181269073858857,
+      "total_divergence_sq": 4.0439979293688,
+      "sample_prob": 0.0010781532619148493,
       "per_agent_divergence": [
         {
           "agent": "codex",
-          "divergence_sq": 1.563538908958435,
-          "embedding_div_sq": 1.002217173576355,
-          "scalar_div_sq": 0.5613217949867249,
+          "divergence_sq": 1.551581859588623,
+          "embedding_div_sq": 0.997767448425293,
+          "scalar_div_sq": 0.5538144707679749,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 0.6560704708099365,
-              "signed": -0.6560704708099365
+              "abs": 0.6527905464172363,
+              "signed": -0.6527905464172363
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.26454195380210876,
-              "signed": -0.26454195380210876
+              "abs": 0.24096238613128662,
+              "signed": -0.24096238613128662
             },
             {
               "feature": "response_len",
-              "abs": 0.209949791431427,
-              "signed": 0.209949791431427
+              "abs": 0.22877109050750732,
+              "signed": 0.22877109050750732
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 1.2791615724563599,
-          "embedding_div_sq": 0.9950125217437744,
-          "scalar_div_sq": 0.28414905071258545,
+          "divergence_sq": 1.253833532333374,
+          "embedding_div_sq": 0.9896846413612366,
+          "scalar_div_sq": 0.26414892077445984,
           "top_scalar_features": [
             {
-              "feature": "n_self_correction",
-              "abs": 0.30916106700897217,
-              "signed": -0.30916106700897217
+              "feature": "n_certainty_words",
+              "abs": 0.2948846220970154,
+              "signed": -0.2948846220970154
             },
             {
-              "feature": "n_certainty_words",
-              "abs": 0.29479503631591797,
-              "signed": -0.29479503631591797
+              "feature": "n_self_correction",
+              "abs": 0.27653905749320984,
+              "signed": -0.27653905749320984
             },
             {
               "feature": "n_questions",
-              "abs": 0.24893707036972046,
-              "signed": -0.24893707036972046
+              "abs": 0.24506935477256775,
+              "signed": -0.24506935477256775
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 1.2585134506225586,
-          "embedding_div_sq": 0.9933247566223145,
-          "scalar_div_sq": 0.26518872380256653,
+          "divergence_sq": 1.2385823726654053,
+          "embedding_div_sq": 0.9884558320045471,
+          "scalar_div_sq": 0.2501266300678253,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 0.42143529653549194,
-              "signed": -0.42143529653549194
+              "abs": 0.4103350043296814,
+              "signed": -0.4103350043296814
             },
             {
               "feature": "response_len",
-              "abs": 0.16290634870529175,
-              "signed": -0.16290634870529175
+              "abs": 0.14505639672279358,
+              "signed": -0.14505639672279358
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.1187337338924408,
-              "signed": 0.1187337338924408
+              "abs": 0.11683842539787292,
+              "signed": 0.11683842539787292
             }
           ]
         }
@@ -698,75 +698,75 @@
       "id": "recb4cGsC6BJUCU3V",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 20.519757078444854,
-      "sample_prob": 0.005594365298748016,
+      "total_divergence_sq": 20.758172229027195,
+      "sample_prob": 0.0055342488922178745,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 16.773143768310547,
-          "embedding_div_sq": 0.9374557137489319,
-          "scalar_div_sq": 15.835686683654785,
+          "divergence_sq": 17.1292781829834,
+          "embedding_div_sq": 0.9324406385421753,
+          "scalar_div_sq": 16.196834564208984,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 3.95424222946167,
-              "signed": 3.95424222946167
+              "abs": 3.9989490509033203,
+              "signed": 3.9989490509033203
             },
             {
               "feature": "n_codeblocks",
-              "abs": 0.34278348088264465,
-              "signed": -0.34278348088264465
+              "abs": 0.34417814016342163,
+              "signed": -0.34417814016342163
             },
             {
               "feature": "letter_D",
-              "abs": 0.1488027572631836,
-              "signed": -0.1488027572631836
+              "abs": 0.16635024547576904,
+              "signed": -0.16635024547576904
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 2.5640227794647217,
-          "embedding_div_sq": 0.9490548372268677,
-          "scalar_div_sq": 1.614967942237854,
+          "divergence_sq": 2.4631149768829346,
+          "embedding_div_sq": 0.9444445371627808,
+          "scalar_div_sq": 1.5186703205108643,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 0.9526673555374146,
-              "signed": -0.9526673555374146
+              "abs": 0.9590924978256226,
+              "signed": -0.9590924978256226
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.5599033236503601,
-              "signed": -0.5599033236503601
+              "abs": 0.5583207011222839,
+              "signed": -0.5583207011222839
             },
             {
               "feature": "n_latex",
-              "abs": 0.4822532534599304,
-              "signed": -0.4822532534599304
+              "abs": 0.37037307024002075,
+              "signed": -0.37037307024002075
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 1.1825934648513794,
-          "embedding_div_sq": 0.9407507181167603,
-          "scalar_div_sq": 0.2418428361415863,
+          "divergence_sq": 1.1657798290252686,
+          "embedding_div_sq": 0.9357825517654419,
+          "scalar_div_sq": 0.22999724745750427,
           "top_scalar_features": [
             {
               "feature": "n_hedge_words",
-              "abs": 0.32917216420173645,
-              "signed": -0.32917216420173645
+              "abs": 0.32383906841278076,
+              "signed": -0.32383906841278076
             },
             {
               "feature": "response_len",
-              "abs": 0.24114331603050232,
-              "signed": 0.24114331603050232
+              "abs": 0.23194915056228638,
+              "signed": 0.23194915056228638
             },
             {
               "feature": "letter_A",
-              "abs": 0.1688593626022339,
-              "signed": 0.1688593626022339
+              "abs": 0.16536369919776917,
+              "signed": 0.16536369919776917
             }
           ]
         }
@@ -780,78 +780,248 @@
     },
     {
       "rank": 10,
-      "id": "recZbxrocrxh9YENH",
-      "domain": "Chemistry",
-      "subdomain": "Chemistry (general)",
-      "total_divergence_sq": 45.786154598210715,
-      "sample_prob": 0.012482821941375732,
+      "id": "recywRj5a8EEjj2Ib",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "total_divergence_sq": 45.14787472225203,
+      "sample_prob": 0.012036684900522232,
       "per_agent_divergence": [
         {
           "agent": "agent_chat",
-          "divergence_sq": 28.102378845214844,
-          "embedding_div_sq": 1.026576042175293,
-          "scalar_div_sq": 27.0757999420166,
+          "divergence_sq": 41.0406379699707,
+          "embedding_div_sq": 0.972615122795105,
+          "scalar_div_sq": 40.068023681640625,
           "top_scalar_features": [
             {
-              "feature": "n_certainty_words",
-              "abs": 3.5438008308410645,
-              "signed": 3.5438008308410645
+              "feature": "n_latex",
+              "abs": 6.2597503662109375,
+              "signed": 6.2597503662109375
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.7140432000160217,
+              "signed": 0.7140432000160217
             },
             {
               "feature": "n_hedge_words",
-              "abs": 3.283350944519043,
-              "signed": 3.283350944519043
-            },
-            {
-              "feature": "n_self_correction",
-              "abs": 1.1399157047271729,
-              "signed": -1.1399157047271729
+              "abs": 0.29948073625564575,
+              "signed": 0.29948073625564575
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 9.04018783569336,
-          "embedding_div_sq": 1.035094976425171,
-          "scalar_div_sq": 8.00509262084961,
+          "divergence_sq": 2.3169045448303223,
+          "embedding_div_sq": 0.9397749900817871,
+          "scalar_div_sq": 1.3771295547485352,
           "top_scalar_features": [
             {
-              "feature": "n_hedge_words",
-              "abs": 2.4798295497894287,
-              "signed": 2.4798295497894287
+              "feature": "n_latex",
+              "abs": 1.0280468463897705,
+              "signed": -1.0280468463897705
             },
             {
-              "feature": "response_len",
-              "abs": 0.9121754169464111,
-              "signed": 0.9121754169464111
+              "feature": "n_certainty_words",
+              "abs": 0.3777105212211609,
+              "signed": -0.3777105212211609
             },
             {
-              "feature": "letter_C",
-              "abs": 0.7509369850158691,
-              "signed": 0.7509369850158691
+              "feature": "letter_D",
+              "abs": 0.20769807696342468,
+              "signed": -0.20769807696342468
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 8.64358901977539,
-          "embedding_div_sq": 1.0232845544815063,
-          "scalar_div_sq": 7.620305061340332,
+          "divergence_sq": 1.790329933166504,
+          "embedding_div_sq": 0.9746160507202148,
+          "scalar_div_sq": 0.8157135844230652,
           "top_scalar_features": [
             {
-              "feature": "letter_B",
-              "abs": 1.5017859935760498,
-              "signed": 1.5017859935760498
+              "feature": "response_len",
+              "abs": 0.68643718957901,
+              "signed": -0.68643718957901
             },
             {
-              "feature": "letter_C",
-              "abs": 1.2579033374786377,
-              "signed": -1.2579033374786377
+              "feature": "n_self_correction",
+              "abs": 0.3725394010543823,
+              "signed": 0.3725394010543823
+            },
+            {
+              "feature": "letter_D",
+              "abs": 0.22709044814109802,
+              "signed": -0.22709044814109802
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Consider a 1-dimensional relativistic harmonic oscillator with mass $m$ and maximum amplitude $A$ obeying Hook's law ($F=-kx$). What is the maximum speed  $v_max$ of the mass? The speed of light is $c$.\n\n(A) $v_{max}=c\\sqrt{1+\\frac{1}{(1-\\frac{kA^2}{2mc",
+      "responses": {
+        "codex": "At the turning point, the oscillator has zero speed and potential energy\n\n\\[\nU_{\\max}=\\frac{1}{2}kA^2.\n\\]\n\nAt equilibrium, potential energy is zero and this energy becomes relativistic kinetic energy:\n\n\\[\n(\\gamma-1)mc^2=\\frac{1}{2}kA^2.\n\\]\n\nSo\n\n\\[\n\\gamma=1+\\frac{kA^2}{2mc^2}.\n\\]\n\nUsing\n\n\\[\n\\gamma=\\frac{1}{\\sqrt{1-v^2/c^2}},\n\\]\n\nwe get\n\n\\[\nv_{\\max}=c\\sqrt{1-\\frac{1}{\\left(1+\\frac{kA^2}{2mc^2}\\right",
+        "claude": "Using energy conservation: at maximum amplitude, KE=0 and PE=\u00bdkA\u00b2. Total energy = mc\u00b2 + \u00bdkA\u00b2 = \u03b3mc\u00b2.\n\nSo \u03b3 = 1 + kA\u00b2/(2mc\u00b2), and v_max = c\u221a(1 - 1/\u03b3\u00b2).\n\nAnswer: C",
+        "agent_chat": "The peer critique confirms my reasoning. Let me verify once more:\n\n**Energy conservation:** At turning point (x=A, v=0), total energy is rest energy plus potential:\n$$E = mc^2 + \\tfrac{1}{2}kA^2$$\n\nAt equilibrium (x=0, v=v_max), all energy is relativistic kinetic + rest:\n$$\\gamma mc^2 = mc^2 + \\tfrac{1}{2}kA^2$$\n\nSolving: $\\gamma = 1 + \\frac{kA^2}{2mc^2}$\n\n**Velocity from gamma:** Since $\\gamma = "
+      }
+    },
+    {
+      "rank": 11,
+      "id": "recyPffUDqC2k7ZZO",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "total_divergence_sq": 66.30246377659296,
+      "sample_prob": 0.017676621675491333,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 62.30650329589844,
+          "embedding_div_sq": 0.9803593754768372,
+          "scalar_div_sq": 61.32614517211914,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 7.779094696044922,
+              "signed": 7.779094696044922
             },
             {
               "feature": "n_hedge_words",
-              "abs": 1.112587809562683,
-              "signed": -1.112587809562683
+              "abs": 0.4676092863082886,
+              "signed": 0.4676092863082886
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.4510258138179779,
+              "signed": 0.4510258138179779
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 2.318594455718994,
+          "embedding_div_sq": 0.9345018267631531,
+          "scalar_div_sq": 1.3840923309326172,
+          "top_scalar_features": [
+            {
+              "feature": "n_latex",
+              "abs": 0.7887170910835266,
+              "signed": -0.7887170910835266
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.7595053315162659,
+              "signed": 0.7595053315162659
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.2808610796928406,
+              "signed": 0.2808610796928406
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 1.6773691177368164,
+          "embedding_div_sq": 0.9679786562919617,
+          "scalar_div_sq": 0.7093905210494995,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.49869152903556824,
+              "signed": 0.49869152903556824
+            },
+            {
+              "feature": "n_codeblocks",
+              "abs": 0.31432026624679565,
+              "signed": -0.31432026624679565
+            },
+            {
+              "feature": "letter_B",
+              "abs": 0.30548280477523804,
+              "signed": 0.30548280477523804
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Imagine an operator $\\vec{P}$ of a system have components $P_x, P_y$ and $P_z$. The matrix form of the  operator $P_x$ has components in the first row as $(0, \\hbar/\\sqrt{2}, 0)$, that in the second row as $(\\hbar/\\sqrt{2}, 0, \\hbar/\\sqrt{2})$ and that ",
+      "responses": {
+        "codex": "In the given normalized state,\n\\[\n|\\psi\\rangle=\\begin{pmatrix}-1/2\\\\ 1/\\sqrt2\\\\ -1/2\\end{pmatrix}\n\\]\nand\n\\[\nP_z=\\begin{pmatrix}\\hbar&0&0\\\\0&0&0\\\\0&0&-\\hbar\\end{pmatrix}.\n\\]\n\n\\[\n\\langle P_z\\rangle=\\frac14\\hbar+\\frac14(-\\hbar)=0\n\\]\n\nAlso,\n\\[\nP_z^2=\\begin{pmatrix}\\hbar^2&0&0\\\\0&0&0\\\\0&0&\\hbar^2\\end{pmatrix}\n\\]\nso\n\\[\n\\langle P_z^2\\rangle=\\frac14\\hbar^2+\\frac14\\hbar^2=\\frac{\\hbar^2}{2}.\n\\]\n\nTherefore,\n",
+        "claude": "State: \u03c8 = (-1/2, 1/\u221a2, -1/2), with |c\u2081|\u00b2 = 1/4, |c\u2082|\u00b2 = 1/2, |c\u2083|\u00b2 = 1/4.\n\nP_z is diagonal: eigenvalues \u210f, 0, -\u210f.\n\n\u27e8P_z\u27e9 = (1/4)(\u210f) + (1/2)(0) + (1/4)(-\u210f) = 0\n\n\u27e8P_z\u00b2\u27e9 = (1/4)(\u210f\u00b2) + 0 + (1/4)(\u210f\u00b2) = \u210f\u00b2/2\n\n\u0394P_z = \u221a(\u27e8P_z\u00b2\u27e9 - \u27e8P_z\u27e9\u00b2) = \u221a(\u210f\u00b2/2) = \u210f/\u221a2\n\nAnswer: D",
+        "agent_chat": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar) = 1/4$\n- $P(0) = 1/2$\n- $P(-\\hbar) = 1/4$\n\n$\\langle P_z \\rangle = (1/4)(\\hbar) + (1/2)(0) + (1/4)(-\\hbar) = 0$\n\n$\\langle P_z^2 \\rangle = (1/4)(\\hbar^2) + (1/2)(0) + (1/4)(\\hbar^2) = \\hbar^2/2$\n\n$(\\D"
+      }
+    },
+    {
+      "rank": 12,
+      "id": "recZbxrocrxh9YENH",
+      "domain": "Chemistry",
+      "subdomain": "Chemistry (general)",
+      "total_divergence_sq": 45.76138456810531,
+      "sample_prob": 0.012200250290334225,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 28.426074981689453,
+          "embedding_div_sq": 1.0304360389709473,
+          "scalar_div_sq": 27.39563751220703,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 3.5629076957702637,
+              "signed": 3.5629076957702637
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 3.3015291690826416,
+              "signed": 3.3015291690826416
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 1.192928433418274,
+              "signed": -1.192928433418274
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 8.800263404846191,
+          "embedding_div_sq": 1.0283840894699097,
+          "scalar_div_sq": 7.771879196166992,
+          "top_scalar_features": [
+            {
+              "feature": "letter_B",
+              "abs": 1.497710108757019,
+              "signed": 1.497710108757019
+            },
+            {
+              "feature": "letter_C",
+              "abs": 1.2644343376159668,
+              "signed": -1.2644343376159668
+            },
+            {
+              "feature": "response_len",
+              "abs": 1.1575517654418945,
+              "signed": -1.1575517654418945
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 8.535049438476562,
+          "embedding_div_sq": 1.0394065380096436,
+          "scalar_div_sq": 7.495641708374023,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 2.3801026344299316,
+              "signed": 2.3801026344299316
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.9078138470649719,
+              "signed": 0.9078138470649719
+            },
+            {
+              "feature": "letter_C",
+              "abs": 0.7362403273582458,
+              "signed": 0.7362403273582458
             }
           ]
         }
@@ -864,79 +1034,79 @@
       }
     },
     {
-      "rank": 11,
+      "rank": 13,
       "id": "recHVUd2DkoKfedJZ",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 11.11031745632522,
-      "sample_prob": 0.0030290409922599792,
+      "total_divergence_sq": 11.256396282015203,
+      "sample_prob": 0.0030010207556188107,
       "per_agent_divergence": [
         {
           "agent": "codex",
-          "divergence_sq": 6.648077011108398,
-          "embedding_div_sq": 0.9917919635772705,
-          "scalar_div_sq": 5.656284809112549,
+          "divergence_sq": 6.78769063949585,
+          "embedding_div_sq": 0.9924975633621216,
+          "scalar_div_sq": 5.795193195343018,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 1.8067021369934082,
-              "signed": -1.8067021369934082
+              "abs": 1.828292727470398,
+              "signed": -1.828292727470398
             },
             {
               "feature": "n_latex",
-              "abs": 0.886504590511322,
-              "signed": -0.886504590511322
+              "abs": 0.9067082405090332,
+              "signed": -0.9067082405090332
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.8706099987030029,
-              "signed": -0.8706099987030029
+              "abs": 0.8774152398109436,
+              "signed": -0.8774152398109436
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 2.6356396675109863,
-          "embedding_div_sq": 0.9862433075904846,
-          "scalar_div_sq": 1.6493964195251465,
+          "divergence_sq": 2.672044277191162,
+          "embedding_div_sq": 0.9874740839004517,
+          "scalar_div_sq": 1.6845704317092896,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 1.0644245147705078,
-              "signed": -1.0644245147705078
+              "abs": 1.0677063465118408,
+              "signed": -1.0677063465118408
             },
             {
               "feature": "n_latex",
-              "abs": 0.4923025369644165,
-              "signed": -0.4923025369644165
+              "abs": 0.5000548958778381,
+              "signed": -0.5000548958778381
             },
             {
               "feature": "response_len",
-              "abs": 0.3665216863155365,
-              "signed": 0.3665216863155365
+              "abs": 0.38919657468795776,
+              "signed": 0.38919657468795776
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 1.8266021013259888,
-          "embedding_div_sq": 0.9831960797309875,
-          "scalar_div_sq": 0.8434059619903564,
+          "divergence_sq": 1.7966625690460205,
+          "embedding_div_sq": 0.9851468205451965,
+          "scalar_div_sq": 0.8115159273147583,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 0.503918468952179,
-              "signed": -0.503918468952179
+              "abs": 0.5052205920219421,
+              "signed": -0.5052205920219421
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.396400511264801,
-              "signed": -0.396400511264801
+              "abs": 0.3911646008491516,
+              "signed": -0.3911646008491516
             },
             {
               "feature": "letter_A",
-              "abs": 0.3669297695159912,
-              "signed": 0.3669297695159912
+              "abs": 0.3726058006286621,
+              "signed": 0.3726058006286621
             }
           ]
         }
@@ -949,79 +1119,79 @@
       }
     },
     {
-      "rank": 12,
+      "rank": 14,
       "id": "recdya6FuYraBU5Rh",
       "domain": "Physics",
       "subdomain": "Physics (general)",
-      "total_divergence_sq": 8.343097415491684,
-      "sample_prob": 0.0022746045142412186,
+      "total_divergence_sq": 8.338890244124343,
+      "sample_prob": 0.002223196206614375,
       "per_agent_divergence": [
         {
           "agent": "codex",
-          "divergence_sq": 4.36234712600708,
-          "embedding_div_sq": 0.9906788468360901,
-          "scalar_div_sq": 3.3716683387756348,
+          "divergence_sq": 4.39385461807251,
+          "embedding_div_sq": 0.9923561215400696,
+          "scalar_div_sq": 3.401498556137085,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 1.279751181602478,
-              "signed": -1.279751181602478
+              "abs": 1.280125617980957,
+              "signed": -1.280125617980957
             },
             {
               "feature": "n_codeblocks",
-              "abs": 0.8164033889770508,
-              "signed": -0.8164033889770508
+              "abs": 0.8285861015319824,
+              "signed": -0.8285861015319824
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.765011727809906,
-              "signed": -0.765011727809906
+              "abs": 0.7666483521461487,
+              "signed": -0.7666483521461487
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 2.5851449966430664,
-          "embedding_div_sq": 0.9750138521194458,
-          "scalar_div_sq": 1.6101311445236206,
+          "divergence_sq": 2.5588958263397217,
+          "embedding_div_sq": 0.9756066799163818,
+          "scalar_div_sq": 1.583289384841919,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 0.811441957950592,
-              "signed": -0.811441957950592
+              "abs": 0.8115427494049072,
+              "signed": -0.8115427494049072
             },
             {
               "feature": "response_len",
-              "abs": 0.6041955947875977,
-              "signed": -0.6041955947875977
+              "abs": 0.5745648741722107,
+              "signed": -0.5745648741722107
             },
             {
               "feature": "n_latex",
-              "abs": 0.5576502084732056,
-              "signed": -0.5576502084732056
+              "abs": 0.5491225719451904,
+              "signed": -0.5491225719451904
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 1.3956044912338257,
-          "embedding_div_sq": 0.9892897605895996,
-          "scalar_div_sq": 0.4063149094581604,
+          "divergence_sq": 1.3861379623413086,
+          "embedding_div_sq": 0.9893961548805237,
+          "scalar_div_sq": 0.39674198627471924,
           "top_scalar_features": [
             {
               "feature": "letter_A",
-              "abs": 0.3841414451599121,
-              "signed": 0.3841414451599121
+              "abs": 0.39145469665527344,
+              "signed": 0.39145469665527344
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.28567928075790405,
-              "signed": -0.28567928075790405
+              "abs": 0.28113365173339844,
+              "signed": -0.28113365173339844
             },
             {
               "feature": "n_self_correction",
-              "abs": 0.25192806124687195,
-              "signed": 0.25192806124687195
+              "abs": 0.271455317735672,
+              "signed": 0.271455317735672
             }
           ]
         }
@@ -1034,79 +1204,79 @@
       }
     },
     {
-      "rank": 13,
+      "rank": 15,
       "id": "recnGEpF1srQpaqWq",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 189.93113163197359,
-      "sample_prob": 0.05178151652216911,
+      "total_divergence_sq": 193.86425230438272,
+      "sample_prob": 0.05168532952666283,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 181.67575073242188,
-          "embedding_div_sq": 0.894771933555603,
-          "scalar_div_sq": 180.78097534179688,
+          "divergence_sq": 185.6536407470703,
+          "embedding_div_sq": 0.8951427340507507,
+          "scalar_div_sq": 184.7584991455078,
           "top_scalar_features": [
             {
               "feature": "n_codeblocks",
-              "abs": 13.375996589660645,
-              "signed": 13.375996589660645
+              "abs": 13.520591735839844,
+              "signed": 13.520591735839844
             },
             {
               "feature": "response_len",
-              "abs": 1.0226274728775024,
-              "signed": 1.0226274728775024
+              "abs": 1.0596463680267334,
+              "signed": 1.0596463680267334
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.609793484210968,
-              "signed": -0.609793484210968
+              "abs": 0.6030857563018799,
+              "signed": -0.6030857563018799
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 4.912070274353027,
-          "embedding_div_sq": 0.9003556370735168,
-          "scalar_div_sq": 4.011714458465576,
+          "divergence_sq": 5.0731353759765625,
+          "embedding_div_sq": 0.9020722508430481,
+          "scalar_div_sq": 4.1710638999938965,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 1.9105254411697388,
-              "signed": -1.9105254411697388
+              "abs": 1.9483308792114258,
+              "signed": -1.9483308792114258
             },
             {
               "feature": "letter_D",
-              "abs": 0.4128948450088501,
-              "signed": -0.4128948450088501
+              "abs": 0.431652307510376,
+              "signed": -0.431652307510376
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.32879146933555603,
-              "signed": -0.32879146933555603
+              "abs": 0.32228192687034607,
+              "signed": -0.32228192687034607
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 3.3433432579040527,
-          "embedding_div_sq": 0.8859823346138,
-          "scalar_div_sq": 2.4573612213134766,
+          "divergence_sq": 3.137477397918701,
+          "embedding_div_sq": 0.8861904740333557,
+          "scalar_div_sq": 2.2512869834899902,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 1.1253710985183716,
-              "signed": -1.1253710985183716
+              "abs": 1.102475881576538,
+              "signed": -1.102475881576538
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.6446202397346497,
-              "signed": -0.6446202397346497
+              "abs": 0.6377676129341125,
+              "signed": -0.6377676129341125
             },
             {
-              "feature": "n_latex",
-              "abs": 0.5203849077224731,
-              "signed": -0.5203849077224731
+              "feature": "letter_D",
+              "abs": 0.42094647884368896,
+              "signed": -0.42094647884368896
             }
           ]
         }
@@ -1119,164 +1289,79 @@
       }
     },
     {
-      "rank": 14,
-      "id": "reczUoM8JsxU6pYxr",
-      "domain": "Physics",
-      "subdomain": "Astrophysics",
-      "total_divergence_sq": 29.705200695389976,
-      "sample_prob": 0.008098620921373367,
-      "per_agent_divergence": [
-        {
-          "agent": "agent_chat",
-          "divergence_sq": 14.134875297546387,
-          "embedding_div_sq": 1.0589957237243652,
-          "scalar_div_sq": 13.075879096984863,
-          "top_scalar_features": [
-            {
-              "feature": "n_latex",
-              "abs": 3.505777359008789,
-              "signed": 3.505777359008789
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.598408579826355,
-              "signed": 0.598408579826355
-            },
-            {
-              "feature": "letter_unknown",
-              "abs": 0.5183074474334717,
-              "signed": -0.5183074474334717
-            }
-          ]
-        },
-        {
-          "agent": "claude",
-          "divergence_sq": 8.934703826904297,
-          "embedding_div_sq": 1.049600601196289,
-          "scalar_div_sq": 7.885103702545166,
-          "top_scalar_features": [
-            {
-              "feature": "n_hedge_words",
-              "abs": 2.648493766784668,
-              "signed": 2.648493766784668
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.5766581892967224,
-              "signed": 0.5766581892967224
-            },
-            {
-              "feature": "letter_unknown",
-              "abs": 0.5183074474334717,
-              "signed": -0.5183074474334717
-            }
-          ]
-        },
-        {
-          "agent": "codex",
-          "divergence_sq": 6.635621070861816,
-          "embedding_div_sq": 1.0064818859100342,
-          "scalar_div_sq": 5.629138469696045,
-          "top_scalar_features": [
-            {
-              "feature": "n_latex",
-              "abs": 2.2213504314422607,
-              "signed": 2.2213504314422607
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.6503167748451233,
-              "signed": -0.6503167748451233
-            },
-            {
-              "feature": "n_hedge_words",
-              "abs": 0.4396311342716217,
-              "signed": -0.4396311342716217
-            }
-          ]
-        }
-      ],
-      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Observations of a quasar across the electromagnetic spectrum are being carried out. Focusing on the near infrared and optical spectrum, there is a peak at wavelength of about 790 nm, and at shorter wavelengths < 790 nm the flux drops significantly.\n\nIf we li",
-      "responses": {
-        "codex": "The sharp drop shortward of 790 nm is interpreted as the redshifted Lyman-alpha break.\n\nRest wavelength of Lyman-alpha: 121.6 nm\n\n\\[\nz = \\frac{790}{121.6} - 1 \\approx 5.5\n\\]\n\nFor a flat Lambda-CDM universe with \\(H_0 = 70\\), \\(\\Omega_m=0.3\\), \\(\\Omega_\\Lambda=0.7\\), the comoving distance to \\(z \\approx 5.5\\) is about:\n\n\\[\nD_C \\approx 8 \\text{ Gpc}\n\\]\n\nAnswer: D",
-        "claude": "Looking at this problem, I need to identify what spectral feature gives a peak at 790 nm with flux dropping at shorter wavelengths.\n\n**Identifying the spectral feature:**\nThe signature \"peak with drop below\" is characteristic of the Lyman-alpha emission line of a quasar with the Lyman-alpha forest/break suppressing flux at shorter wavelengths. Rest-frame Lyman-\u03b1 is at 121.6 nm.\n\n**Calculating reds",
-        "agent_chat": "The critique endorses my answer and confirms the reasoning. Let me verify the key steps:\n\n**Spectral identification:** A peak at 790 nm with sharp flux suppression at shorter wavelengths is the canonical Lyman-\u03b1 emission line plus Lyman-\u03b1 forest/Gunn-Peterson absorption signature. Rest wavelength 121.6 nm gives:\n$$z = 790/121.6 - 1 \\approx 5.5$$\n\n**Comoving distance:** With $c/H_0 \\approx 4286$ Mp"
-      }
-    },
-    {
-      "rank": 15,
+      "rank": 16,
       "id": "recrHBEJJoDTV05JR",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 4.121756590148152,
-      "sample_prob": 0.001123727415688336,
+      "total_divergence_sq": 4.081075161822412,
+      "sample_prob": 0.0010880380868911743,
       "per_agent_divergence": [
         {
           "agent": "agent_chat",
-          "divergence_sq": 1.4810452461242676,
-          "embedding_div_sq": 0.9693849086761475,
-          "scalar_div_sq": 0.5116602182388306,
+          "divergence_sq": 1.454293131828308,
+          "embedding_div_sq": 0.9660897850990295,
+          "scalar_div_sq": 0.4882032573223114,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 0.44223377108573914,
-              "signed": -0.44223377108573914
+              "abs": 0.4067767262458801,
+              "signed": -0.4067767262458801
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.3570207953453064,
-              "signed": -0.3570207953453064
+              "abs": 0.3598029315471649,
+              "signed": -0.3598029315471649
             },
             {
               "feature": "n_questions",
-              "abs": 0.3135588765144348,
-              "signed": -0.3135588765144348
+              "abs": 0.3125513195991516,
+              "signed": -0.3125513195991516
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 1.3954401016235352,
-          "embedding_div_sq": 1.000138282775879,
-          "scalar_div_sq": 0.395301878452301,
+          "divergence_sq": 1.3857349157333374,
+          "embedding_div_sq": 0.9971330165863037,
+          "scalar_div_sq": 0.3886019289493561,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 0.5430976748466492,
-              "signed": -0.5430976748466492
+              "abs": 0.5438812971115112,
+              "signed": -0.5438812971115112
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.2820945382118225,
-              "signed": -0.2820945382118225
+              "abs": 0.2651512622833252,
+              "signed": -0.2651512622833252
             },
             {
               "feature": "letter_D",
-              "abs": 0.06821489334106445,
-              "signed": -0.06821489334106445
+              "abs": 0.0723714828491211,
+              "signed": -0.0723714828491211
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 1.2452715635299683,
-          "embedding_div_sq": 0.9755338430404663,
-          "scalar_div_sq": 0.2697376310825348,
+          "divergence_sq": 1.2410460710525513,
+          "embedding_div_sq": 0.9715635180473328,
+          "scalar_div_sq": 0.2694825530052185,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 0.4024667739868164,
-              "signed": -0.4024667739868164
+              "abs": 0.3956080973148346,
+              "signed": -0.3956080973148346
             },
             {
               "feature": "letter_unknown",
-              "abs": 0.17580179870128632,
-              "signed": 0.17580179870128632
+              "abs": 0.17496773600578308,
+              "signed": 0.17496773600578308
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.16787564754486084,
-              "signed": -0.16787564754486084
+              "abs": 0.17278242111206055,
+              "signed": -0.17278242111206055
             }
           ]
         }
@@ -1289,249 +1374,79 @@
       }
     },
     {
-      "rank": 16,
-      "id": "recEmTBhx2hgw6tPQ",
-      "domain": "Chemistry",
-      "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 7.904988477541565,
-      "sample_prob": 0.0021551616955548525,
-      "per_agent_divergence": [
-        {
-          "agent": "agent_chat",
-          "divergence_sq": 4.616662979125977,
-          "embedding_div_sq": 0.813112199306488,
-          "scalar_div_sq": 3.8035504817962646,
-          "top_scalar_features": [
-            {
-              "feature": "n_self_correction",
-              "abs": 1.1090764999389648,
-              "signed": 1.1090764999389648
-            },
-            {
-              "feature": "n_certainty_words",
-              "abs": 0.9183622598648071,
-              "signed": -0.9183622598648071
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.8971759080886841,
-              "signed": 0.8971759080886841
-            }
-          ]
-        },
-        {
-          "agent": "claude",
-          "divergence_sq": 2.0466294288635254,
-          "embedding_div_sq": 0.7877944111824036,
-          "scalar_div_sq": 1.2588350772857666,
-          "top_scalar_features": [
-            {
-              "feature": "n_certainty_words",
-              "abs": 0.728195309638977,
-              "signed": -0.728195309638977
-            },
-            {
-              "feature": "n_questions",
-              "abs": 0.43847930431365967,
-              "signed": -0.43847930431365967
-            },
-            {
-              "feature": "n_self_correction",
-              "abs": 0.41933560371398926,
-              "signed": -0.41933560371398926
-            }
-          ]
-        },
-        {
-          "agent": "codex",
-          "divergence_sq": 1.2416967153549194,
-          "embedding_div_sq": 0.7983991503715515,
-          "scalar_div_sq": 0.44329753518104553,
-          "top_scalar_features": [
-            {
-              "feature": "n_hedge_words",
-              "abs": 0.3420008420944214,
-              "signed": -0.3420008420944214
-            },
-            {
-              "feature": "n_certainty_words",
-              "abs": 0.3343244194984436,
-              "signed": -0.3343244194984436
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.2934856712818146,
-              "signed": -0.2934856712818146
-            }
-          ]
-        }
-      ],
-      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
-      "responses": {
-        "codex": "2,5-Dimethylthiophene is the diene, so the sulfur becomes the bridge in the bicyclic Diels-Alder adduct. That rules out the epoxy/benzo[c]thiophene options A and D.\n\nThe exo adduct has the anhydride moiety oriented away from the sulfur bridge, corresponding to the epithioisobenzofuran product with configuration `(3aR,4S,7R,7aS)`.\n\nAnswer: C",
-        "claude": "Looking at this [4+2] cycloaddition:\n\n**Identifying the diene and dienophile:**\n- 2,5-Dimethylthiophene = diene (contributes the **sulfur bridge**)\n- Furan-2,5-dione (maleic anhydride) = dienophile (contributes the anhydride/\"isobenzofuran-1,3-dione\" core)\n\n**Eliminating bridge type:**\nThe bridge atom comes from thiophene \u2192 must be **sulfur** \u2192 \"epithio\" prefix on an \"isobenzofuran-1,3-dione\" core",
-        "agent_chat": "Re-examining this with the peer's critique in mind, I need to actually walk through the CIP assignment rather than assert the pattern.\n\n## Re-analysis\n\n**Connectivity (still solid):** thiophene supplies the **epithio** bridge; maleic anhydride contributes the **isobenzofuran-1,3-dione** core. So the answer is B or C.\n\n**Critical priority issue at C3a (which I oversimplified):**\n\nAt C3a, comparing "
-      }
-    },
-    {
       "rank": 17,
-      "id": "recKcjTwONILZqHAX",
-      "domain": "Physics",
-      "subdomain": "High-energy particle physics",
-      "total_divergence_sq": 9.157746808479942,
-      "sample_prob": 0.002496704924851656,
-      "per_agent_divergence": [
-        {
-          "agent": "agent_chat",
-          "divergence_sq": 4.00475549697876,
-          "embedding_div_sq": 0.97463059425354,
-          "scalar_div_sq": 3.0301249027252197,
-          "top_scalar_features": [
-            {
-              "feature": "n_certainty_words",
-              "abs": 1.6233640909194946,
-              "signed": 1.6233640909194946
-            },
-            {
-              "feature": "n_latex",
-              "abs": 0.4891026020050049,
-              "signed": -0.4891026020050049
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.2772328853607178,
-              "signed": 0.2772328853607178
-            }
-          ]
-        },
-        {
-          "agent": "codex",
-          "divergence_sq": 3.1628220081329346,
-          "embedding_div_sq": 0.9534168243408203,
-          "scalar_div_sq": 2.209404706954956,
-          "top_scalar_features": [
-            {
-              "feature": "response_len",
-              "abs": 1.412628173828125,
-              "signed": -1.412628173828125
-            },
-            {
-              "feature": "n_latex",
-              "abs": 0.3063024878501892,
-              "signed": -0.3063024878501892
-            },
-            {
-              "feature": "n_hedge_words",
-              "abs": 0.30044785141944885,
-              "signed": -0.30044785141944885
-            }
-          ]
-        },
-        {
-          "agent": "claude",
-          "divergence_sq": 1.9901701211929321,
-          "embedding_div_sq": 0.9808216094970703,
-          "scalar_div_sq": 1.0093483924865723,
-          "top_scalar_features": [
-            {
-              "feature": "response_len",
-              "abs": 0.8266474008560181,
-              "signed": -0.8266474008560181
-            },
-            {
-              "feature": "n_certainty_words",
-              "abs": 0.4271065592765808,
-              "signed": -0.4271065592765808
-            },
-            {
-              "feature": "n_codeblocks",
-              "abs": 0.31294190883636475,
-              "signed": -0.31294190883636475
-            }
-          ]
-        }
-      ],
-      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
-      "responses": {
-        "codex": "In four-dimensional QFT, each loop typically contributes a loop-suppression factor\n\n\\[\n\\frac{1}{16\\pi^2}=\\frac{1}{(4\\pi)^2}.\n\\]\n\nThe note contains\n\n\\[\n\\frac{1}{(4\\pi)^6}.\n\\]\n\nSo\n\n\\[\n(4\\pi)^{-6} = \\left((4\\pi)^{-2}\\right)^3,\n\\]\n\nwhich corresponds to 3 loops.\n\nAnswer: D",
-        "claude": "Each loop integral in 4D spacetime contributes a factor of 1/(4\u03c0)\u00b2 after standard loop integration (from the d\u2074k/(2\u03c0)\u2074 measure combined with typical Feynman parameter integrals).\n\nGiven factor: 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]\u00b3\n\nSo the diagram has 3 loops.\n\nThe other elements are consistent: \u03b1\u00b3 g\u00b2 indicates coupling powers (vertices), \u221a2 and 8 are symmetry/combinatoric factors, and (Q/M)\u00b2 is a ratio of physica",
-        "agent_chat": "Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that each loop contributes a factor of 1/(4\u03c0)\u00b2. This comes from the angular part of the 4D momentum integration: \u222bd\u2074k/(2\u03c0)\u2074 yields factors involving 1/(16\u03c0\u00b2) = 1/(4\u03c0)\u00b2 after the angular integration.\n\nThe size estimate contains 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]"
-      }
-    },
-    {
-      "rank": 18,
       "id": "reccOKzFNmyqeJ6ry",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "total_divergence_sq": 10.372082437882511,
-      "sample_prob": 0.002827773103490472,
+      "total_divergence_sq": 10.505675535480407,
+      "sample_prob": 0.0028008746448904276,
       "per_agent_divergence": [
         {
           "agent": "agent_chat",
-          "divergence_sq": 4.141510009765625,
-          "embedding_div_sq": 0.9211779236793518,
-          "scalar_div_sq": 3.2203316688537598,
+          "divergence_sq": 4.159719467163086,
+          "embedding_div_sq": 0.9228969812393188,
+          "scalar_div_sq": 3.2368226051330566,
           "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 1.5367828607559204,
-              "signed": 1.5367828607559204
+              "abs": 1.5456122159957886,
+              "signed": 1.5456122159957886
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.5118208527565002,
-              "signed": -0.5118208527565002
+              "abs": 0.5151684284210205,
+              "signed": -0.5151684284210205
             },
             {
               "feature": "n_questions",
-              "abs": 0.4302094578742981,
-              "signed": -0.4302094578742981
+              "abs": 0.4339456558227539,
+              "signed": -0.4339456558227539
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 3.5157716274261475,
-          "embedding_div_sq": 0.9351083636283875,
-          "scalar_div_sq": 2.5806634426116943,
+          "divergence_sq": 3.596846103668213,
+          "embedding_div_sq": 0.9353272914886475,
+          "scalar_div_sq": 2.6615185737609863,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 0.9158636331558228,
-              "signed": -0.9158636331558228
+              "abs": 0.9273728728294373,
+              "signed": -0.9273728728294373
             },
             {
               "feature": "n_codeblocks",
-              "abs": 0.726772129535675,
-              "signed": -0.726772129535675
+              "abs": 0.7372291684150696,
+              "signed": -0.7372291684150696
             },
             {
               "feature": "n_latex",
-              "abs": 0.7130579948425293,
-              "signed": -0.7130579948425293
+              "abs": 0.7329086065292358,
+              "signed": -0.7329086065292358
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 2.714801073074341,
-          "embedding_div_sq": 0.9248700141906738,
-          "scalar_div_sq": 1.789931058883667,
+          "divergence_sq": 2.7491109371185303,
+          "embedding_div_sq": 0.9255130887031555,
+          "scalar_div_sq": 1.823598027229309,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 1.1720516681671143,
-              "signed": -1.1720516681671143
+              "abs": 1.1822304725646973,
+              "signed": -1.1822304725646973
             },
             {
               "feature": "n_latex",
-              "abs": 0.4602748155593872,
-              "signed": -0.4602748155593872
+              "abs": 0.4730572998523712,
+              "signed": -0.4730572998523712
             },
             {
               "feature": "letter_A",
-              "abs": 0.27182507514953613,
-              "signed": 0.27182507514953613
+              "abs": 0.2749028205871582,
+              "signed": 0.2749028205871582
             }
           ]
         }
@@ -1544,88 +1459,173 @@
       }
     },
     {
-      "rank": 19,
-      "id": "receYQxnUBvxPcvbQ",
+      "rank": 18,
+      "id": "recKcjTwONILZqHAX",
       "domain": "Physics",
-      "subdomain": "Astrophysics",
-      "total_divergence_sq": 14.003473006825118,
-      "sample_prob": 0.003817810909822583,
+      "subdomain": "High-energy particle physics",
+      "total_divergence_sq": 9.137754953845615,
+      "sample_prob": 0.002436178270727396,
       "per_agent_divergence": [
         {
-          "agent": "codex",
-          "divergence_sq": 10.756573677062988,
-          "embedding_div_sq": 1.0035243034362793,
-          "scalar_div_sq": 9.75304889678955,
+          "agent": "agent_chat",
+          "divergence_sq": 3.9811275005340576,
+          "embedding_div_sq": 0.9754811525344849,
+          "scalar_div_sq": 3.005646228790283,
           "top_scalar_features": [
             {
-              "feature": "n_hedge_words",
-              "abs": 2.9771549701690674,
-              "signed": 2.9771549701690674
+              "feature": "n_certainty_words",
+              "abs": 1.6468137502670288,
+              "signed": 1.6468137502670288
             },
             {
               "feature": "n_latex",
-              "abs": 0.7602543830871582,
-              "signed": -0.7602543830871582
+              "abs": 0.38205620646476746,
+              "signed": -0.38205620646476746
             },
             {
               "feature": "response_len",
-              "abs": 0.41063088178634644,
-              "signed": -0.41063088178634644
+              "abs": 0.28622108697891235,
+              "signed": 0.28622108697891235
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 3.214134931564331,
+          "embedding_div_sq": 0.9543445706367493,
+          "scalar_div_sq": 2.2597901821136475,
+          "top_scalar_features": [
+            {
+              "feature": "response_len",
+              "abs": 1.4364906549453735,
+              "signed": -1.4364906549453735
+            },
+            {
+              "feature": "n_latex",
+              "abs": 0.29607731103897095,
+              "signed": -0.29607731103897095
+            },
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.28965091705322266,
+              "signed": -0.28965091705322266
             }
           ]
         },
         {
           "agent": "claude",
-          "divergence_sq": 1.830110788345337,
-          "embedding_div_sq": 1.0131309032440186,
-          "scalar_div_sq": 0.8169799447059631,
+          "divergence_sq": 1.9424912929534912,
+          "embedding_div_sq": 0.9811289310455322,
+          "scalar_div_sq": 0.9613621234893799,
           "top_scalar_features": [
             {
               "feature": "response_len",
-              "abs": 0.5466154217720032,
-              "signed": -0.5466154217720032
+              "abs": 0.8008660078048706,
+              "signed": -0.8008660078048706
             },
-            {
-              "feature": "letter_unknown",
-              "abs": 0.37671124935150146,
-              "signed": -0.37671124935150146
-            },
-            {
-              "feature": "n_questions",
-              "abs": 0.3338772654533386,
-              "signed": -0.3338772654533386
-            }
-          ]
-        },
-        {
-          "agent": "agent_chat",
-          "divergence_sq": 1.4167900085449219,
-          "embedding_div_sq": 1.0155380964279175,
-          "scalar_div_sq": 0.4012519419193268,
-          "top_scalar_features": [
             {
               "feature": "n_certainty_words",
-              "abs": 0.378845751285553,
-              "signed": -0.378845751285553
+              "abs": 0.4230206608772278,
+              "signed": -0.4230206608772278
             },
             {
-              "feature": "letter_unknown",
-              "abs": 0.37671124935150146,
-              "signed": -0.37671124935150146
-            },
-            {
-              "feature": "response_len",
-              "abs": 0.2059289813041687,
-              "signed": -0.2059289813041687
+              "feature": "n_codeblocks",
+              "abs": 0.3142172694206238,
+              "signed": -0.3142172694206238
             }
           ]
         }
       ],
-      "query_excerpt": "Domain: Physics / Astrophysics\n\nQuestion: Astronomers are currently observing a star with a radius equal to that of the Sun. One  hemisphere of the star is covered in dark spots with a filling factor of 20%. The star has an effective temperature (Teff) of 6000K, and the spots exhibit a temperature d",
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
       "responses": {
-        "codex": "Spot temperature is `6000K - 1000K = 5000K`.\n\nSpot flux contrast, assuming blackbody bolometric flux:\n\n`1 - (5000/6000)^4 \u2248 1 - 0.482 \u2248 0.518`\n\nWith 20% of the visible hemisphere spotted, the brightness drop is:\n\n`0.20 \u00d7 0.518 \u2248 0.104`\n\nAn exoplanet transit depth is approximately:\n\n`(Rpl/Rstar)^2`\n\nSo:\n\n`Rpl/Rstar \u2248 sqrt(0.104) \u2248 0.32`\n\nAnswer: C",
-        "claude": "Looking at this problem:\n\n**Spot-induced amplitude:**\nWhen the spotted hemisphere faces us vs. the clean hemisphere:\n- \u0394F/F = f \u00b7 (1 \u2212 (T_spot/T_eff)\u2074)\n- f = 0.20, T_spot = 5000K, T_eff = 6000K\n- (5000/6000)\u2074 = (5/6)\u2074 = 625/1296 \u2248 0.4823\n- \u0394F/F = 0.20 \u00b7 (1 \u2212 0.4823) = 0.20 \u00b7 0.5177 \u2248 0.1035\n\n**Equivalent transit depth:**\nFor a transit: \u0394F/F = (R_pl/R_star)\u00b2\n- R_pl/R_star = \u221a0.1035 \u2248 0.322\n\nAnswer:",
-        "agent_chat": "Looking at this problem again with the critique in mind:\n\n**Spot-induced brightness amplitude:**\n- Unspotted hemisphere facing us: F_max \u221d T_eff\u2074 = 6000\u2074\n- Spotted hemisphere facing us: F_min \u221d 0.8\u00b7T_eff\u2074 + 0.2\u00b7T_spot\u2074\n\n**Amplitude:**\n\u0394F/F = 0.2 \u00d7 [1 \u2212 (5000/6000)\u2074]\n     = 0.2 \u00d7 [1 \u2212 0.4823]\n     \u2248 0.1035\n\n**Equivalent transit depth:**\n(R_pl/R_star)\u00b2 = 0.1035\nR_pl/R_star \u2248 0.322\n\nThe peer reviewer"
+        "codex": "In four-dimensional QFT, each loop typically contributes a loop-suppression factor\n\n\\[\n\\frac{1}{16\\pi^2}=\\frac{1}{(4\\pi)^2}.\n\\]\n\nThe note contains\n\n\\[\n\\frac{1}{(4\\pi)^6}.\n\\]\n\nSo\n\n\\[\n(4\\pi)^{-6} = \\left((4\\pi)^{-2}\\right)^3,\n\\]\n\nwhich corresponds to 3 loops.\n\nAnswer: D",
+        "claude": "Each loop integral in 4D spacetime contributes a factor of 1/(4\u03c0)\u00b2 after standard loop integration (from the d\u2074k/(2\u03c0)\u2074 measure combined with typical Feynman parameter integrals).\n\nGiven factor: 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]\u00b3\n\nSo the diagram has 3 loops.\n\nThe other elements are consistent: \u03b1\u00b3 g\u00b2 indicates coupling powers (vertices), \u221a2 and 8 are symmetry/combinatoric factors, and (Q/M)\u00b2 is a ratio of physica",
+        "agent_chat": "Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that each loop contributes a factor of 1/(4\u03c0)\u00b2. This comes from the angular part of the 4D momentum integration: \u222bd\u2074k/(2\u03c0)\u2074 yields factors involving 1/(16\u03c0\u00b2) = 1/(4\u03c0)\u00b2 after the angular integration.\n\nThe size estimate contains 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]"
+      }
+    },
+    {
+      "rank": 19,
+      "id": "recEmTBhx2hgw6tPQ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "total_divergence_sq": 7.73312767935073,
+      "sample_prob": 0.0020616967231035233,
+      "per_agent_divergence": [
+        {
+          "agent": "agent_chat",
+          "divergence_sq": 4.34097957611084,
+          "embedding_div_sq": 0.8239059448242188,
+          "scalar_div_sq": 3.517073631286621,
+          "top_scalar_features": [
+            {
+              "feature": "n_self_correction",
+              "abs": 0.9725862741470337,
+              "signed": 0.9725862741470337
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.9430805444717407,
+              "signed": 0.9430805444717407
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.9064228534698486,
+              "signed": -0.9064228534698486
+            }
+          ]
+        },
+        {
+          "agent": "claude",
+          "divergence_sq": 2.0448787212371826,
+          "embedding_div_sq": 0.7992754578590393,
+          "scalar_div_sq": 1.245603322982788,
+          "top_scalar_features": [
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.7198514938354492,
+              "signed": -0.7198514938354492
+            },
+            {
+              "feature": "n_questions",
+              "abs": 0.43205931782722473,
+              "signed": -0.43205931782722473
+            },
+            {
+              "feature": "n_self_correction",
+              "abs": 0.4231935739517212,
+              "signed": -0.4231935739517212
+            }
+          ]
+        },
+        {
+          "agent": "codex",
+          "divergence_sq": 1.347269058227539,
+          "embedding_div_sq": 0.8095678687095642,
+          "scalar_div_sq": 0.5377012491226196,
+          "top_scalar_features": [
+            {
+              "feature": "n_hedge_words",
+              "abs": 0.44666966795921326,
+              "signed": -0.44666966795921326
+            },
+            {
+              "feature": "n_certainty_words",
+              "abs": 0.33183959126472473,
+              "signed": -0.33183959126472473
+            },
+            {
+              "feature": "response_len",
+              "abs": 0.327902227640152,
+              "signed": -0.327902227640152
+            }
+          ]
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
+      "responses": {
+        "codex": "2,5-Dimethylthiophene is the diene, so the sulfur becomes the bridge in the bicyclic Diels-Alder adduct. That rules out the epoxy/benzo[c]thiophene options A and D.\n\nThe exo adduct has the anhydride moiety oriented away from the sulfur bridge, corresponding to the epithioisobenzofuran product with configuration `(3aR,4S,7R,7aS)`.\n\nAnswer: C",
+        "claude": "Looking at this [4+2] cycloaddition:\n\n**Identifying the diene and dienophile:**\n- 2,5-Dimethylthiophene = diene (contributes the **sulfur bridge**)\n- Furan-2,5-dione (maleic anhydride) = dienophile (contributes the anhydride/\"isobenzofuran-1,3-dione\" core)\n\n**Eliminating bridge type:**\nThe bridge atom comes from thiophene \u2192 must be **sulfur** \u2192 \"epithio\" prefix on an \"isobenzofuran-1,3-dione\" core",
+        "agent_chat": "Re-examining this with the peer's critique in mind, I need to actually walk through the CIP assignment rather than assert the pattern.\n\n## Re-analysis\n\n**Connectivity (still solid):** thiophene supplies the **epithio** bridge; maleic anhydride contributes the **isobenzofuran-1,3-dione** core. So the answer is B or C.\n\n**Critical priority issue at C3a (which I oversimplified):**\n\nAt C3a, comparing "
       }
     },
     {
@@ -1633,75 +1633,75 @@
       "id": "recOYsaYs6RmtlTDy",
       "domain": "Physics",
       "subdomain": "Quantum Mechanics",
-      "total_divergence_sq": 35.39716970481663,
-      "sample_prob": 0.009650438092648983,
+      "total_divergence_sq": 35.672628376633156,
+      "sample_prob": 0.009510530158877373,
       "per_agent_divergence": [
         {
           "agent": "claude",
-          "divergence_sq": 24.31831932067871,
-          "embedding_div_sq": 0.9908463358879089,
-          "scalar_div_sq": 23.32747459411621,
+          "divergence_sq": 24.652080535888672,
+          "embedding_div_sq": 0.9937326312065125,
+          "scalar_div_sq": 23.658348083496094,
           "top_scalar_features": [
             {
               "feature": "n_latex",
-              "abs": 4.622905731201172,
-              "signed": 4.622905731201172
+              "abs": 4.654553413391113,
+              "signed": 4.654553413391113
             },
             {
               "feature": "n_self_correction",
-              "abs": 1.304145097732544,
-              "signed": -1.304145097732544
+              "abs": 1.314167857170105,
+              "signed": -1.314167857170105
             },
             {
               "feature": "n_hedge_words",
-              "abs": 0.31357234716415405,
-              "signed": -0.31357234716415405
+              "abs": 0.320584237575531,
+              "signed": -0.320584237575531
             }
           ]
         },
         {
           "agent": "agent_chat",
-          "divergence_sq": 7.453681945800781,
-          "embedding_div_sq": 0.9694387316703796,
-          "scalar_div_sq": 6.484243392944336,
+          "divergence_sq": 7.302649021148682,
+          "embedding_div_sq": 0.9746377468109131,
+          "scalar_div_sq": 6.3280110359191895,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 1.8076149225234985,
-              "signed": 1.8076149225234985
+              "abs": 1.7485826015472412,
+              "signed": 1.7485826015472412
             },
             {
               "feature": "n_hedge_words",
-              "abs": 1.3674192428588867,
-              "signed": 1.3674192428588867
+              "abs": 1.3811266422271729,
+              "signed": 1.3811266422271729
             },
             {
               "feature": "n_certainty_words",
-              "abs": 0.6360600590705872,
-              "signed": -0.6360600590705872
+              "abs": 0.6498863101005554,
+              "signed": -0.6498863101005554
             }
           ]
         },
         {
           "agent": "codex",
-          "divergence_sq": 3.625157117843628,
-          "embedding_div_sq": 1.0004667043685913,
-          "scalar_div_sq": 2.624690055847168,
+          "divergence_sq": 3.7179043292999268,
+          "embedding_div_sq": 1.0035029649734497,
+          "scalar_div_sq": 2.7144012451171875,
           "top_scalar_features": [
             {
               "feature": "n_self_correction",
-              "abs": 0.9872347116470337,
-              "signed": -0.9872347116470337
+              "abs": 0.9997900724411011,
+              "signed": -0.9997900724411011
             },
             {
               "feature": "n_codeblocks",
-              "abs": 0.7530068755149841,
-              "signed": -0.7530068755149841
+              "abs": 0.7614085674285889,
+              "signed": -0.7614085674285889
             },
             {
               "feature": "response_len",
-              "abs": 0.6512978672981262,
-              "signed": -0.6512978672981262
+              "abs": 0.6598784923553467,
+              "signed": -0.6598784923553467
             }
           ]
         }

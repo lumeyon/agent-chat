@@ -2,71 +2,71 @@
   "agent": "agent_chat",
   "k_lowrank": 5,
   "n_samples": 20,
-  "total_valid_rows": 172,
+  "total_valid_rows": 194,
   "matrix_shape": [
-    172,
+    194,
     396
   ],
   "anomalies": [
     {
       "rank": 1,
-      "id": "reczjcMtrB1YGS2fO",
-      "domain": "Physics",
-      "subdomain": "Optics and Acoustics",
-      "anomaly_score": 31.910599520870164,
-      "sample_prob": 0.03746005892753601,
+      "id": "recUOePh79cp4T2Bg",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 11.41323113380713,
+      "sample_prob": 0.011674401350319386,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 12.821406364440918,
-          "max_single_dim": 0.3929325342178345
+          "abs_residual": 12.71572208404541,
+          "max_single_dim": 0.41220951080322266
         },
         {
-          "feature": "n_questions",
-          "abs_residual": 5.058789253234863,
-          "signed_residual": 5.058789253234863
+          "feature": "response_len",
+          "abs_residual": 1.9771610498428345,
+          "signed_residual": 1.9771610498428345
         },
         {
           "feature": "n_self_correction",
-          "abs_residual": 1.2802826166152954,
-          "signed_residual": -1.2802826166152954
+          "abs_residual": 1.5529894828796387,
+          "signed_residual": -1.5529894828796387
         },
         {
           "feature": "n_certainty_words",
-          "abs_residual": 1.0174856185913086,
-          "signed_residual": -1.0174856185913086
+          "abs_residual": 1.2064814567565918,
+          "signed_residual": -1.2064814567565918
         }
       ],
-      "query_excerpt": "Domain: Physics / Optics and Acoustics\n\nQuestion: Consider an aperture, which shapes like a N-sided polygon. All the apothems are of the same length a. When a monochromatic light (of wavelength \\lambda), travelling along z-axis, falls vertically on this aperture, it creates a series of intensity max",
-      "response_excerpt": "The peer reviewer confirms my calculation and reasoning. The caveat raises the possibility that \"first two minima\" could mean the first minima on each side of the central maximum (giving 2\u03b8\u2081 = 1.220 \u03bb/a, choice B), but this interpretation is non-standard.\n\nConsidering the question more carefully:\n- It says \"a series of intensity maxima and minima\" \u2014 this describes the radial sequence of Airy rings\n- \"First two minima\" in this radial series naturally refers to the 1st and 2nd dark rings\n- The Airy pattern is rotationally symmetric, so \"opposite sides\" doesn't really add new minima \u2014 the entire "
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: The Cope rearrangement is a chemical reaction where a 1,5-diene molecule undergoes rearrangement, resulting in a change in the positions of its carbon-carbon double bonds. This rearrangement can be initiated by heat or light and is valuable for creati",
+      "response_excerpt": "Looking at this critique carefully, I'll work through both reactions again.\n\n## Reaction A: Re-examining the Wittig pathway\n\nLumeyon is right that I should justify [1,2] vs [2,3] more rigorously. Let me work through the [2,3]-Wittig product explicitly:\n\nPhCH(\u207b)\u2212O\u2212CH\u2082\u2212CH=CMe\u2082 undergoing [2,3]-Wittig:\n- New C\u2212C bond forms between the benzyl carbanion C and the **\u03b3-carbon** of the allyl (the CMe\u2082 tertiary carbon)\n- O\u2212CH\u2082(\u03b1) bond breaks; O retains the negative charge on the original carbanion C\n- \u03c0 bond shifts from \u03b2=\u03b3 to \u03b1=\u03b2\n\n**[2,3]-Wittig product**: PhCH(OH)\u2212**C(CH\u2083)\u2082**\u2212CH=CH\u2082 = **2,2-dimethyl-"
     },
     {
       "rank": 2,
       "id": "recJZ3QEfRKjYw9a7",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "anomaly_score": 1.0508119094047288,
-      "sample_prob": 0.00123355514369905,
+      "anomaly_score": 1.0400398323923952,
+      "sample_prob": 0.001063839066773653,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.070762634277344,
-          "max_single_dim": 0.364995539188385
+          "abs_residual": 13.04478931427002,
+          "max_single_dim": 0.3650799095630646
         },
         {
-          "feature": "n_hedge_words",
-          "abs_residual": 0.14907771348953247,
-          "signed_residual": 0.14907771348953247
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.12721222639083862,
-          "signed_residual": -0.12721222639083862
+          "feature": "n_latex",
+          "abs_residual": 0.1538495421409607,
+          "signed_residual": 0.1538495421409607
         },
         {
           "feature": "n_questions",
-          "abs_residual": 0.11937320232391357,
-          "signed_residual": -0.11937320232391357
+          "abs_residual": 0.12018178403377533,
+          "signed_residual": -0.12018178403377533
+        },
+        {
+          "feature": "n_hedge_words",
+          "abs_residual": 0.11262378096580505,
+          "signed_residual": 0.11262378096580505
         }
       ],
       "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: cyclohexanone was treated with bromine, forming product 1.\n1 was heated with sodium hydroxide, forming product 2.\n2 was treated with thionyl chloride and pyridine, forming 3.\n3 was treated with Lithium tri-tert-butoxyaluminum hydride, forming product ",
@@ -74,383 +74,383 @@
     },
     {
       "rank": 3,
-      "id": "recnTTKdBzfuoZ7w7",
-      "domain": "Biology",
-      "subdomain": "Molecular Biology",
-      "anomaly_score": 24.270048339516507,
-      "sample_prob": 0.028490770608186722,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 11.208626747131348,
-          "max_single_dim": 0.45638278126716614
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 3.9324116706848145,
-          "signed_residual": 3.9324116706848145
-        },
-        {
-          "feature": "n_hedge_words",
-          "abs_residual": 1.8528170585632324,
-          "signed_residual": -1.8528170585632324
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 1.5060889720916748,
-          "signed_residual": -1.5060889720916748
-        }
-      ],
-      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: Congratulations, you just landed your dream job at one of the top structural biology labs at Stanford University in California. Without further ado, the Principal Investigator explains that the priority of the moment is to produce in E. coli BL21 then p",
-      "response_excerpt": "The peer is right that I was sloppy. Let me redo this with their corrections.\n\n## Step 1: First filter \u2014 does each insert encode the specified P53 protein?\n\nThe peer flagged that B differs at residue 153. Checking the \"VDSTPPP\" region (residues 147\u2013153, \"...VDST-P-P-P-G...\"):\n\n- **A**: `GTTGAT-TCC-ACA-CCC-CCG-CCC-GGC` \u2192 V-D-S-T-**P-P-P**-G \u2713\n- **B**: `GTTGAT-TCC-ACA-CCC-CCG-TCC-GGC` \u2192 V-D-S-T-**P-P-S**-G \u2717 (P153S)\n- **C**: `...CCCCCG-CCC-GGC` \u2192 V-D-S-T-**P-P-P**-G \u2713\n- **D**: `...CCCCCG-CCC-GGC` \u2192 V-D-S-T-**P-P-P**-G \u2713\n\n**B is eliminated** \u2014 it produces a mutant, not human p53.\n\n## Step 2: Amon"
-    },
-    {
-      "rank": 4,
-      "id": "recEmTBhx2hgw6tPQ",
-      "domain": "Chemistry",
-      "subdomain": "Organic Chemistry",
-      "anomaly_score": 6.017323966209233,
-      "sample_prob": 0.007063775323331356,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 11.633661270141602,
-          "max_single_dim": 0.3989286720752716
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 1.4283467531204224,
-          "signed_residual": -1.4283467531204224
-        },
-        {
-          "feature": "response_len",
-          "abs_residual": 0.9011528491973877,
-          "signed_residual": 0.9011528491973877
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.829585075378418,
-          "signed_residual": 0.829585075378418
-        }
-      ],
-      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
-      "response_excerpt": "Re-examining this with the peer's critique in mind, I need to actually walk through the CIP assignment rather than assert the pattern.\n\n## Re-analysis\n\n**Connectivity (still solid):** thiophene supplies the **epithio** bridge; maleic anhydride contributes the **isobenzofuran-1,3-dione** core. So the answer is B or C.\n\n**Critical priority issue at C3a (which I oversimplified):**\n\nAt C3a, comparing the three carbon substituents (excluding H):\n- **C4** (bridgehead): neighbors {S, C, C} \u2014 highest is **S (Z=16)**\n- **C(=O) anhydride**: neighbors {O, O, O} \u2014 highest is **O (Z=8)**\n- **C7a**: neighbo"
-    },
-    {
-      "rank": 5,
-      "id": "recmkvk6EFAmqyMxR",
+      "id": "recywRj5a8EEjj2Ib",
       "domain": "Physics",
-      "subdomain": "Relativistic Mechanics",
-      "anomaly_score": 31.610248230630532,
-      "sample_prob": 0.03710747882723808,
+      "subdomain": "Physics (general)",
+      "anomaly_score": 32.986748742406235,
+      "sample_prob": 0.03374158963561058,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.505985260009766,
-          "max_single_dim": 0.43609458208084106
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 5.120226860046387,
-          "signed_residual": 5.120226860046387
-        },
-        {
-          "feature": "response_len",
-          "abs_residual": 1.526944637298584,
-          "signed_residual": -1.526944637298584
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.9968985319137573,
-          "signed_residual": -0.9968985319137573
-        }
-      ],
-      "query_excerpt": "Domain: Physics / Relativistic Mechanics\n\nQuestion: Particles are collided at the center of a spherical detector producing new type of particles that travel uninterrupted at ultra-relativistic velocities highly centered around Lorentz factor of ~20. On average, one third of these fast-decaying parti",
-      "response_excerpt": "Looking at this problem again with the peer's endorsement.\n\nThe decay survival probability for ultra-relativistic particles traveling distance R is:\nP = exp(-R/(\u03b3\u03b2c\u03c4)) \u2248 exp(-R/(\u03b3c\u03c4))\n\nAt \u03b3\u2081 = 20: P\u2081 = 1/3, so R/(\u03b3\u2081c\u03c4) = ln(3)\nAt \u03b3\u2082 = ?: P\u2082 = 2/3, so R/(\u03b3\u2082c\u03c4) = ln(3/2)\n\nTaking the ratio:\n\u03b3\u2082/\u03b3\u2081 = ln(3)/ln(3/2) = 1.0986/0.4055 \u2248 2.71\n\n\u03b3\u2082 \u2248 20 \u00d7 2.71 \u2248 54.2\n\nThe peer reviewer correctly endorses my reasoning. The math checks out and choice B (54) matches.\n\nAnswer: B"
-    },
-    {
-      "rank": 6,
-      "id": "reczQ4I0VpENdMtIj",
-      "domain": "Biology",
-      "subdomain": "Genetics",
-      "anomaly_score": 2.180146343082029,
-      "sample_prob": 0.0025592881720513105,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 13.143133163452148,
-          "max_single_dim": 0.3923254609107971
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 0.7189472913742065,
-          "signed_residual": -0.7189472913742065
-        },
-        {
-          "feature": "response_len",
-          "abs_residual": 0.6892846822738647,
-          "signed_residual": 0.6892846822738647
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.3178536891937256,
-          "signed_residual": -0.3178536891937256
-        }
-      ],
-      "query_excerpt": "Domain: Biology / Genetics\n\nQuestion: In an inactive state, a transcription factor subunit awaits an activation signal from the membrane phosphorylation cascade. Upon phosphorylation on the Ser residues in the transactivation domain, it dimerizes, shuttles into the nucleus, and serves in gene transc",
-      "response_excerpt": "Looking at this problem again with the peer critique in mind:\n\n**Key constraint:** Mutation Y is heterozygous and dominant-negative. This means the mutant protein must interfere with the wild-type protein's function.\n\n**Mechanism analysis:**\n- Mutation Y is in the dimerization domain\n- For a dominant-negative effect, the mutant must still be able to interact with WT (if it simply abolished dimerization, WT homodimers would still form \u2192 recessive/haploinsufficient, not dominant-negative)\n- The mutant subunit pairs with WT subunits, forming nonfunctional heterodimers/complexes that cannot proper"
-    },
-    {
-      "rank": 7,
-      "id": "recNuT2oSnO86bxOx",
-      "domain": "Chemistry",
-      "subdomain": "Organic Chemistry",
-      "anomaly_score": 1.0746967367266649,
-      "sample_prob": 0.0012615935411304235,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 13.452627182006836,
-          "max_single_dim": 0.36917242407798767
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.1736970841884613,
-          "signed_residual": -0.1736970841884613
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 0.14806832373142242,
-          "signed_residual": -0.14806832373142242
-        },
-        {
-          "feature": "n_hedge_words",
-          "abs_residual": 0.12815609574317932,
-          "signed_residual": 0.12815609574317932
-        }
-      ],
-      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: benzene is treated with HNO3 and H2SO4, forming product 1.\nproduct 1 is treated with Br2 and iron powder, forming product 2.\nproduct 2 is stirred with Pd/C under a hydrogen atmosphere, forming product 3.\nProduct 3 is treated with NaNO2 and HBF4, formi",
-      "response_excerpt": "The peer agrees with my answer (B) and only flags wording ambiguity at step 5. Reviewing the synthesis:\n\n1. Benzene \u2192 nitrobenzene\n2. \u2192 3-bromonitrobenzene (meta-direction by NO2)\n3. \u2192 3-bromoaniline (NO2 reduced to NH2; C-Br survives Pd/C since it's an aryl bromide and conditions aren't forcing)\n4. \u2192 3-bromobenzenediazonium tetrafluoroborate\n5. Heating an aryldiazonium salt in the presence of an arene (anisole) is the classic Gomberg-Bachmann setup; the aryl radical attacks anisole predominantly at the para position (ortho/para-directing OMe, with para favored sterically). Pure Balz-Schiemann"
-    },
-    {
-      "rank": 8,
-      "id": "recgM7o1tcc7tP778",
-      "domain": "Physics",
-      "subdomain": "Quantum Mechanics",
-      "anomaly_score": 4.673543774563086,
-      "sample_prob": 0.005486303940415382,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 13.307256698608398,
-          "max_single_dim": 0.3485821485519409
-        },
-        {
-          "feature": "response_len",
-          "abs_residual": 1.4731706380844116,
-          "signed_residual": 1.4731706380844116
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 0.9208478927612305,
-          "signed_residual": -0.9208478927612305
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 0.6113401055335999,
-          "signed_residual": -0.6113401055335999
-        }
-      ],
-      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Consider a bound system of two nucleons (NN) in a 1S0 state which emit a particle X of intrinsic parity -1. Pauli statistics require that the isospin, angular momentum, and spin quantum numbers of the final NN state satisfy T(NN) = S(NN) + L(NN) + 1 (mo",
-      "response_excerpt": "Looking at this carefully, let me re-examine each option against all constraints.\n\n**Constraints:**\n1. Pauli (T=0): S(NN) + L(NN) must be odd\n2. Angular momentum: J(NN) = l(X) (since J_initial = 0)\n3. Parity: L(NN) + l(X) must be odd\n4. Physical validity: S(NN) \u2208 {0, 1} for two spin-1/2 nucleons\n\n**Option (A) 3D3 + f:** S=1, L=2, J=3, l=3 \u2014 Pauli: 3 odd \u2713, J=3=l \u2713, parity: 5 odd \u2713. **Permitted**\n\n**Option (B) 7D1 + p:** Requires S=3, which is **physically impossible** for two spin-1/2 nucleons (max S=1). The term symbol itself doesn't describe any NN state.\n\n**Option (C) 3S1 + p:** S=1, L=0, J"
-    },
-    {
-      "rank": 9,
-      "id": "recWxGU8Q4YReJ1tb",
-      "domain": "Chemistry",
-      "subdomain": "Organic Chemistry",
-      "anomaly_score": 14.23560817519325,
-      "sample_prob": 0.016711276024580002,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 11.107568740844727,
-          "max_single_dim": 0.4266926348209381
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 2.2649526596069336,
-          "signed_residual": 2.2649526596069336
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 1.8736637830734253,
-          "signed_residual": -1.8736637830734253
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 1.4690914154052734,
-          "signed_residual": -1.4690914154052734
-        }
-      ],
-      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: cyclooctatetraene was heated with maleic anhydride in a 1:1 ratio, forming product 1.\n1 was heated with methnol and a small amount of sulfuric acid, forming product 2.\n2 was heated with cyclopentadiene, forming final product 3.\nwhat is the structure o",
-      "response_excerpt": "Looking at this critique, the peer raises legitimate concerns about rigor, but doesn't actually demonstrate that D is wrong. Let me reconsider the option-level distinctions more carefully.\n\n**Re-examining the four options:**\n\nThe 10 stereocenters split into:\n- C10, C11: ester-bearing bridge carbons\n- C1, C4: ethano bridge attachment\n- C5, C8: methano bridge attachment  \n- C4a, C4b, C8a, C8b: central cyclobutane\n\n**B (10R,11R)**: Reading the SMILES `[C@@H]1...[C@H]1C(OC)=O`, the two ester centers have opposite SMILES tags around the same ring \u2014 this corresponds to a *trans*-diester pattern on t"
-    },
-    {
-      "rank": 10,
-      "id": "recKcjTwONILZqHAX",
-      "domain": "Physics",
-      "subdomain": "High-energy particle physics",
-      "anomaly_score": 3.5291796192016136,
-      "sample_prob": 0.004142926540225744,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 12.822541236877441,
-          "max_single_dim": 0.3437865674495697
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 1.187975287437439,
-          "signed_residual": 1.187975287437439
+          "abs_residual": 12.705741882324219,
+          "max_single_dim": 0.4079073369503021
         },
         {
           "feature": "n_latex",
-          "abs_residual": 0.7899540066719055,
-          "signed_residual": -0.7899540066719055
+          "abs_residual": 5.077760219573975,
+          "signed_residual": 5.077760219573975
         },
         {
-          "feature": "n_self_correction",
-          "abs_residual": 0.535468339920044,
-          "signed_residual": -0.535468339920044
-        }
-      ],
-      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
-      "response_excerpt": "Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that each loop contributes a factor of 1/(4\u03c0)\u00b2. This comes from the angular part of the 4D momentum integration: \u222bd\u2074k/(2\u03c0)\u2074 yields factors involving 1/(16\u03c0\u00b2) = 1/(4\u03c0)\u00b2 after the angular integration.\n\nThe size estimate contains 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]\u00b3, pointing to **3 loops**.\n\nThe peer's caveat is fair \u2014 coupling normalization conventions (like \u03b1 = e\u00b2/(4\u03c0)) can shuffle factors of 4\u03c0 between vertices and loops. But the question is clearly designe"
-    },
-    {
-      "rank": 11,
-      "id": "rec0VuKUjt1SZ7NYv",
-      "domain": "Physics",
-      "subdomain": "Relativistic Mechanics",
-      "anomaly_score": 41.72595128903254,
-      "sample_prob": 0.04898236691951752,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 12.222427368164062,
-          "max_single_dim": 0.379263699054718
-        },
-        {
-          "feature": "n_latex",
-          "abs_residual": 5.842528343200684,
-          "signed_residual": 5.842528343200684
+          "feature": "letter_A",
+          "abs_residual": 1.6678657531738281,
+          "signed_residual": 1.6678657531738281
         },
         {
           "feature": "letter_D",
-          "abs_residual": 1.9636088609695435,
-          "signed_residual": -1.9636088609695435
-        },
-        {
-          "feature": "letter_C",
-          "abs_residual": 1.0266631841659546,
-          "signed_residual": 1.0266631841659546
+          "abs_residual": 1.2922608852386475,
+          "signed_residual": -1.2922608852386475
         }
       ],
-      "query_excerpt": "Domain: Physics / Relativistic Mechanics\n\nQuestion: Consider the following metric:\n\nds^{2}=\\frac{32}{\\left(4-x^{2}-y^{2}\\right)}\\left(dx^{2}+dy^{2}\\right)\n\nWhat is the area of the pseudosphere of radius r=2?\n\nPS: for the maths use a LaTeX editor.\n\n(A) 4\\pi\\left(x^{2}+y^{2}\\right)\n(B) 4\\pi\\left(x^{2}",
-      "response_excerpt": "The metric is $ds^2 = \\frac{32}{4-x^2-y^2}(dx^2 + dy^2)$ on the disk $x^2+y^2 < 4$.\n\n**Area element:** $dA = \\frac{32}{4-x^2-y^2}\\, dx\\, dy$\n\n**In polar coordinates:**\n$$A = 2\\pi \\int_0^2 \\frac{32\\rho}{4-\\rho^2}\\, d\\rho = 64\\pi \\cdot \\left[-\\tfrac{1}{2}\\ln(4-\\rho^2)\\right]_0^2$$\n\nThis diverges logarithmically as $\\rho \\to 2^-$, giving $A = +\\infty$.\n\nThe peer endorses my answer and only flags a minor terminology caveat (the metric lacks the squared denominator of the standard Poincar\u00e9 disk, so it isn't constant-curvature hyperbolic geometry). That observation is correct but doesn't affect the "
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Consider a 1-dimensional relativistic harmonic oscillator with mass $m$ and maximum amplitude $A$ obeying Hook's law ($F=-kx$). What is the maximum speed  $v_max$ of the mass? The speed of light is $c$.\n\n(A) $v_{max}=c\\sqrt{1+\\frac{1}{(1-\\frac{kA^2}{2mc",
+      "response_excerpt": "The peer critique confirms my reasoning. Let me verify once more:\n\n**Energy conservation:** At turning point (x=A, v=0), total energy is rest energy plus potential:\n$$E = mc^2 + \\tfrac{1}{2}kA^2$$\n\nAt equilibrium (x=0, v=v_max), all energy is relativistic kinetic + rest:\n$$\\gamma mc^2 = mc^2 + \\tfrac{1}{2}kA^2$$\n\nSolving: $\\gamma = 1 + \\frac{kA^2}{2mc^2}$\n\n**Velocity from gamma:** Since $\\gamma = 1/\\sqrt{1-v^2/c^2}$:\n$$v_{max} = c\\sqrt{1 - 1/\\gamma^2} = c\\sqrt{1 - \\frac{1}{(1+\\frac{kA^2}{2mc^2})^2}}$$\n\n**Sanity check (nonrelativistic limit):** For small $kA^2/(2mc^2) \\equiv \\epsilon$:\n$$1 - \\f"
     },
     {
-      "rank": 12,
-      "id": "recf6ayQmL1SxKbvW",
-      "domain": "Biology",
-      "subdomain": "Molecular Biology",
-      "anomaly_score": 25.724763450449245,
-      "sample_prob": 0.030198467895388603,
+      "rank": 4,
+      "id": "recyPffUDqC2k7ZZO",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 48.226185790859745,
+      "sample_prob": 0.04932975396513939,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 10.91154956817627,
-          "max_single_dim": 0.3638979494571686
+          "abs_residual": 12.5292387008667,
+          "max_single_dim": 0.3716537654399872
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 6.171426296234131,
+          "signed_residual": 6.171426296234131
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 2.0603082180023193,
+          "signed_residual": 2.0603082180023193
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 1.5699511766433716,
+          "signed_residual": -1.5699511766433716
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Imagine an operator $\\vec{P}$ of a system have components $P_x, P_y$ and $P_z$. The matrix form of the  operator $P_x$ has components in the first row as $(0, \\hbar/\\sqrt{2}, 0)$, that in the second row as $(\\hbar/\\sqrt{2}, 0, \\hbar/\\sqrt{2})$ and that ",
+      "response_excerpt": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar) = 1/4$\n- $P(0) = 1/2$\n- $P(-\\hbar) = 1/4$\n\n$\\langle P_z \\rangle = (1/4)(\\hbar) + (1/2)(0) + (1/4)(-\\hbar) = 0$\n\n$\\langle P_z^2 \\rangle = (1/4)(\\hbar^2) + (1/2)(0) + (1/4)(\\hbar^2) = \\hbar^2/2$\n\n$(\\Delta P_z)^2 = \\hbar^2/2 - 0 = \\hbar^2/2$\n\n$\\Delta P_z = \\hbar/\\sqrt{2}$\n\nAnswer: D"
+    },
+    {
+      "rank": 5,
+      "id": "recf6ayQmL1SxKbvW",
+      "domain": "Biology",
+      "subdomain": "Molecular Biology",
+      "anomaly_score": 26.04204147422047,
+      "sample_prob": 0.02663796953856945,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.072754859924316,
+          "max_single_dim": 0.36435893177986145
         },
         {
           "feature": "n_questions",
-          "abs_residual": 3.695835590362549,
-          "signed_residual": 3.695835590362549
+          "abs_residual": 3.7873191833496094,
+          "signed_residual": 3.7873191833496094
         },
         {
           "feature": "response_len",
-          "abs_residual": 2.322908401489258,
-          "signed_residual": -2.322908401489258
+          "abs_residual": 2.2907395362854004,
+          "signed_residual": -2.2907395362854004
         },
         {
           "feature": "n_hedge_words",
-          "abs_residual": 1.608665108680725,
-          "signed_residual": -1.608665108680725
+          "abs_residual": 1.7939138412475586,
+          "signed_residual": -1.7939138412475586
         }
       ],
       "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: Imagine a situation where a novel natural molecule, Xantheraquin, is discovered and is being investigated for in silico testing against a bacterial pathogen that is multidrug resistant. Preliminary studies indicate that Xantheraquin has multiple chiral ",
       "response_excerpt": "The peer critique accepts my answer (B) but suggests refining the reasoning about D. Let me reconsider:\n\n**Step 1: What does the question actually ask?**\nThe MOST crucial step BEFORE in silico docking, given multiple chiral centers and tautomeric forms.\n\n**Step 2: Evaluate each option as pre-docking ligand preparation:**\n- **(A)** ADME/MD simulations \u2014 relevant later in the pipeline, doesn't address ligand state enumeration.\n- **(B)** Enumerate all tautomeric/chiral forms, then prioritize biologically plausible ones \u2014 directly addresses the stated complexity. This IS standard ligand preparatio"
     },
     {
-      "rank": 13,
-      "id": "recqLRu4BcJvlSANc",
+      "rank": 6,
+      "id": "recZbxrocrxh9YENH",
       "domain": "Chemistry",
       "subdomain": "Chemistry (general)",
-      "anomaly_score": 4.788601124173738,
-      "sample_prob": 0.005621370393782854,
+      "anomaly_score": 22.052672204174314,
+      "sample_prob": 0.02255730889737606,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 12.524332046508789,
-          "max_single_dim": 0.40732502937316895
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 1.4754014015197754,
-          "signed_residual": 1.4754014015197754
+          "abs_residual": 13.102842330932617,
+          "max_single_dim": 0.389135479927063
         },
         {
           "feature": "n_certainty_words",
-          "abs_residual": 1.0334537029266357,
-          "signed_residual": -1.0334537029266357
+          "abs_residual": 2.821514844894409,
+          "signed_residual": 2.821514844894409
         },
         {
           "feature": "n_hedge_words",
-          "abs_residual": 0.4242560863494873,
-          "signed_residual": -0.4242560863494873
+          "abs_residual": 2.2683184146881104,
+          "signed_residual": 2.2683184146881104
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.5180209875106812,
+          "signed_residual": -1.5180209875106812
         }
       ],
-      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: A chemical reaction for the synthesis of a product containing H+ ion was proceeding at room temperature and pH 1.  Accidentally an unknown substance was fallen into the running reaction making the rate of the reaction slower for the product formatio",
-      "response_excerpt": "The peer's critique is correct on the reasoning point. Let me refine:\n\n**Reconsidering the analysis:**\n\n- Reaction at pH 1 produces H+ \u2192 acid-catalyzed or acid-dependent reaction\n- Unknown substance added \u2192 exothermic + pH jumps 1\u21924 \u2192 classic **neutralization by a base**\n- [H+] dropped by ~1000\u00d7 (from 0.1 M to 0.0001 M)\n\n**Evaluating options:**\n\n- **(A) Pressure**: No basis for pressure change in solution\n- **(B) Temperature**: Temperature went *up*, which would *increase* rate (Arrhenius) \u2014 opposite of observed\n- **(C) pH increased**: The peer is right \u2014 Le Chatelier actually predicts the *fo"
+      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: Calculate the enthalpy of formation of (CH3)2C=CH-CH2-CH(CH3)-CH2-CH=C(CH3)2. Given,\nEnthalpy of atomization of carbon = 1000 kJ/mol.\nBond energy of H-H = 100 kJ/mol\nBond energy of C-C = 200 kJ/mol\nBond energy of C=C = 300 kJ/mol\nBond energy of C-H ",
+      "response_excerpt": "Looking at this again with the peer's critique in mind:\n\n**My calculation gives: \u0394Hf = 1900 kJ/mol** (the arithmetic is confirmed correct by the peer).\n\n**Evaluating the options:**\n- (A) 67.4 kJ/mol \u2014 doesn't match\n- (B) 11.44 kJ/g \u2014 only matches after an unsolicited per-gram conversion\n- (C) 1900 kJ/g \u2014 matches the calculated **number** exactly, with a unit label that appears to be a typo (should be kJ/mol)\n- (D) 11200 kJ/mol \u2014 this is just the bond-formation energy sum, not \u0394Hf\n\n**The peer is right.** Enthalpy of formation is conventionally reported per mole, and the question gives no indica"
+    },
+    {
+      "rank": 7,
+      "id": "recEmTBhx2hgw6tPQ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 5.351674089231494,
+      "sample_prob": 0.005474137142300606,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 11.853137969970703,
+          "max_single_dim": 0.4011388421058655
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.0847760438919067,
+          "signed_residual": -1.0847760438919067
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.0441159009933472,
+          "signed_residual": 1.0441159009933472
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.8999670147895813,
+          "signed_residual": -0.8999670147895813
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the EXO product of the following [4+2] cycloaddition reaction.\n2,5-dimethylthiophene + Furan-2,5-dione + Heat ---> ?\n\n(A) (3aR,4R,7S,7aS)-4,7-dimethyl-3a,4,7,7a-tetrahydro-4,7-epoxybenzo[c]thiophene-1,3-dione\n(B) (3aR,4R,7S,7aS)-4,7-dimethyl-",
+      "response_excerpt": "Re-examining this with the peer's critique in mind, I need to actually walk through the CIP assignment rather than assert the pattern.\n\n## Re-analysis\n\n**Connectivity (still solid):** thiophene supplies the **epithio** bridge; maleic anhydride contributes the **isobenzofuran-1,3-dione** core. So the answer is B or C.\n\n**Critical priority issue at C3a (which I oversimplified):**\n\nAt C3a, comparing the three carbon substituents (excluding H):\n- **C4** (bridgehead): neighbors {S, C, C} \u2014 highest is **S (Z=16)**\n- **C(=O) anhydride**: neighbors {O, O, O} \u2014 highest is **O (Z=8)**\n- **C7a**: neighbo"
+    },
+    {
+      "rank": 8,
+      "id": "recZt4x514UQNnsgy",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 5.4290785218609585,
+      "sample_prob": 0.005553313065320253,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.094033241271973,
+          "max_single_dim": 0.3859264552593231
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.374127984046936,
+          "signed_residual": 1.374127984046936
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.8849189281463623,
+          "signed_residual": -0.8849189281463623
+        },
+        {
+          "feature": "letter_unknown",
+          "abs_residual": 0.6886471509933472,
+          "signed_residual": 0.6886471509933472
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Identify the starting material(s) required to synthesize methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate.\n\n(A) Cyclohexene and methyl 2,3-dimethylenehexanoate\n(B) methyl (2E,8E,10E)-tetradeca-2,8,10-trienoate\n(C) 1-vinylcyclohex-1",
+      "response_excerpt": "The peer critique is correct on both points:\n\n1. **Re: option A** \u2014 My rejection was poorly worded. Cyclohexene *can* serve as a dienophile, and methyl 2,3-dimethylenehexanoate is a legitimate diene (an exocyclic/cross-conjugated diene with an ester). The real reason A fails is regiochemical: a Diels-Alder between this diene and cyclohexene would put the COOMe and propyl substituents on the carbons that *retain* the double bond in the new cyclohexene ring (since those substituents sit on the diene termini that become the new sp\u00b2 carbons C2=C3 of the product). That's incompatible with the targe"
+    },
+    {
+      "rank": 9,
+      "id": "reczzzihL7btBH7RO",
+      "domain": "Physics",
+      "subdomain": "Relativistic Mechanics",
+      "anomaly_score": 7.961237975113363,
+      "sample_prob": 0.008143416605889797,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.695878982543945,
+          "max_single_dim": 0.3830278813838959
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 1.7673715353012085,
+          "signed_residual": -1.7673715353012085
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 1.677626132965088,
+          "signed_residual": 1.677626132965088
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 0.739105224609375,
+          "signed_residual": -0.739105224609375
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Relativistic Mechanics\n\nQuestion: While designing a high-resolution transmission electron microscope operating at an accelerating voltage of 1000 kV, Mike connected vacuum pumps to create an ultra-high vacuum state (< 10^-9 Torr) in the sample compartment, aiming to minimize the pr",
+      "response_excerpt": "Looking at this critique, I need to assess whether the peer's objections actually defeat the answer C, or whether they're technically valid concerns that don't change the conclusion.\n\n**Evaluating the critique:**\n\n1. **Cross-section concern:** The peer is right that electron scattering cross-sections differ from gas-kinetic hard-sphere cross-sections in principle. However, this question is a standard textbook problem testing the \u221a2 factor from kinetic theory. The conventional treatment assumes the same geometric cross-section to isolate the kinematic effect. This is the pedagogically intended "
+    },
+    {
+      "rank": 10,
+      "id": "recdya6FuYraBU5Rh",
+      "domain": "Physics",
+      "subdomain": "Physics (general)",
+      "anomaly_score": 3.337727404678162,
+      "sample_prob": 0.0034141051582992077,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.588777542114258,
+          "max_single_dim": 0.4174610674381256
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.7497419714927673,
+          "signed_residual": -0.7497419714927673
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.7220320701599121,
+          "signed_residual": 0.7220320701599121
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.6978237628936768,
+          "signed_residual": 0.6978237628936768
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Physics (general)\n\nQuestion: Astronomers are searching for exoplanets around two stars with exactly the same masses. Using the RV method, they detected one planet around each star, both with masses similar to that of Neptune. The stars themselves have masses similar to that of our ",
+      "response_excerpt": "The peer endorses my answer with a valid caveat about the problem's under-specification (Neptune-similar masses, sin i unstated). Both are standard assumptions for this type of textbook problem.\n\nThe physics: For circular orbits, RV semi-amplitude K = (2\u03c0G/P)^(1/3) \u00b7 M_p sin i / M_star^(2/3).\n\nWith identical stellar masses and assuming identical M_p sin i:\n- K \u221d P^(-1/3)\n- P \u221d K^(-3)\n- \u0394\u03bb \u221d K (same spectral line, Doppler)\n\nTherefore P\u2082/P\u2081 = (K\u2081/K\u2082)\u00b3 = (5/7)\u00b3 = 125/343 \u2248 0.364\n\nAnswer: A"
+    },
+    {
+      "rank": 11,
+      "id": "recNuT2oSnO86bxOx",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.0767830606200732,
+      "sample_prob": 0.0011014231713488698,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.425193786621094,
+          "max_single_dim": 0.36927908658981323
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.15728244185447693,
+          "signed_residual": 0.15728244185447693
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.15098649263381958,
+          "signed_residual": -0.15098649263381958
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.14751002192497253,
+          "signed_residual": -0.14751002192497253
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: benzene is treated with HNO3 and H2SO4, forming product 1.\nproduct 1 is treated with Br2 and iron powder, forming product 2.\nproduct 2 is stirred with Pd/C under a hydrogen atmosphere, forming product 3.\nProduct 3 is treated with NaNO2 and HBF4, formi",
+      "response_excerpt": "The peer agrees with my answer (B) and only flags wording ambiguity at step 5. Reviewing the synthesis:\n\n1. Benzene \u2192 nitrobenzene\n2. \u2192 3-bromonitrobenzene (meta-direction by NO2)\n3. \u2192 3-bromoaniline (NO2 reduced to NH2; C-Br survives Pd/C since it's an aryl bromide and conditions aren't forcing)\n4. \u2192 3-bromobenzenediazonium tetrafluoroborate\n5. Heating an aryldiazonium salt in the presence of an arene (anisole) is the classic Gomberg-Bachmann setup; the aryl radical attacks anisole predominantly at the para position (ortho/para-directing OMe, with para favored sterically). Pure Balz-Schiemann"
+    },
+    {
+      "rank": 12,
+      "id": "recHVUd2DkoKfedJZ",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 3.1908253269796347,
+      "sample_prob": 0.003263841150328517,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.159786224365234,
+          "max_single_dim": 0.35837695002555847
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 0.8710602521896362,
+          "signed_residual": -0.8710602521896362
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.6763825416564941,
+          "signed_residual": 0.6763825416564941
+        },
+        {
+          "feature": "n_latex",
+          "abs_residual": 0.6490762829780579,
+          "signed_residual": 0.6490762829780579
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Enamine reactions include nucleophilic substitutions, electrophilic additions, and the condensation of secondary amines with carbonyl compounds to generate enamines. Enamine reactions are useful techniques for creating complex compounds with specified",
+      "response_excerpt": "The critique confirms my reasoning and endorses choice A. Both my analysis and the peer's review agree:\n\n1. **Mechanism**: LDA deprotonates the iminium/enaminium to form the enamine, which is \u03b1-alkylated by ethyl iodide, then hydrolyzed by H\u2083O\u207a to regenerate the ketone.\n\n2. **Product tracking**: Ethylation at the less-hindered methyl side of pentan-2-one (CH\u2083\u2013CO\u2013CH\u2082CH\u2082CH\u2083) extends C1 to a propyl chain, giving CH\u2083CH\u2082CH\u2082\u2013CO\u2013CH\u2082CH\u2082CH\u2083 = **heptan-4-one**.\n\n3. **Reagent order**: Three discrete steps with DME as co-solvent for LDA \u2014 matches (A) over (B).\n\n4. Choices (C) and (D) ignore the alkylation"
+    },
+    {
+      "rank": 13,
+      "id": "recKcjTwONILZqHAX",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "anomaly_score": 3.476808522842475,
+      "sample_prob": 0.003556368872523308,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 12.872358322143555,
+          "max_single_dim": 0.3403160274028778
+        },
+        {
+          "feature": "n_certainty_words",
+          "abs_residual": 1.2093980312347412,
+          "signed_residual": 1.2093980312347412
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 0.6183569431304932,
+          "signed_residual": -0.6183569431304932
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.462933212518692,
+          "signed_residual": -0.462933212518692
+        }
+      ],
+      "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Your colleague has devised a new quantum field theory on four-dimensional spacetime, and is exploring the regularization of certain higher-order loop diagrams in that theory. On their desk you spy a scribbled note: a Feynman diagram, and next",
+      "response_excerpt": "Looking at this problem again with the critique in mind:\n\nThe standard loop-counting heuristic in 4D quantum field theory (Naive Dimensional Analysis) is that each loop contributes a factor of 1/(4\u03c0)\u00b2. This comes from the angular part of the 4D momentum integration: \u222bd\u2074k/(2\u03c0)\u2074 yields factors involving 1/(16\u03c0\u00b2) = 1/(4\u03c0)\u00b2 after the angular integration.\n\nThe size estimate contains 1/(4\u03c0)\u2076 = [1/(4\u03c0)\u00b2]\u00b3, pointing to **3 loops**.\n\nThe peer's caveat is fair \u2014 coupling normalization conventions (like \u03b1 = e\u00b2/(4\u03c0)) can shuffle factors of 4\u03c0 between vertices and loops. But the question is clearly designe"
     },
     {
       "rank": 14,
       "id": "rec47oNPXudlTIk4y",
       "domain": "Chemistry",
       "subdomain": "Chemistry (general)",
-      "anomaly_score": 26.964949457150396,
-      "sample_prob": 0.03165432810783386,
+      "anomaly_score": 27.267397854439196,
+      "sample_prob": 0.027891363948583603,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 12.890347480773926,
-          "max_single_dim": 0.3573954701423645
+          "abs_residual": 12.592362403869629,
+          "max_single_dim": 0.35518425703048706
         },
         {
           "feature": "n_certainty_words",
-          "abs_residual": 4.504290580749512,
-          "signed_residual": 4.504290580749512
+          "abs_residual": 4.418914794921875,
+          "signed_residual": 4.418914794921875
         },
         {
-          "feature": "n_self_correction",
-          "abs_residual": 1.4987260103225708,
-          "signed_residual": -1.4987260103225708
+          "feature": "letter_A",
+          "abs_residual": 1.5247637033462524,
+          "signed_residual": -1.5247637033462524
         },
         {
-          "feature": "letter_C",
-          "abs_residual": 0.8298614025115967,
-          "signed_residual": -0.8298614025115967
+          "feature": "letter_unknown",
+          "abs_residual": 1.3719373941421509,
+          "signed_residual": 1.3719373941421509
         }
       ],
       "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: In an industrial research lab, a scientist performs ethylene polymerization with a homogeneous organometallic catalyst system, generating a polymer of high density. He intends to add a second catalyst system to introduce regular branches in the poly",
@@ -458,95 +458,95 @@
     },
     {
       "rank": 15,
-      "id": "recPL4ZPpVYxgMu57",
-      "domain": "Physics",
-      "subdomain": "High-energy particle physics",
-      "anomaly_score": 15.989757270291705,
-      "sample_prob": 0.018770480528473854,
+      "id": "recrHBEJJoDTV05JR",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 1.1992161723038066,
+      "sample_prob": 0.0012266580015420914,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.614792823791504,
-          "max_single_dim": 0.3857044577598572
-        },
-        {
-          "feature": "n_self_correction",
-          "abs_residual": 3.2770304679870605,
-          "signed_residual": 3.2770304679870605
+          "abs_residual": 13.194507598876953,
+          "max_single_dim": 0.41726192831993103
         },
         {
           "feature": "response_len",
-          "abs_residual": 1.5537309646606445,
-          "signed_residual": -1.5537309646606445
+          "abs_residual": 0.2951827943325043,
+          "signed_residual": 0.2951827943325043
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 0.23207423090934753,
+          "signed_residual": -0.23207423090934753
         },
         {
           "feature": "n_questions",
-          "abs_residual": 0.9561011791229248,
-          "signed_residual": -0.9561011791229248
+          "abs_residual": 0.20680966973304749,
+          "signed_residual": -0.20680966973304749
+        }
+      ],
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: Substance X, known for incorporating a heavier isotope of one of its constituent elements, reacts violently with liquid Y with the release of a gas W whose molecule contains the same number of neutrons and protons, and a precipitate G forms, which, wh",
+      "response_excerpt": "The peer reviewer agrees with my answer and raises only minor caveats that don't change the conclusion.\n\n**Verification:**\n- X = LiAlD\u2084 (deuterated lithium aluminum hydride; close analog LiAlH\u2084 is the famous reagent)\n- Y = D\u2082O (must be heavy water for self-consistency: violent reaction \u2192 D\u2082 gas with equal n=p, and B = D\u2082O with mp \u2248 277 K matches)\n- W = D\u2082 (2 protons, 2 neutrons \u2713)\n- G = Al(OD)\u2083, which on heating gives Al\u2082O\u2083 + D\u2082O (= B) \u2713\n- Keto acid \u2192 product with 2 O atoms: pyruvic acid \u2192 1,2-propanediol works\n\n**Mass calculation in LiAlD\u2084:**\n- Lightest element = H (Z=1), present as 4 deuteri"
+    },
+    {
+      "rank": 16,
+      "id": "recPL4ZPpVYxgMu57",
+      "domain": "Physics",
+      "subdomain": "High-energy particle physics",
+      "anomaly_score": 14.436747314539389,
+      "sample_prob": 0.01476710569113493,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.64051342010498,
+          "max_single_dim": 0.384078711271286
+        },
+        {
+          "feature": "n_self_correction",
+          "abs_residual": 2.9814109802246094,
+          "signed_residual": 2.9814109802246094
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.4113227128982544,
+          "signed_residual": -1.4113227128982544
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 1.0704289674758911,
+          "signed_residual": -1.0704289674758911
         }
       ],
       "query_excerpt": "Domain: Physics / High-energy particle physics\n\nQuestion: Which of the following symmetries must be respected by all operators in the SMEFT?\n\n1. Lorentz Symmetry\n2. Poincare symmetry\n3. CP symmetry\n4. CPT symmetry\n\n(A) 1,3,4\n(B) 1,2,4\n(C) 3,4\n(D) 1,2",
       "response_excerpt": "The peer critique actually reinforces my original answer. Let me reconsider:\n\n1. **Lorentz symmetry** \u2713 \u2014 SMEFT is built as a relativistic QFT\n2. **Poincar\u00e9 symmetry** \u2713 \u2014 includes translations, required for relativistic QFT\n3. **CP symmetry** \u2717 \u2014 SM already violates CP; SMEFT explicitly includes CP-violating operators\n4. **CPT symmetry** \u2713 \u2014 follows from CPT theorem (locality + Lorentz invariance + Hermiticity)\n\nThe peer's caveat about CPT applying to the Hermitian Lagrangian rather than individual non-Hermitian basis operators is technically valid but doesn't change the answer at the multipl"
     },
     {
-      "rank": 16,
-      "id": "recyPffUDqC2k7ZZO",
-      "domain": "Physics",
-      "subdomain": "Quantum Mechanics",
-      "anomaly_score": 67.20651524767527,
-      "sample_prob": 0.07889417558908463,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 12.189519882202148,
-          "max_single_dim": 0.37661659717559814
-        },
-        {
-          "feature": "n_latex",
-          "abs_residual": 7.463920593261719,
-          "signed_residual": 7.463920593261719
-        },
-        {
-          "feature": "letter_D",
-          "abs_residual": 2.5170435905456543,
-          "signed_residual": -2.5170435905456543
-        },
-        {
-          "feature": "letter_C",
-          "abs_residual": 1.311280608177185,
-          "signed_residual": 1.311280608177185
-        }
-      ],
-      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Imagine an operator $\\vec{P}$ of a system have components $P_x, P_y$ and $P_z$. The matrix form of the  operator $P_x$ has components in the first row as $(0, \\hbar/\\sqrt{2}, 0)$, that in the second row as $(\\hbar/\\sqrt{2}, 0, \\hbar/\\sqrt{2})$ and that ",
-      "response_excerpt": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar) = 1/4$\n- $P(0) = 1/2$\n- $P(-\\hbar) = 1/4$\n\n$\\langle P_z \\rangle = (1/4)(\\hbar) + (1/2)(0) + (1/4)(-\\hbar) = 0$\n\n$\\langle P_z^2 \\rangle = (1/4)(\\hbar^2) + (1/2)(0) + (1/4)(\\hbar^2) = \\hbar^2/2$\n\n$(\\Delta P_z)^2 = \\hbar^2/2 - 0 = \\hbar^2/2$\n\n$\\Delta P_z = \\hbar/\\sqrt{2}$\n\nAnswer: D"
-    },
-    {
       "rank": 17,
       "id": "recDDxpS9s8cwkqfq",
       "domain": "Chemistry",
       "subdomain": "Organic Chemistry",
-      "anomaly_score": 35.37834609169499,
-      "sample_prob": 0.04153086617588997,
+      "anomaly_score": 36.09965535812444,
+      "sample_prob": 0.03692572936415672,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.518627166748047,
-          "max_single_dim": 0.39803239703178406
+          "abs_residual": 13.706548690795898,
+          "max_single_dim": 0.40337520837783813
         },
         {
           "feature": "n_questions",
-          "abs_residual": 4.580564975738525,
-          "signed_residual": 4.580564975738525
+          "abs_residual": 4.5431437492370605,
+          "signed_residual": 4.5431437492370605
         },
         {
           "feature": "n_self_correction",
-          "abs_residual": 2.02704119682312,
-          "signed_residual": -2.02704119682312
+          "abs_residual": 2.4494683742523193,
+          "signed_residual": -2.4494683742523193
         },
         {
           "feature": "letter_unknown",
-          "abs_residual": 1.4909240007400513,
-          "signed_residual": -1.4909240007400513
+          "abs_residual": 1.8312855958938599,
+          "signed_residual": -1.8312855958938599
         }
       ],
       "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: A textile dye containing an extensively conjugated pi-electrons emits light with energy of 2.3393 eV. What color of light is absorbed by the organic compound?\n\n(A) Yellow\n(B) Blue\n(C) Red\n(D) Violet",
@@ -554,99 +554,99 @@
     },
     {
       "rank": 18,
-      "id": "recVvpD8miVjmmyfe",
-      "domain": "Biology",
-      "subdomain": "Molecular Biology",
-      "anomaly_score": 2.0185621271375567,
-      "sample_prob": 0.002369602909311652,
+      "id": "reccOKzFNmyqeJ6ry",
+      "domain": "Chemistry",
+      "subdomain": "Organic Chemistry",
+      "anomaly_score": 2.7850565581923235,
+      "sample_prob": 0.002848787698894739,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.250215530395508,
-          "max_single_dim": 0.36252954602241516
+          "abs_residual": 12.716106414794922,
+          "max_single_dim": 0.3279952108860016
         },
         {
           "feature": "n_latex",
-          "abs_residual": 0.7849698662757874,
-          "signed_residual": -0.7849698662757874
+          "abs_residual": 0.7931861281394958,
+          "signed_residual": 0.7931861281394958
         },
         {
           "feature": "n_certainty_words",
-          "abs_residual": 0.4208278954029083,
-          "signed_residual": -0.4208278954029083
-        },
-        {
-          "feature": "letter_D",
-          "abs_residual": 0.3438793420791626,
-          "signed_residual": 0.3438793420791626
-        }
-      ],
-      "query_excerpt": "Domain: Biology / Molecular Biology\n\nQuestion: You come across an algorithm that gives the following output (written as input -> output):\n\nAGG -> 115\nTGCTGA -> 176\n\nWhat value does ACAGTGACC give?\n\n(A) 185\n(B) 333\n(C) 351\n(D) 315",
-      "response_excerpt": "Looking at this again with the critique in mind:\n\n**Verifying AGG \u2192 115:**\n- Reverse complement of AGG = CCT\n- mRNA: CCU = Pro\n- Pro residue (97.12) + H\u2082O (18.02) = 115.14 \u2248 **115** \u2713\n\n**Verifying TGCTGA \u2192 176:**\n- Reverse complement = TCAGCA\n- mRNA: UCA-GCA = Ser-Ala\n- Ser residue (87.08) + Ala residue (71.08) + H\u2082O (18.02) = 176.18 \u2248 **176** \u2713\n\n**Applying to ACAGTGACC:**\n- Reverse complement: GGTCACTGT\n- mRNA: GGU-CAC-UGU = Gly-His-Cys\n- Gly (57.05) + His (137.14) + Cys (103.14) + H\u2082O (18.02) = 315.35 \u2248 **315** \u2713\n\nThe peer critique correctly notes the residue-mass convention and endorses the"
-    },
-    {
-      "rank": 19,
-      "id": "recYOzCsevNz61Lyn",
-      "domain": "Chemistry",
-      "subdomain": "Chemistry (general)",
-      "anomaly_score": 8.317017680549043,
-      "sample_prob": 0.009763401001691818,
-      "top_features": [
-        {
-          "feature": "embedding_total",
-          "abs_residual": 12.791181564331055,
-          "max_single_dim": 0.4154224991798401
-        },
-        {
-          "feature": "n_hedge_words",
-          "abs_residual": 1.6930510997772217,
-          "signed_residual": 1.6930510997772217
-        },
-        {
-          "feature": "n_questions",
-          "abs_residual": 1.5298429727554321,
-          "signed_residual": -1.5298429727554321
+          "abs_residual": 0.6461384296417236,
+          "signed_residual": 0.6461384296417236
         },
         {
           "feature": "letter_unknown",
-          "abs_residual": 1.1408230066299438,
-          "signed_residual": -1.1408230066299438
+          "abs_residual": 0.560123085975647,
+          "signed_residual": 0.560123085975647
         }
       ],
-      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: You have prepared a di-substituted 6-membered aromatic ring compound containing 8 carbon atoms in total. Peaks in the FTIR spectrum of this compound indicate the presence of a carbonyl group as well as an aromatic-halogen bond. Identify the correct ",
-      "response_excerpt": "Looking at the critique carefully, the peer raises fair points about underdetermination, but I think the analysis missed some decisive multiplicity evidence. Let me reconsider:\n\n**Reviewing both candidates more rigorously:**\n\n**Option D \u2014 4-haloacetophenone (X\u2013C\u2086H\u2084\u2013COCH\u2083):**\n- Real reference data (e.g., 4-bromoacetophenone): aromatic H at 7.83/7.59 ppm, CH\u2083 as singlet \u2713\n- COCH\u2083 as a 3H singlet (no neighboring H) \u2014 matches D exactly \u2713\n- All multiplicities are internally consistent \u2713\n\n**Option B \u2014 4-halophenylacetaldehyde (X\u2013C\u2086H\u2084\u2013CH\u2082\u2013CHO):**\n- Aromatic shifts: real compounds show ~7.15\u20137.25 ppm "
+      "query_excerpt": "Domain: Chemistry / Organic Chemistry\n\nQuestion: A student performed an acid-catalyzed reaction of 3-methylpyrrolidine with compound A, the final product of the reaction is 1-(cyclohexylidenemethyl)-3-methylpyrrolidine. Select the suitable reagent (A) and catalyst (B) for the reaction.\n3-methylpyrro",
+      "response_excerpt": "The product 1-(cyclohexylidenemethyl)-3-methylpyrrolidine is an enamine with connectivity N\u2013CH=C(cyclohexylidene). This forms from a secondary amine condensing with an aldehyde bearing \u03b1-hydrogens.\n\nCyclohexanecarbaldehyde (C\u2086H\u2081\u2081\u2013CHO) has \u03b1-H on the ring carbon. Condensation with 3-methylpyrrolidine (secondary amine) followed by dehydration gives exactly the exocyclic enamine described. Vinylcyclohexane is an alkene and does not give enamines under acid catalysis with amines.\n\nThe peer's caveat is fair: acetic acid can catalyze enamine formation (and is sometimes preferred to avoid over-proton"
     },
     {
-      "rank": 20,
-      "id": "recooG6bivTUJpDBz",
-      "domain": "Chemistry",
-      "subdomain": "Chemistry (general)",
-      "anomaly_score": 3.5315776125518283,
-      "sample_prob": 0.004145741928368807,
+      "rank": 19,
+      "id": "rec0VuKUjt1SZ7NYv",
+      "domain": "Physics",
+      "subdomain": "Relativistic Mechanics",
+      "anomaly_score": 30.16342691734303,
+      "sample_prob": 0.03085366077721119,
       "top_features": [
         {
           "feature": "embedding_total",
-          "abs_residual": 13.160451889038086,
-          "max_single_dim": 0.33547747135162354
-        },
-        {
-          "feature": "n_certainty_words",
-          "abs_residual": 1.158032774925232,
-          "signed_residual": 1.158032774925232
+          "abs_residual": 12.317686080932617,
+          "max_single_dim": 0.37456604838371277
         },
         {
           "feature": "n_latex",
-          "abs_residual": 0.7816340923309326,
-          "signed_residual": -0.7816340923309326
+          "abs_residual": 4.834742546081543,
+          "signed_residual": 4.834742546081543
+        },
+        {
+          "feature": "letter_A",
+          "abs_residual": 1.5954349040985107,
+          "signed_residual": 1.5954349040985107
+        },
+        {
+          "feature": "letter_D",
+          "abs_residual": 1.2171269655227661,
+          "signed_residual": -1.2171269655227661
+        }
+      ],
+      "query_excerpt": "Domain: Physics / Relativistic Mechanics\n\nQuestion: Consider the following metric:\n\nds^{2}=\\frac{32}{\\left(4-x^{2}-y^{2}\\right)}\\left(dx^{2}+dy^{2}\\right)\n\nWhat is the area of the pseudosphere of radius r=2?\n\nPS: for the maths use a LaTeX editor.\n\n(A) 4\\pi\\left(x^{2}+y^{2}\\right)\n(B) 4\\pi\\left(x^{2}",
+      "response_excerpt": "The metric is $ds^2 = \\frac{32}{4-x^2-y^2}(dx^2 + dy^2)$ on the disk $x^2+y^2 < 4$.\n\n**Area element:** $dA = \\frac{32}{4-x^2-y^2}\\, dx\\, dy$\n\n**In polar coordinates:**\n$$A = 2\\pi \\int_0^2 \\frac{32\\rho}{4-\\rho^2}\\, d\\rho = 64\\pi \\cdot \\left[-\\tfrac{1}{2}\\ln(4-\\rho^2)\\right]_0^2$$\n\nThis diverges logarithmically as $\\rho \\to 2^-$, giving $A = +\\infty$.\n\nThe peer endorses my answer and only flags a minor terminology caveat (the metric lacks the squared denominator of the standard Poincar\u00e9 disk, so it isn't constant-curvature hyperbolic geometry). That observation is correct but doesn't affect the "
+    },
+    {
+      "rank": 20,
+      "id": "recgM7o1tcc7tP778",
+      "domain": "Physics",
+      "subdomain": "Quantum Mechanics",
+      "anomaly_score": 5.134896614602496,
+      "sample_prob": 0.005252399947494268,
+      "top_features": [
+        {
+          "feature": "embedding_total",
+          "abs_residual": 13.311179161071777,
+          "max_single_dim": 0.34904471039772034
+        },
+        {
+          "feature": "response_len",
+          "abs_residual": 1.5704265832901,
+          "signed_residual": 1.5704265832901
         },
         {
           "feature": "n_self_correction",
-          "abs_residual": 0.586420476436615,
-          "signed_residual": -0.586420476436615
+          "abs_residual": 0.8856085538864136,
+          "signed_residual": -0.8856085538864136
+        },
+        {
+          "feature": "n_questions",
+          "abs_residual": 0.6459159255027771,
+          "signed_residual": -0.6459159255027771
         }
       ],
-      "query_excerpt": "Domain: Chemistry / Chemistry (general)\n\nQuestion: The 1H NMR spectrum of a solution containing a 1:1 mixture of two aromatic compounds with the molecular formula C10H14 exhibits two signals (two singlets) at around 6.7 ppm in a 1:1 ratio. There are also three signals at around 2.2 ppm (all singlets",
-      "response_excerpt": "Looking at this carefully:\n\n**Required pattern:** 2 aromatic singlets (1:1) + 3 methyl singlets (2:1:1), all near 2.2 ppm.\n\n**Compound-by-compound NMR analysis:**\n\n- **1,2,4,5-tetramethylbenzene (durene):** 1 aromatic singlet (2H), 1 methyl singlet (12H)\n- **1,2,3,4-tetramethylbenzene (prehnitene):** 1 aromatic singlet (2H), 2 methyl singlets (6H:6H)\n- **1,2,3,5-tetramethylbenzene (isodurene):** 1 aromatic singlet (2H), 3 methyl singlets (6:3:3)\n- **1,4-diethylbenzene:** aromatic singlet + CH\u2082 quartet + CH\u2083 triplet (not singlets)\n\n**Testing option D (durene + prehnitene):**\n- Aromatic region: "
+      "query_excerpt": "Domain: Physics / Quantum Mechanics\n\nQuestion: Consider a bound system of two nucleons (NN) in a 1S0 state which emit a particle X of intrinsic parity -1. Pauli statistics require that the isospin, angular momentum, and spin quantum numbers of the final NN state satisfy T(NN) = S(NN) + L(NN) + 1 (mo",
+      "response_excerpt": "Looking at this carefully, let me re-examine each option against all constraints.\n\n**Constraints:**\n1. Pauli (T=0): S(NN) + L(NN) must be odd\n2. Angular momentum: J(NN) = l(X) (since J_initial = 0)\n3. Parity: L(NN) + l(X) must be odd\n4. Physical validity: S(NN) \u2208 {0, 1} for two spin-1/2 nucleons\n\n**Option (A) 3D3 + f:** S=1, L=2, J=3, l=3 \u2014 Pauli: 3 odd \u2713, J=3=l \u2713, parity: 5 odd \u2713. **Permitted**\n\n**Option (B) 7D1 + p:** Requires S=3, which is **physically impossible** for two spin-1/2 nucleons (max S=1). The term symbol itself doesn't describe any NN state.\n\n**Option (C) 3S1 + p:** S=1, L=0, J"
     }
   ]
 }

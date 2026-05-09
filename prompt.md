@@ -277,6 +277,30 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 8. **Don't over-engineer v0.1.** Single feature set, one kernel, one detector. Don't pre-build
    the multi-agent decomposition for v0.1 — that's v0.2's job.
 
+## NL43 — agent-chat re-run COMPLETE; tracks refreshed on full data
+
+Agent-chat run ended at 198/198, 175 correct = **88.4%**. Final 3-way:
+
+| | n=198 | acc | net vs ac |
+|---|---|---|---|
+| codex | 177/198 | **89.4%** | +2 |
+| claude | 176/198 | 88.9% | +1 |
+| agent-chat | 175/198 | 88.4% | — |
+
+Paired wins: vs claude 5 fix / 6 break (-1, noise); vs codex 9 fix / 11 break (-2). Flip ledger 4 fix / 3 break / 0 neutral, +1 net. **Same conclusion as the partial:** agent-chat is statistically tied with both single-model baselines on GPQA — neither winning nor catastrophically losing.
+
+Per-domain (paired n=198):
+- Physics: codex 96.5%, claude 97.7%, agent-chat 96.5% — saturated, no headroom
+- Chemistry: codex 84.9%, claude 87.1%, agent-chat 86.0% — tight cluster
+- Biology: codex 78.9%, claude 57.9%, agent-chat 63.2% — agent-chat lifts claude by +5% on its weakest domain
+
+Track A and Track C re-ran on the full 198/197/194 valid responses; cross-track convergence on `rec6sE2CRtD4drtHg` (Coleman-Weinberg) confirmed even more strongly:
+- Track A codex anomaly score 54.3 (still rank 2 of 20)
+- Track A claude anomaly score 46+ (similar pattern)
+- Track C total disagreement 228.4 (rank 3), codex contributes 156.1 of that
+
+Track A agent_chat surfaced a new anomaly that wasn't in the partial: `recywRj5a8EEjj2Ib` (Physics, score 33.0, n_latex-driven) — one of the post-reboot re-run questions where agent-chat went unusually heavy on math notation.
+
 ## NL42 build status — ALL THREE TRACKS SHIPPED
 
 ### Track A (cf16e1e) — per-agent anomaly detector
