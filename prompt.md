@@ -308,6 +308,26 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL56 — v1.3 also refuted, IDENTICAL outcome pattern to v1.2
+
+Tested v1.3 (Step 0: question-interpretation check before VALID/INVALID rebuttal) on the same 8 v1.1-flipped cases.
+
+| outcome | v1.2 | v1.3 |
+|---|---|---|
+| FIXES-v11 | 1 | 1 (same case: recDDxpS9s8cwkqfq) |
+| BREAKS-v11 | 4 | 4 |
+| BOTH-CORRECT | 2 | 2 |
+| BOTH-WRONG | 1 | 1 |
+| net delta | **-3** | **-3** |
+
+**Both v1.2 ("tie goes to critique") and v1.3 ("question-restate first") produce IDENTICAL loss patterns.** Both fix the over-defensive recDDxpS9s8cwkqfq case, both break 4 of v1.1's 6 hard-won fixes.
+
+This is a stronger Popper-style refutation than v1.2 alone: two **completely different** prompt modifications addressing the same failure mode converge on the same loss. **v1.1 sits at a sharp local optimum** on this benchmark — there's no simple prompt change that fixes recDDxpS9s8cwkqfq without breaking the other cases.
+
+The recDDxpS9s8cwkqfq class of error (question-misinterpretation hidden behind a vague critique) likely requires a fundamentally different intervention — perhaps having codex VERIFY orion's question restatement BEFORE producing its critique, rather than asking orion to restate post-hoc.
+
+**Practical takeaway: ship v1.1 as production. v1.0 → v1.1 was a clear win (+4 net at scale, 92% deferential reduction). v1.1 → v1.x for x ≥ 2 has not produced an improvement on this benchmark.**
+
 ## NL55 — letter-A bias refuted; v1.1 cuts unparseable rate in half
 
 The NL50 cluster-0 letter_A +0.77σ signature predicted v1.1 might over-pick A. Population-level letter distribution refutes:
