@@ -308,6 +308,29 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL54 — Codex/claude solo responses: judge features don't fire (expected)
+
+Sampled 30 codex + 30 claude single-shot baseline responses, ran through the same 6-category LLM-judge:
+
+| | codex (n=30) | claude (n=30) |
+|---|---|---|
+| DEFERENTIAL | 0% | 0% |
+| REBUTTAL | 0% | 0% |
+| REFUSAL | 0% | 3.3% (1) |
+| ASKS_BACK | 0% | 0% |
+| OVERCONFIDENT | 0% | 0% |
+| CODE_HEAVY | 6.7% (2) | 0% |
+
+The 6 judge categories were designed around agent_chat-specific failure modes (critique-response interaction). They don't fire on solo responses, as expected: DEFERENTIAL/REBUTTAL require a critique to react to; OVERCONFIDENT/ASKS_BACK aren't characteristic of normal answer-style responses either.
+
+Only signals that fire:
+- **codex 6.7% CODE_HEAVY** vs claude 0%: codex uses code blocks 2× more than claude (consistent with the "codex math-heavy anomalies" finding from Track A on agent_chat data).
+- **claude 3.3% REFUSAL**: the known Usage-Policy refusals from the GPQA biology subset.
+
+Methodological lesson: substrate features should be **task-specific**. The 6-category judge encodes domain knowledge about agent_chat orchestration. To analyze solo responses meaningfully, we'd need different categories (CHAIN_OF_THOUGHT_DEPTH, CONCISE_DIRECT, VERBOSE, MATH_HEAVY, etc.).
+
+This is actually consistent with the substrate's value model: features should be designed FOR THE INTERVENTION you're studying. The 6-category judge correctly characterized agent_chat reasoning style and validated the v1.1 fix; trying to apply it to a different setting (solo responses) shows its scope correctly bounded.
+
 ## NL53 — Judge-only clustering: clean style separation visualized
 
 Re-clustered on judge features alone (6 dims), dropping the 384-dim embedding that had dwarfed the judge dims in v0.2's k-means.
