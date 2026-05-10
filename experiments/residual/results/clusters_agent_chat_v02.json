@@ -1,0 +1,483 @@
+{
+  "agent": "agent_chat",
+  "feature_set": "regex+judge",
+  "k_lowrank": 5,
+  "n_clusters": 4,
+  "n_total_rows": 194,
+  "n_high_residual": 97,
+  "matrix_shape": [
+    194,
+    402
+  ],
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "n_members": 5,
+      "signature": [
+        {
+          "feature": "n_questions",
+          "mean_abs": 4.90324592590332,
+          "mean_signed": 4.90324592590332
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 1.4778659343719482,
+          "mean_signed": -0.7453151345252991
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 1.19290030002594,
+          "mean_signed": 0.1689784824848175
+        },
+        {
+          "feature": "letter_A",
+          "mean_abs": 1.0783770084381104,
+          "mean_signed": -1.0783770084381104
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 0.9313443899154663,
+          "mean_signed": -0.9313443899154663
+        },
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 0.8067575693130493,
+          "mean_signed": -0.5900202989578247
+        }
+      ],
+      "judge_density": {
+        "DEFERENTIAL": 0.4,
+        "REBUTTAL": 0.8,
+        "REFUSAL": 0.0,
+        "ASKS_BACK": 0.0,
+        "OVERCONFIDENT": 0.0,
+        "CODE_HEAVY": 0.0
+      },
+      "exemplars": [
+        {
+          "id": "recf6ayQmL1SxKbvW",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 38.938167572021484,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer critique accepts my answer (B) but suggests refining the reasoning about D. Let me reconsider:\n\n**Step 1: What does the question actually ask?**\nThe MOST crucial step BEFORE in silico docking"
+        },
+        {
+          "id": "recDDxpS9s8cwkqfq",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 38.451194763183594,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Reconsidering the critique:\n\n**The key question: what does \"emits\" mean here?**\n\nFor a textile dye, the standard organic chemistry framing is:\n- Dye absorbs certain wavelengths of visible light\n- The "
+        },
+        {
+          "id": "reczjcMtrB1YGS2fO",
+          "domain": "Physics",
+          "subdomain": "Optics and Acoustics",
+          "residual_norm_sq": 37.98603439331055,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer reviewer confirms my calculation and reasoning. The caveat raises the possibility that \"first two minima\" could mean the first minima on each side of the central maximum (giving 2\u03b8\u2081 = 1.220 \u03bb"
+        },
+        {
+          "id": "recmkvk6EFAmqyMxR",
+          "domain": "Physics",
+          "subdomain": "Relativistic Mechanics",
+          "residual_norm_sq": 37.258426666259766,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this problem again with the peer's endorsement.\n\nThe decay survival probability for ultra-relativistic particles traveling distance R is:\nP = exp(-R/(\u03b3\u03b2c\u03c4)) \u2248 exp(-R/(\u03b3c\u03c4))\n\nAt \u03b3\u2081 = 20: P\u2081 "
+        },
+        {
+          "id": "recnTTKdBzfuoZ7w7",
+          "domain": "Biology",
+          "subdomain": "Molecular Biology",
+          "residual_norm_sq": 29.56260108947754,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer is right that I was sloppy. Let me redo this with their corrections.\n\n## Step 1: First filter \u2014 does each insert encode the specified P53 protein?\n\nThe peer flagged that B differs at residue "
+        }
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "n_members": 31,
+      "signature": [
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 1.6483339071273804,
+          "mean_signed": 1.6483339071273804
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.7109741568565369,
+          "mean_signed": -0.505889892578125
+        },
+        {
+          "feature": "REBUTTAL",
+          "mean_abs": 0.5073664784431458,
+          "mean_signed": -0.052998390048742294
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 0.4751044809818268,
+          "mean_signed": -0.20805111527442932
+        },
+        {
+          "feature": "DEFERENTIAL",
+          "mean_abs": 0.46091559529304504,
+          "mean_signed": -0.1461731195449829
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 0.4540059566497803,
+          "mean_signed": -0.17620784044265747
+        }
+      ],
+      "judge_density": {
+        "DEFERENTIAL": 0.03225806451612903,
+        "REBUTTAL": 0.6451612903225806,
+        "REFUSAL": 0.0,
+        "ASKS_BACK": 0.0,
+        "OVERCONFIDENT": 0.0,
+        "CODE_HEAVY": 0.0
+      },
+      "exemplars": [
+        {
+          "id": "recZbxrocrxh9YENH",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 28.697303771972656,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this again with the peer's critique in mind:\n\n**My calculation gives: \u0394Hf = 1900 kJ/mol** (the arithmetic is confirmed correct by the peer).\n\n**Evaluating the options:**\n- (A) 67.4 kJ/mol \u2014"
+        },
+        {
+          "id": "rec47oNPXudlTIk4y",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 26.6541690826416,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this problem again with the peer's endorsement:\n\nThe question asks about a dual catalyst system to make branched PE from ethylene alone. The essential additional reaction step is selective "
+        },
+        {
+          "id": "rec06pnAkLOr2t2mp",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 17.54488754272461,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The draft answer and the critique agree, and the reasoning is correct.\n\nUsing \u0394E \u2248 \u210f/\u03c4:\n- \u03c4\u2081 = 10\u207b\u2079 s \u2192 \u0394E\u2081 \u2248 6.6\u00d710\u207b\u2077 eV\n- \u03c4\u2082 = 10\u207b\u2078 s \u2192 \u0394E\u2082 \u2248 6.6\u00d710\u207b\u2078 eV\n\nTo clearly resolve the two levels, the ener"
+        },
+        {
+          "id": "recnjViFrqlZNL3fY",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 9.236534118652344,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this question carefully:\n\nThe atmospheric UV cutoff for ground-based optical telescopes is around 3200-3500 \u00c5 (atmospheric ozone absorbs below this).\n\nFor Lyman alpha (1216 \u00c5) to be observa"
+        },
+        {
+          "id": "recgC4GJ8wUemlUQD",
+          "domain": "Physics",
+          "subdomain": "High-energy particle physics",
+          "residual_norm_sq": 8.94674015045166,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this carefully:\n\n- **Pion (B)**: Pseudo-Goldstone boson of spontaneously broken chiral symmetry in QCD.\n- **Phonon (C)**: Goldstone mode of spontaneously broken translational symmetry in a "
+        }
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "n_members": 57,
+      "signature": [
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 0.8850910663604736,
+          "mean_signed": 0.37060362100601196
+        },
+        {
+          "feature": "DEFERENTIAL",
+          "mean_abs": 0.8684741854667664,
+          "mean_signed": 0.00019422330660745502
+        },
+        {
+          "feature": "n_hedge_words",
+          "mean_abs": 0.7435310482978821,
+          "mean_signed": 0.04323716089129448
+        },
+        {
+          "feature": "REBUTTAL",
+          "mean_abs": 0.6514183878898621,
+          "mean_signed": 0.026173550635576248
+        },
+        {
+          "feature": "letter_A",
+          "mean_abs": 0.6220680475234985,
+          "mean_signed": 0.13443884253501892
+        },
+        {
+          "feature": "response_len",
+          "mean_abs": 0.5653584599494934,
+          "mean_signed": 0.1558140367269516
+        }
+      ],
+      "judge_density": {
+        "DEFERENTIAL": 0.15789473684210525,
+        "REBUTTAL": 0.543859649122807,
+        "REFUSAL": 0.0,
+        "ASKS_BACK": 0.0,
+        "OVERCONFIDENT": 0.0,
+        "CODE_HEAVY": 0.0
+      },
+      "exemplars": [
+        {
+          "id": "recD8oX1KevFbl7bL",
+          "domain": "Biology",
+          "subdomain": "Genetics",
+          "residual_norm_sq": 38.236183166503906,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this question carefully:\n\n**Intact:** ATG-TTT-CTC-GCT-GGT-ACT-TCT-GTG-GAT...\n\n**Mutant 1:** ATG-TTC-TAC-GCT-GGT-ACT-TCT-GTG-GAT... \u2192 missense changes (Phe\u2192Phe silent, Leu\u2192Tyr); protein stil"
+        },
+        {
+          "id": "recLSzwBUS3olCjhl",
+          "domain": "Chemistry",
+          "subdomain": "Chemistry (general)",
+          "residual_norm_sq": 20.86786460876465,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at the NMR data again:\n\n- **7.0 ppm (1H, d, J = 16.0 Hz)**: vinylic H on the carbon bonded to OAc (the peer's wording correction is fair \u2014 it's on C, not directly on O). The 16 Hz coupling is "
+        },
+        {
+          "id": "reckl6PkaEMWM50yZ",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 20.114105224609375,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this carefully, the peer critique correctly identified that my draft's stereochemical reasoning was hand-wavy. Let me redo it rigorously.\n\n**Starting material 3D setup (verified by checking"
+        },
+        {
+          "id": "recZWeueB7lSPR6wN",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 17.518783569335938,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at the critique carefully, I need to revisit the enolate geometry assumption.\n\n**Re-examining the enolate geometry:**\n\nFor cyclohexanone's lithium enolate, the ring forces a specific geometry."
+        },
+        {
+          "id": "recXsYa3i2UhGF5fe",
+          "domain": "Chemistry",
+          "subdomain": "Organic Chemistry",
+          "residual_norm_sq": 16.90632438659668,
+          "judge_labels": {
+            "DEFERENTIAL": 1,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "Looking at this problem again with the peer's endorsement:\n\n**Starting material:** 2-formyl-5-vinylcyclohex-3-enecarboxylic acid\n- Cyclohexene ring: 1 ring + 1 C=C = 2 degrees\n- Formyl (-CHO): 1 degre"
+        }
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "n_members": 4,
+      "signature": [
+        {
+          "feature": "n_latex",
+          "mean_abs": 5.457587718963623,
+          "mean_signed": 5.457587718963623
+        },
+        {
+          "feature": "n_self_correction",
+          "mean_abs": 1.0393034219741821,
+          "mean_signed": 0.615951418876648
+        },
+        {
+          "feature": "letter_A",
+          "mean_abs": 0.9366241693496704,
+          "mean_signed": 0.9366241693496704
+        },
+        {
+          "feature": "n_certainty_words",
+          "mean_abs": 0.9111505746841431,
+          "mean_signed": -0.9111505746841431
+        },
+        {
+          "feature": "letter_B",
+          "mean_abs": 0.8818947076797485,
+          "mean_signed": 0.8818947076797485
+        },
+        {
+          "feature": "letter_D",
+          "mean_abs": 0.8393073081970215,
+          "mean_signed": -0.8393073081970215
+        }
+      ],
+      "judge_density": {
+        "DEFERENTIAL": 0.0,
+        "REBUTTAL": 0.5,
+        "REFUSAL": 0.0,
+        "ASKS_BACK": 0.0,
+        "OVERCONFIDENT": 0.0,
+        "CODE_HEAVY": 0.0
+      },
+      "exemplars": [
+        {
+          "id": "recyPffUDqC2k7ZZO",
+          "domain": "Physics",
+          "subdomain": "Quantum Mechanics",
+          "residual_norm_sq": 56.722015380859375,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer's critique confirms my reasoning. Let me verify once more:\n\nState: $(-1/2, 1/\\sqrt{2}, -1/2)$ in the $P_z$ eigenbasis.\n\nNormalization check: $1/4 + 1/2 + 1/4 = 1$ \u2713\n\nProbabilities:\n- $P(\\hbar"
+        },
+        {
+          "id": "recywRj5a8EEjj2Ib",
+          "domain": "Physics",
+          "subdomain": "Physics (general)",
+          "residual_norm_sq": 36.47602462768555,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 0,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer critique confirms my reasoning. Let me verify once more:\n\n**Energy conservation:** At turning point (x=A, v=0), total energy is rest energy plus potential:\n$$E = mc^2 + \\tfrac{1}{2}kA^2$$\n\nAt"
+        },
+        {
+          "id": "rec0VuKUjt1SZ7NYv",
+          "domain": "Physics",
+          "subdomain": "Relativistic Mechanics",
+          "residual_norm_sq": 35.66571807861328,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The metric is $ds^2 = \\frac{32}{4-x^2-y^2}(dx^2 + dy^2)$ on the disk $x^2+y^2 < 4$.\n\n**Area element:** $dA = \\frac{32}{4-x^2-y^2}\\, dx\\, dy$\n\n**In polar coordinates:**\n$$A = 2\\pi \\int_0^2 \\frac{32\\rho"
+        },
+        {
+          "id": "recyrk6XBVwugG5u8",
+          "domain": "Physics",
+          "subdomain": "Astrophysics",
+          "residual_norm_sq": 33.55865478515625,
+          "judge_labels": {
+            "DEFERENTIAL": 0,
+            "REBUTTAL": 1,
+            "REFUSAL": 0,
+            "ASKS_BACK": 0,
+            "OVERCONFIDENT": 0,
+            "CODE_HEAVY": 0
+          },
+          "response_excerpt": "The peer's critique confirms my answer and adds a minor refinement: the grazing condition should technically be $b_2 \\leq 1 + R_{p,2}/R_\\star$ rather than $b_2 \\leq 1$. I noted this correction in my d"
+        }
+      ]
+    }
+  ]
+}

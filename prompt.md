@@ -308,6 +308,36 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL52 — Track A v0.2: population-level structural shift CONFIRMED
+
+Built `judge_features.py` (LLM-judge classifier across 6 categories: DEFERENTIAL/REBUTTAL/REFUSAL/ASKS_BACK/OVERCONFIDENT/CODE_HEAVY) and `cluster_v02.py` (augmented matrix [embedding | regex | judge] = 402-dim).
+
+Smoke test on canonical examples: works (DEFERENTIAL paraphrase classified DEFERENTIAL; structured rebuttal classified REBUTTAL).
+
+Classified all 194 v1.0 agent_chat responses + all 195 v1.1 responses (~390 LLM calls). Population-level distribution:
+
+| | v1.0 (n=194) | v1.1 (n=195) | delta |
+|---|---|---|---|
+| **DEFERENTIAL** | 6.2% (12) | **0.5% (1)** | **-5.7pp / -92%** |
+| **REBUTTAL** | 41.2% (80) | **97.9% (191)** | **+56.7pp** |
+| REFUSAL | 1.5% | 1.5% | 0 |
+| ASKS_BACK / OVERCONFIDENT / CODE_HEAVY | 0% | 0% | 0 |
+
+**The cleanest possible structural validation.** v1.1's prompt change at the population level:
+- 92% reduction in deferential responses (12 → 1)
+- Doubled rebuttal responses (80 → 191), making it 98% of all responses
+- 56.7-percentage-point overall shift in reasoning style
+
+Paired with the +4 net correctness lift on full 198, this completes the substrate value-proposition demo:
+1. Track A clustering auto-identified a failure-mode cluster (n=48, self-correction-heavy regex)
+2. LLM-judge resolved the cluster's interior: only 12/194 = 6.2% truly deferential at population
+3. Auto-generated study card prescribed the v1.1 prompt fix targeting that 6.2%
+4. v1.1 outcome: **92% reduction in deferential at population, +4 net correctness on benchmark**
+
+The v1.0 cluster 0 (regex-only) was right to flag self-correction-heavy responses but couldn't distinguish deferential from rebuttal subtypes. The v1.1 fix succeeded by changing the OVERALL distribution toward rebuttal — even when the deferential subset is small, the prompt intervention is powerful enough to shift the entire population's reasoning style.
+
+**Caveat on cluster_v02.py k-means clustering:** the 6 binary judge features got dwarfed by the 384-dim embedding in distance computation, so v0.2's k=4 clusters didn't separate cleanly along DEFERENTIAL/REBUTTAL axes. The right next step (deferred) is to re-cluster on judge features ALONE to get clean style-based clusters.
+
 ## NL51 — LLM-judge validates that v1.1 structurally shifted cluster 0
 
 NL50 hypothesis: regex feature `n_self_correction` is too coarse — it catches both deferential and rebuttal-driven self-correction. An LLM-judge should distinguish them.
