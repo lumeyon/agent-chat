@@ -308,6 +308,24 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL55 — letter-A bias refuted; v1.1 cuts unparseable rate in half
+
+The NL50 cluster-0 letter_A +0.77σ signature predicted v1.1 might over-pick A. Population-level letter distribution refutes:
+
+| | A% | B% | C% | D% | unparseable |
+|---|---|---|---|---|---|
+| ground truth | 15.7% | 27.3% | 26.8% | 30.3% | 0% |
+| codex | 14.1% | 28.3% | 28.3% | 29.3% | 0% |
+| claude | 14.6% | 27.3% | 26.3% | 29.8% | 2.0% |
+| agent_chat v1.0 | 13.1% | 28.3% | 27.8% | 27.8% | 3.0% |
+| **agent_chat v1.1** | **13.3%** | 28.7% | 26.7% | 29.7% | **1.5%** |
+
+**v1.1's A% (13.3%) is essentially identical to v1.0 (13.1%) and below ground truth (15.7%). No bias.** The cluster-level letter_A signal was sampling noise on a small subgroup.
+
+**Bonus finding:** v1.1 reduced unparseable responses from 3.0% to 1.5% (6 → 3). The mandated VALID/INVALID rebuttal format makes orion more disciplined about closing with `Answer: X`. Small additional benefit.
+
+Flip pattern of v1.1's 8 outcome changes: TO {B: 3, D: 4, A: 1}, FROM {C: 3, B: 3, A: 1, D: 1}. Even-distribution flips, no A bias.
+
 ## NL54 — Codex/claude solo responses: judge features don't fire (expected)
 
 Sampled 30 codex + 30 claude single-shot baseline responses, ran through the same 6-category LLM-judge:
