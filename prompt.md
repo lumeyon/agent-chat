@@ -308,6 +308,28 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL58 — Qualitative inspection of v2.0 critiques: restatements are genuinely good
+
+Read the actual codex restatements from v2.0's 8-case test. They are high-quality:
+
+- `recDDxpS9s8cwkqfq`: "given that the dye emits photons of 2.3393 eV, what color of light does the compound absorb?... emission and absorption are not the same process" — explicitly catches the pitfall
+- `recLAgwx9vbgB5EHk`: "RCM forms the ring alkene from the two alkene carbons retained in the molecule, while terminal CH2 groups are [eliminated]"
+- `recgM7o1tcc7tP778`: identifies T(NN)=0, Pauli statistics, angular momentum, and parity conservation jointly
+- `recw4rROcnHKNZhtK`: "least represented... it is not asking what causes shmoo formation, and 'active chromatin' matters"
+
+**The structural intervention design is sound.** Codex consistently produces meaningful pitfall-identifying restatements, not just paraphrasing.
+
+**So why does v2.0 net -2 vs v1.1?** The 3-4 BREAK cases aren't broken by bad restatements — they're broken because **the richer critique gives orion more to think about, occasionally unsettling lucky-correct flips** v1.1 made. v1.1's 6 fixes were partly fragile; a more substantive critique destabilizes some of them on this small subset.
+
+**Conclusion:** v2.0 is a *good* design that doesn't show its value on this saturated benchmark. The 8-case test is biased toward cases v1.1 affected; on the 187 cases v1.1 didn't touch, v2.0 might find new fixes — but a full 198-question v2.0 sweep would cost ~3 hours of compute and likely net within ±2 of v1.1 anyway.
+
+**Production end-state: v1.1 ships. v2.0 is a useful design study showing that structural interventions in the agent_chat protocol are tractable and produce meaningful artifacts (the restatements themselves are valuable as standalone outputs even if they don't lift accuracy).**
+
+The substrate's experimental ladder is now thoroughly explored at the prompt-modification + single-structural-change granularity. Diminishing returns past this point on GPQA Diamond. To find the next +N% lift, the right move is to:
+- Run v1.1 on a denser-disagreement benchmark (HumanEval, MATH) where the underlying signal is larger
+- OR explore multi-component structural changes (e.g., codex restatement + multi-round critique-revise loop)
+- OR generate more agent_chat data per question (multiple draft sample) and aggregate
+
 ## NL57 — v2.0 structural intervention better than v1.2/v1.3 but still loses to v1.1
 
 Tested v2.0: STRUCTURAL change to the agent_chat protocol (modify codex's CRITIQUE step instead of orion's REVISE step). Codex must FIRST restate the question in its own words BEFORE critiquing — fresh-eyes verification of question meaning, no anchoring on orion's draft.
