@@ -4,6 +4,18 @@
 
 The substrate auto-discovered a failure mode in the agent-chat orchestration, prescribed a prompt-engineering fix, and the fix lifted agent-chat from **below** both single-model baselines to **above** both. Closed loop validated end-to-end.
 
+**Population-level structural shift confirmed via LLM-judge classification of all 194 v1.0 + 195 v1.1 responses:**
+
+| reasoning style | v1.0 | v1.1 | delta |
+|---|---|---|---|
+| DEFERENTIAL | 6.2% (12) | 0.5% (1) | **-92%** |
+| REBUTTAL | 41.2% (80) | 97.9% (191) | **+56.7pp** |
+| REFUSAL | 1.5% | 1.5% | 0 |
+
+Judge-only clustering (no embedding) on v1.0 found a clean 12-row DEFERENTIAL cluster — the exact size matching the population count. After v1.1, this cluster collapses to 0; 97.4% of all responses fall into a single pure REBUTTAL cluster.
+
+The substrate's auto-prescription didn't just numerically improve correctness; it produced a 56.7-percentage-point structural shift in reasoning style at population scale.
+
 ---
 
 ## 1. Executive Summary

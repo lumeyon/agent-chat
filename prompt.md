@@ -308,6 +308,36 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL53 — Judge-only clustering: clean style separation visualized
+
+Re-clustered on judge features alone (6 dims), dropping the 384-dim embedding that had dwarfed the judge dims in v0.2's k-means.
+
+**v1.0 judge-only clusters:**
+| cluster | n | style |
+|---|---|---|
+| 0 | 76 | pure REBUTTAL |
+| 1 | 103 | (none — plain answer responses) |
+| 2 | **12** | **pure DEFERENTIAL** ← the soft-pushback population |
+| 3 | 3 | pure REFUSAL |
+
+**v1.1 judge-only clusters:**
+| cluster | n | style |
+|---|---|---|
+| 0 | **190** | pure REBUTTAL (97.4% of all responses) |
+| 1 | 3 | pure REFUSAL |
+| 2 | 1 | outlier |
+| 3 | 1 | mixed (the 1 stray DEFERENTIAL holdout) |
+
+**Two clean visualizations of the v1.1 structural effect:**
+1. The 12-row pure DEFERENTIAL cluster from v1.0 → **0** in v1.1 (-100%).
+2. The 103-row "plain answer" cluster from v1.0 → collapsed INTO the REBUTTAL cluster (because v1.1's prompt forces explicit rebuttal in every response).
+
+End state in v1.1: 190 of 195 responses (97.4%) are pure REBUTTAL — a uniform reasoning style induced by the prompt change.
+
+This validates the substrate's claim at the cleanest possible level: by clustering on the right features (LLM-judge style classifications), the structural effect of the v1.1 intervention is visible as a clean cluster collapse from 4 distinct styles to essentially 1 dominant style.
+
+REPORT.md updated with the population-shift table and judge-cluster summary.
+
 ## NL52 — Track A v0.2: population-level structural shift CONFIRMED
 
 Built `judge_features.py` (LLM-judge classifier across 6 categories: DEFERENTIAL/REBUTTAL/REFUSAL/ASKS_BACK/OVERCONFIDENT/CODE_HEAVY) and `cluster_v02.py` (augmented matrix [embedding | regex | judge] = 402-dim).
