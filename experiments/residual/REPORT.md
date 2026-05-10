@@ -1,8 +1,12 @@
 # Residual-Explore Substrate — End-to-End Report
 
-**Status:** v1.1 production variant. **agent-chat v1.1 = 179/198 = 90.4% on GPQA Diamond, beats codex (89.4%) by +2 questions and claude (88.9%) by +3 questions.**
+**Status:** v1.1 production variant. **agent-chat v1.1 = 179/198 = 90.4% on GPQA Diamond.** Point-estimate beats codex (89.4%) by +2 questions and claude (88.9%) by +3 questions, **but the correctness lift is not statistically significant at n=198** (10k-bootstrap 95% CI for v1.1−codex is [-7, +11], p=0.37 one-sided).
 
-The substrate auto-discovered a failure mode in the agent-chat orchestration, prescribed a prompt-engineering fix, and the fix lifted agent-chat from **below** both single-model baselines to **above** both. Closed loop validated end-to-end.
+**What IS unambiguous and significant**: the **structural-level effect of the v1.1 prompt change**. LLM-judge classification of all 194 v1.0 + 195 v1.1 responses shows:
+- 92% reduction in DEFERENTIAL responses (12 → 1)
+- 56.7-percentage-point increase in REBUTTAL responses (41% → 98%)
+
+The substrate auto-discovered a failure mode in the agent-chat orchestration, prescribed a prompt-engineering fix, and the fix produced a clean structural shift in reasoning style. The correctness lift is consistent with the diagnosis but underpowered at this benchmark size.
 
 **Population-level structural shift confirmed via LLM-judge classification of all 194 v1.0 + 195 v1.1 responses:**
 

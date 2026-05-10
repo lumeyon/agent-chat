@@ -308,6 +308,36 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL59 — STATISTICAL HONESTY CHECK: correctness lift not significant at n=198
+
+Bootstrap (10000 resamples) of v1.1 vs baselines on n=198:
+
+| comparison | mean Δ | 95% CI | p (one-sided) |
+|---|---|---|---|
+| v1.1 vs codex | +1.99 | [-7, +11] | **0.365** |
+| v1.1 vs claude | +3.04 | [-3, +10] | 0.224 |
+| v1.1 vs v1.0 | +4.03 | **[-1, +10]** | **0.099** |
+
+**The +2 over codex is consistent with chance. All 95% CIs cross or hug 0.** Only v1.1 vs v1.0 (+4 net) is marginally significant (p=0.10), just outside α=0.05.
+
+**Major correction to earlier claims:**
+- ❌ "v1.1 beats codex by +2 questions, statistically meaningful" — incorrect. Point estimate +2 but CI [-7, +11].
+- ❌ "First time agent-chat beats both single-model baselines" — true as a point estimate but NOT statistically distinguishable from v1.0/codex parity.
+
+**What DOES hold:**
+- ✅ The **population-level structural shift** is clean and large: 92% reduction in deferential responses, 56.7pp REBUTTAL increase. That's well outside any reasonable noise band.
+- ✅ The **closed-loop methodology worked as a process**: auto-discover failure mode → prescribe fix → measure structural effect at scale.
+- ✅ **Qualitative findings hold**: LLM-judge classifications are independently sensible; v2.0 restatements genuinely catch pitfalls.
+
+**Honest reframing:** the substrate's **diagnostic** value (structural shift) is real and large. The **correctness lift** is suggestive but underpowered at n=198. To make a definitive correctness claim we'd need either:
+- A larger benchmark (n=500+)
+- Multiple seeded runs of v1.0 and v1.1 to estimate within-run variance
+- A denser-disagreement benchmark where the per-question signal is bigger
+
+**Production decision unchanged but now better-framed:** v1.1 ships because (a) the structural change is clearly beneficial, (b) the point-estimate correctness is positive, (c) it has zero observed downside (no STAY-RIGHT cases broken at scale, only 2 BREAKs out of 8 flips). But the marketing should be "structurally cleaner reasoning, with a small correctness improvement that's plausibly real but underpowered" — NOT "statistically beats codex on GPQA."
+
+This is the kind of correction the substrate's own discipline (always validate at full scale before claiming) should have caught earlier. Recording it now so future iterations on other benchmarks include the bootstrap test up front.
+
 ## NL58 — Qualitative inspection of v2.0 critiques: restatements are genuinely good
 
 Read the actual codex restatements from v2.0's 8-case test. They are high-quality:
