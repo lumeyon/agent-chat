@@ -308,6 +308,42 @@ This is the fundamentally novel piece — and its success criterion is qualitati
 
 So v1.1 trades soft-pushback for two new modes.
 
+## NL57 — v2.0 structural intervention better than v1.2/v1.3 but still loses to v1.1
+
+Tested v2.0: STRUCTURAL change to the agent_chat protocol (modify codex's CRITIQUE step instead of orion's REVISE step). Codex must FIRST restate the question in its own words BEFORE critiquing — fresh-eyes verification of question meaning, no anchoring on orion's draft.
+
+8-case decisive test (16 LLM calls: 8 codex critiques + 8 claude revises):
+
+| outcome | v1.2 | v1.3 | **v2.0** |
+|---|---|---|---|
+| FIXES-v11 | 1 | 1 | 1 (same case: recDDxpS9s8cwkqfq) |
+| BREAKS-v11 | 4 | 4 | **3** |
+| BOTH-CORRECT | 2 | 2 | **3** |
+| BOTH-WRONG | 1 | 1 | 1 |
+| **net delta** | **-3** | **-3** | **-2** |
+
+**Structural intervention preserves more fixes than prompt-only.** v2.0 kept 3 of v1.1's 6 fixes (vs 2 for v1.2/v1.3). Having codex restate the question with fresh eyes IS more effective than asking orion to restate it post-hoc.
+
+But still net-negative on this subset. **v1.1 remains the local optimum.**
+
+Three findings firmed up:
+1. The recDDxpS9s8cwkqfq case is **reliably fixable** by any intervention that addresses question-interpretation (3 of 3 attempts fix it).
+2. **3-4 of v1.1's 6 fixes are genuinely fragile** — any protocol change breaks them, regardless of direction.
+3. **Structural changes have more potential than prompt-only**, but neither fully solves the over-defensive case without collateral damage.
+
+**Substrate experimental ladder summary:**
+- v1.0 → v1.1 (prompt-only, VALID/INVALID rebuttal): **+4 net at scale**, ship.
+- v1.1 → v1.2 (prompt-only, "tie to critique"): -3 on subset, refuted.
+- v1.1 → v1.3 (prompt-only, question-restate first): -3 on subset, refuted.
+- v1.1 → v2.0 (structural, codex restates question pre-critique): -2 on subset, refuted but better.
+
+Trajectory suggests further improvement requires either:
+- v2.x with multiple structural changes (combine codex restatement + extended dialogue)
+- A different benchmark with denser disagreement signal
+- A different baseline architecture (not orion-codex critique loop)
+
+Production decision: ship v1.1. The substrate's originally-prescribed simplest fix is empirically optimal at the prompt-modification + single-structural-change granularity.
+
 ## NL56 — v1.3 also refuted, IDENTICAL outcome pattern to v1.2
 
 Tested v1.3 (Step 0: question-interpretation check before VALID/INVALID rebuttal) on the same 8 v1.1-flipped cases.
