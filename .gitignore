@@ -1,3 +1,6 @@
+# Research papers / reference PDFs — keep locally, don't track
+*.pdf
+
 # Logs
 logs
 *.log

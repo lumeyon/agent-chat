@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 results/run.log
 results/training/
-models/*.pt
-models/*.safetensors
+# Trained LoRA adapters — large binaries, reproducible from committed
+# code + data + eval JSONs. Don't track in git.
+models/
