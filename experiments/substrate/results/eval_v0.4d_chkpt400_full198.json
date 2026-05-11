@@ -1,0 +1,1395 @@
+{
+  "n": 198,
+  "n_correct": 59,
+  "accuracy": 0.29797979797979796,
+  "per_question": [
+    {
+      "id": "rec06pnAkLOr2t2mp",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To determine which energy difference allows for the clear distinction between the two quantum states, we need to consider the resolution limit in energy due to the lifetime of the states. The energy resolution \\(\\Delta E\\) can be estimated using the Heisenberg uncertainty principle, which relates the energy uncertainty to the time uncertainty:\n\n\\[\n\\Delta E \\approx \\frac{\\hbar}{\\Delta t}\n\\]\n\nwhere \\(\\hbar\\) is the reduced Planck's constant (\\(\\hbar \\approx 1.0545718 \\times 10^{-34} \\, \\text{J s}\\"
+    },
+    {
+      "id": "rec0Arme2jcXQZnAW",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's break down the transformations step by step to determine the number of carbon atoms in the final product, product 3.\n\n### Step 1: Trans-Cinnamaldehyde and Methylmagnesium Bromide\n- **Trans-cinnamaldehyde** has the structure: CH3-CH=CH-CH=CH2.\n- When treated with methylmagnesium bromide (MeMgBr), an addition reaction occurs, where the magnesium reagent adds across the double bond.\n- The product will be a geminal diol: CH3-CH(OH)-CH(OH)-CH=CH2.\n\n### Step 2: Product 1 and Pyridinium Chlorochr"
+    },
+    {
+      "id": "rec0wZvZgiz320KRs",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the expectation value of the operator \\(10\\sigma_z + 5\\sigma_x\\) for a spin-half particle in the state \\(0.5|\\uparrow\\rangle + \\frac{\\sqrt{3}}{2}|\\downarrow\\rangle\\), we need to follow these steps:\n\n1. **Identify the operators and states:**\n   - The Pauli matrices are given by:\n     \\[\n     \\sigma_z = \\begin{pmatrix}\n     1 & 0 \\\\\n     0 & -1\n     \\end{pmatrix}, \\quad\n     \\sigma_x = \\begin{pmatrix}\n     0 & 1 \\\\\n     1 & 0\n     \\end{pmatrix}\n     \\]\n   - The eigenstates \\(|\\uparrow\\rang"
+    },
+    {
+      "id": "rec0yTRmO1o1xCA6H",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine which Maxwell's equations would be different in a parallel universe where magnets can have isolated North or South poles, we need to consider the implications of such a scenario on the fundamental properties of the magnetic field.\n\n1. **Magnetic Monopoles**: If magnets can have isolated North or South poles, it implies the existence of magnetic monopoles. This directly affects the divergence of the magnetic field.\n\n2. **Gauss's Law for Magnetism**: In standard electromagnetism, Gaus"
+    },
+    {
+      "id": "rec1zl5LvaatzGhFt",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the eigenvector of the quantum mechanical operator \\(\\vec{P}\\) for a muon along an arbitrary direction \\(\\vec{n}\\) lying in the x-z plane corresponding to the eigenvalue \\(+\\hbar/2\\), we need to consider the components of the operator \\(\\vec{P}\\) in the x, y, and z directions.\n\nGiven:\n- \\(P_x = \\frac{\\hbar}{2} \\begin{pmatrix} 0 & 1 \\\\ 1 & 0 \\end{pmatrix}\\)\n- \\(P_y = \\frac{\\hbar}{2} \\begin{pmatrix} 0 & -i \\\\ i & 0 \\end{pmatrix}\\)\n- \\(P_z = \\frac{\\hbar}{2} \\begin{pmatrix} 1 & 0 \\\\ 0 & -1 \\"
+    },
+    {
+      "id": "rec260hNUCEj109Dj",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the energy spectrum for a quantum mechanical particle in the given potential \\(V(r, \\theta) = \\frac{1}{2}kr^2 + \\frac{3}{2}kr^2\\cos^2(\\theta)\\), we need to solve the Schr\u00f6dinger equation in polar coordinates. The potential can be separated into radial and angular parts.\n\n### Step 1: Separate Variables\nThe time-independent Schr\u00f6dinger equation in polar coordinates is:\n\n\\[ -\\frac{\\hbar^2}{2m}\\left[\\frac{1}{r}\\frac{\\partial}{\\partial r}\\left(r\\frac{\\partial \\psi}{\\partial r}\\right) + \\frac{"
+    },
+    {
+      "id": "rec2UlKqC6RFHdcro",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the energy at which \\(\\gamma\\gamma \\rightarrow e^+e^-\\) becomes significant and limits the lifetime of high-energy \\(\\gamma\\)-rays, we need to consider the threshold energy for this process. This process can occur when the total energy of the two \\(\\gamma\\)-rays is equal to the rest mass energy of an electron-positron pair plus any additional kinetic energy.\n\nThe rest mass energy of an electron (or positron) is given by \\(m_e c^2\\), where \\(m_e\\) is the electron mass and \\(c\\) is th"
+    },
+    {
+      "id": "rec2ZTsqazBZ3LTWZ",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "Let's analyze the data step by step:\n\n1. **Single Mutants:**\n   - **g1:** 75% of control resistance.\n   - **g2:** 0% of control resistance.\n   - **g3:** 50% of control resistance.\n\n2. **Double Mutants:**\n   - **g1g3:** 10% of control resistance.\n   - **g2g3:** 0% of control resistance.\n   - **g1g2:** 0% of control resistance.\n\nFrom the single mutants, we see that:\n- g2 completely abolishes resistance (0%).\n- g1 reduces resistance significantly but not completely (75%).\n- g3 reduces resistance to"
+    },
+    {
+      "id": "rec2fsnzUuvNtUYK8",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To determine which molecule has \\(C_3\\) symmetry, we need to analyze the molecular structures and their symmetry elements.\n\n1. **Triisopropyl borate**:\n   - This molecule consists of a boron atom bonded to three isopropyl groups.\n   - The structure does not exhibit any \\(C_3\\) symmetry as it lacks a central axis around which a 120\u00b0 rotation would map the molecule onto itself.\n\n2. **Quinuclidine**:\n   - Quinuclidine has a bicyclic structure with a seven-membered ring fused to a five-membered ring"
+    },
+    {
+      "id": "rec4JrWy7Il8ho5vk",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine which exoplanet has the highest density, we need to calculate the density for each option given that density is defined as mass divided by volume. The volume of a sphere (which we can assume these planets are, for simplicity) is given by \\(V = \\frac{4}{3}\\pi r^3\\), where \\(r\\) is the radius of the planet.\n\nLet's analyze each option:\n\na) An Earth-mass and Earth-radius planet.\n- Mass = \\(M_{\\text{Earth}}\\)\n- Radius = \\(R_{\\text{Earth}}\\)\n- Density = \\(\\frac{M_{\\text{Earth}}}{\\frac{4}{"
+    },
+    {
+      "id": "rec4L69T0Y1AS4AFS",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "Let's analyze each statement step by step:\n\n(A) SARS-CoV-2 ORF3a has the ability to trigger caspase-8 activation/cleavage, without affecting the expression levels of Bcl-2. Caspase-8 activation is recognized as a characteristic feature of the extrinsic apoptotic pathway via death receptors, while Bcl-2 plays a crucial role in initiating the mitochondrial pathway. This suggests that the mechanism through which SARS-CoV-2 ORF3a induces apoptosis is via the extrinsic apoptotic pathway.\n\nThis statem"
+    },
+    {
+      "id": "rec4UqStf9WUVif1f",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the kinetic energy (KE) of the product particles in the reaction \\( \\pi^+ = \\mu^+ + \\nu \\), we need to use the principles of conservation of energy and momentum. Since the pion (\\(\\pi^+\\)) is initially stationary, its initial momentum is zero. Therefore, the total momentum after the decay must also be zero.\n\n### Step 1: Conservation of Energy\nThe total energy before the decay (which is just the rest mass energy of the pion) must equal the total energy after the decay.\n\n\\[ E_{\\pi^+} = E_{"
+    },
+    {
+      "id": "rec4r4KWNLrT7g2kR",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's break down the transformations step by step to determine the structure of product 4.\n\n### Step 1: Reduction of Limonene with Pd/C and Hydrogen\nThe starting material is (R)-(+)-limonene, which is a chiral compound with a bicyclic structure. When reduced with Pd/C and hydrogen, the double bond is reduced, and the stereochemistry at the chiral center remains unchanged because the reduction is selective for the double bond. The major product after 1 equivalent of hydrogen is consumed will be ("
+    },
+    {
+      "id": "rec527dNeEtWJrYNl",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine where the disappearing ChIP peaks are most likely to be found, let's analyze each option step by step:\n\n1. **In the introns of large genes (A)**:\n   - Introns are typically not highly enriched for transcription factor binding sites because they are not transcribed into RNA. Therefore, it is less likely to find significant peaks in introns.\n\n2. **At active promoters and enhancers (B)**:\n   - Promoters and enhancers are known to be regions where transcription factors like IKAROS bind "
+    },
+    {
+      "id": "rec5eA17Qr1ucNLUf",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine which planet has a higher probability of transiting, we need to consider the transit probability formula, which depends on the planet's size relative to the star and the orbital period. For circular orbits, the transit probability \\(P_{\\text{transit}}\\) can be approximated as:\n\n\\[ P_{\\text{transit}} \\propto \\frac{R_p}{a} \\]\n\nwhere \\(R_p\\) is the radius of the planet and \\(a\\) is the semi-major axis of the orbit. Since the radii of the planets are not given, we will focus on the rati"
+    },
+    {
+      "id": "rec5rjeLsEq5Fg7Oj",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine how many of the given compounds will exhibit optical activity, we need to identify those that have chiral centers and do not have any plane of symmetry.\n\n1. **(Z)-1-chloro-2-methylbut-1-ene**\n   - This compound has a double bond, but it is in the (Z) configuration, which does not introduce a chiral center.\n   - It does not exhibit optical activity.\n\n2. **(3aR,7aS,E)-8-(chloromethylene)hexahydro-4,7-methanoisobenzofuran-1,3-dione**\n   - This compound has multiple stereocenters (3aR, "
+    },
+    {
+      "id": "rec7C06XOB2h298ue",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to use the concept of the formation constant (Kf) for the complex ion. The formation constant \\( K_{\\text{Ca-EDTA}} \\) is given as \\( 5 \\times 10^{10} \\), and it represents the equilibrium between free calcium ions (\\([Ca^{2+}]\\)) and EDTA (\\([EDTA]\\)) to form the Ca-EDTA complex:\n\n\\[ Ca^{2+} + EDTA \\rightleftharpoons Ca-EDTA \\]\n\nThe formation constant expression is:\n\n\\[ K_{\\text{Ca-EDTA}} = \\frac{[Ca-EDTA]}{[Ca^{2+}][EDTA]} \\]\n\nGiven that the initial concentration"
+    },
+    {
+      "id": "rec7qmSnbud4FHSqL",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to understand the given information and use it to calculate the ratios of silicon atoms in the photospheres of Star_1 and Star_2.\n\n### Step 1: Understanding the Given Information\n\n- **Masses**: \n  - Star_1: 1.5 times the mass of the Sun\n  - Star_2: 1.2 times the mass of the Sun\n\n- **Abundances**:\n  - [Si/Fe]_1 = 0.3 dex\n  - [Mg/Si]_2 = 0.3 dex\n  - [Fe/H]_1 = 0 dex\n  - [Mg/H]_2 = 0 dex\n\n- **Sun's Photospheric Composition**:\n  - \\(12 + \\log_{10}(n_{\\text{Fe}}/n_{\\tex"
+    },
+    {
+      "id": "rec8nshandHARTkrg",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, let's break down each reaction step by step.\n\n### Reaction 1: Methyl 2-oxocyclohexane-1-carboxylate + (NaOEt, THF, 2,4-dimethyl-1-(vinylsulfinyl)benzene)\n\n1. **Identify the components:**\n   - Methyl 2-oxocyclohexane-1-carboxylate: This is the starting material, which has a structure with a carboxylic acid group attached to a 2-oxocyclohexane ring.\n   - NaOEt: Sodium ethoxide, a strong base.\n   - THF: Tetrahydrofuran, a solvent.\n   - 2,4-dimethyl-1-(vinylsulfinyl)benzene: T"
+    },
+    {
+      "id": "rec8y3ZrBOcLgNEkE",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine which assumptions imply the \"impulse\" approximation, let's analyze each assumption:\n\n1. **The interaction current only interacts with individual nucleons.**\n   - This implies that the interaction is localized and does not involve the collective behavior of multiple nucleons simultaneously. It suggests that the interaction can be treated as if it acts on each nucleon independently.\n\n2. **The nucleus is transparent apart from the selected nucleon.**\n   - This means that when consideri"
+    },
+    {
+      "id": "rec9GugrngvsQR99A",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the correct answer, let's analyze each part of the question step by step.\n\n### Part A: Tautomerism\n\nTautomerism involves the reversible interconversion between constitutional isomers that differ only in the position of a hydrogen atom and an oxygen atom. Common examples include keto-enol tautomers.\n\n- **Benzoquinone**: This compound has a structure with alternating double bonds and no hydroxyl groups. It does not exhibit tautomerism because it lacks the necessary functional groups f"
+    },
+    {
+      "id": "rec9ubQihAh6g9bft",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the correct answer, let's break down the statement into two parts: thermodynamic and kinetic aspects.\n\n### Thermodynamic Aspect\nIn basic solutions, the standard reduction potential for oxygen can be considered. Oxygen typically acts as an oxidizing agent in basic solutions because it can accept electrons to form peroxides or hydroxides. The standard reduction half-reaction for oxygen in basic solution is:\n\n\\[ \\text{O}_2 + 4\\text{H}^+ + 4e^- \\rightarrow 2\\text{H}_2\\text{O} \\]\n\nHoweve"
+    },
+    {
+      "id": "recA1i5ZAh0Uzclxp",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the correct answer, let's analyze the reaction step by step.\n\n1. **Reactants**: The reactant given is ((2,2-dimethylbut-3-en-1-yl)oxy)benzene. This compound has a benzene ring with an oxygen atom attached to a 2,2-dimethylbut-3-en-1-yl group.\n\n2. **Reaction with Hydrogen Bromide (HBr)**: The reaction involves the addition of HBr across the double bond in the 2,2-dimethylbut-3-en-1-yl group. This is a typical electrophilic addition reaction where HBr acts as the electrophile.\n\n3. **P"
+    },
+    {
+      "id": "recAAJoHMW45Lv5je",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, let's break it down step by step:\n\n1. **Decolorization of Bromine Water**: The fact that mixture X decolorizes bromine water indicates that it contains alkenes (unsaturated hydrocarbons with at least one double bond).\n\n2. **Disproportionation Reaction**: When mixture X is treated with platinum and heated, it undergoes a disproportionation reaction to form mixture Y. Disproportionation typically involves the oxidation of one part of the molecule and reduction of another par"
+    },
+    {
+      "id": "recBGxVySx1pkrO1i",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To identify the correct reactants for the given name reactions, let's analyze each reaction step by step.\n\n### Reaction 1: A + H2SO4 ---> 2,8-dimethylspiro[4.5]decan-6-one\n\nThe product here is 2,8-dimethylspiro[4.5]decan-6-one. This compound is formed through a Claisen rearrangement, which involves the reaction of a spiro compound with sulfuric acid (H2SO4). The spiro compound typically has a structure where two rings are joined at a single atom, and the rearrangement leads to the formation of t"
+    },
+    {
+      "id": "recBXlqrZUCR897It",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to understand the given reaction and the reactivity of the dienes provided.\n\nThe reaction is:\n\\[ \\text{Cyclohexene} + A \\rightarrow 8,8\\text{-diiodobicyclo}[4.2.0]octan-7-one \\]\n\nThis suggests that compound \\(A\\) is likely an electrophile that can react with cyclohexene to form the product. The product, 8,8-diiodobicyclo[4.2.0]octan-7-one, indicates that the reaction involves the formation of a bicyclic structure from the diene and the addition of iodine atoms.\n\nNo"
+    },
+    {
+      "id": "recBtVK8rBVtIlXDq",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this question, let's break down the context provided:\n\n1. **Ribonucleoprotein Particle (RNP):** This term typically refers to particles that contain RNA and proteins. In molecular biology, a well-known RNP is the spliceosome, which is involved in the splicing of pre-mRNA.\n\n2. **Nascent Chain:** This refers to a newly synthesized polypeptide chain during protein synthesis. The meeting point suggests that the nascent chain is being processed further.\n\n3. **Sugar:** This likely refers to t"
+    },
+    {
+      "id": "recCJJOeBGERaHYax",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's analyze the transformations step by step:\n\n### Step 1: Formation of Product 1\nStarting from (S)-4-hydroxycyclohex-2-en-1-one, it reacts with tert-Butyldimethylsilyl chloride and triethylamine to form a silylated derivative. The stereochemistry at the chiral center remains (S).\n\n### Step 2: Formation of Product 2\nProduct 1 is then treated with Ph2CuLi at low temperature, which reduces the double bond to form a secondary alcohol. The reduction will not change the stereochemistry at the chira"
+    },
+    {
+      "id": "recD8oX1KevFbl7bL",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine which mutation will most likely eliminate the anti-nutritional compound, we need to consider how each mutation affects the coding sequence of the gene. The goal is to find a mutation that disrupts the reading frame or introduces a premature stop codon, as these changes can lead to a non-functional protein or no protein at all, potentially eliminating the production of the anti-nutritional compound.\n\nLet's analyze each mutation:\n\n1. **Mutant 1**: \n   - Change: TCT -> TAC (Cys -> Tyr)"
+    },
+    {
+      "id": "recDDxpS9s8cwkqfq",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the color of light absorbed by the organic compound, we need to understand the relationship between the energy of light and its wavelength. The energy \\(E\\) of a photon is given by the equation:\n\n\\[ E = \\frac{hc}{\\lambda} \\]\n\nwhere:\n- \\(h\\) is Planck's constant (\\(6.626 \\times 10^{-34} \\, \\text{J} \\cdot \\text{s}\\)),\n- \\(c\\) is the speed of light in a vacuum (\\(3.00 \\times 10^8 \\, \\text{m/s}\\)),\n- \\(\\lambda\\) is the wavelength of the light in meters.\n\nGiven that the energy of the emi"
+    },
+    {
+      "id": "recDj2Y2BbtV02Wv5",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's analyze the reactions step by step to determine the structure of the final product (product 3).\n\n### Step 1: Toluene (C6H5CH3) reacts with nitric acid and sulfuric acid to form product 1.\nThis reaction is a nitration reaction, where a nitro group (-NO2) is introduced at the meta position to the existing methyl group in toluene. The product is 2-methyl-1-nitrotoluene.\n\n### Step 2: Product 1 (2-methyl-1-nitrotoluene) is treated with MnO2 and H2SO4.\nThis is an oxidation reaction where the nit"
+    },
+    {
+      "id": "recDytVnNYZe2HuUU",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To solve this problem, we need to use the relativistic energy-momentum relation and the relationship between kinetic energy and velocity for a relativistic particle. The energy \\(E\\) of a particle moving at a velocity \\(v\\) can be given by:\n\n\\[ E = \\gamma mc^2 \\]\n\nwhere \\(m\\) is the rest mass of the particle, \\(c\\) is the speed of light, and \\(\\gamma\\) is the Lorentz factor:\n\n\\[ \\gamma = \\frac{1}{\\sqrt{1 - \\frac{v^2}{c^2}}} \\]\n\nGiven that the speed \\(v = 0.96c\\), we can calculate \\(\\gamma\\):\n\n\\["
+    },
+    {
+      "id": "recEmTBhx2hgw6tPQ",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To identify the exo product of the [4+2] cycloaddition reaction between 2,5-dimethylthiophene and furan-2,5-dione, we need to consider the stereochemistry and the nature of the products formed in such reactions.\n\n1. **Identify the reactants**: \n   - 2,5-Dimethylthiophene has a thiophene ring with methyl groups at positions 2 and 5.\n   - Furan-2,5-dione has a furan ring with a ketone group at both positions 2 and 5.\n\n2. **[4+2] Cycloaddition Reaction**:\n   - In a [4+2] cycloaddition, the \u03c0-electr"
+    },
+    {
+      "id": "recFaL6j8UMhutXrc",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to understand the Pinacol-Pinacolone rearrangement and how it affects the structure of the starting compound.\n\n### Step 1: Understanding the Reaction Mechanism\nThe Pinacol-Pinacolone rearrangement involves the conversion of a vicinal diol (a diol where the hydroxyl groups are adjacent) into an aldehyde or ketone. The mechanism typically involves the following steps:\n1. Protonation of one of the hydroxyl groups to form a less stable secondary alcohol.\n2. Intramolecu"
+    },
+    {
+      "id": "recG1ljJQcVy6CbSl",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to find the eigenvalues and eigenvectors of the matrix operator \\(A_y = c \\cdot S\\), where \\(c = \\frac{h}{4\\pi}\\) and \\(S\\) is given as:\n\n\\[ S = \\begin{pmatrix} 0 & -i \\\\ i & 0 \\end{pmatrix} \\]\n\nFirst, let's write down the matrix for \\(A_y\\):\n\n\\[ A_y = \\frac{h}{4\\pi} \\begin{pmatrix} 0 & -i \\\\ i & 0 \\end{pmatrix} \\]\n\nThe eigenvalue equation for \\(A_y\\) is:\n\n\\[ A_y \\phi = a \\phi \\]\n\nThis translates to:\n\n\\[ \\frac{h}{4\\pi} \\begin{pmatrix} 0 & -i \\\\ i & 0 \\end{pmatrix} "
+    },
+    {
+      "id": "recGFKDUd8qgz81Zl",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To determine what is most likely to be observed with an absorption line at an energy equivalent of 3.9 micro electron volts (3.9 * 10^-6 eV), we need to consider the typical energy levels associated with different phases of the interstellar medium (ISM).\n\n1. **Energy Levels in the ISM**:\n   - **Cold Atomic Interstellar Medium**: This phase includes neutral hydrogen atoms and has typical energy levels around 1-10 eV for transitions.\n   - **Warm Atomic Interstellar Medium**: This phase includes ne"
+    },
+    {
+      "id": "recGFNRVl1qBZGwyU",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's analyze the structure of the final product E step by step through the given reactions.\n\n1. **Propionaldehyde (A) to A**: This is just the starting material and does not change its structure in this step.\n\n2. **A + BuLi**: This reaction involves a Grignard reagent (BuLi) reacting with aldehyde A. The aldehyde group (-CHO) is converted to an alcohol (-CH2-) via a nucleophilic addition. So, the structure becomes a primary alcohol.\n\n3. **B + Bromoethane**: This is an SN2 reaction where bromoet"
+    },
+    {
+      "id": "recHVUd2DkoKfedJZ",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "Let's break down the reaction step by step:\n\n1. **Starting Material**: The starting material given is (E)-N-methyl-N-(pentan-2-ylidene)ethanaminium.\n\n2. **Reagent (A)**: \n   - **LDA (Lithium Diisopropylamide)**: This is a strong base that will deprotonate the amine group, forming an enolate intermediate.\n   - **DME (Dimethyl Ether)**: This is often used as a solvent in such reactions.\n   \n   So, the first step involves using LDA in DME to form the enolate.\n\n3. **Reagent (B)**: \n   - **CH3CH2I (M"
+    },
+    {
+      "id": "recI1ls9OXdxatHQn",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To find the value of \\(a\\), we need to ensure that the wave function \\(\\psi(x) = \\frac{a}{\\sqrt{1 + x}} - 0.5i\\) satisfies the normalization condition for the probability density. The probability density is given by \\(|\\psi(x)|^2\\), and the normalization condition requires:\n\n\\[\n\\int_{-\\infty}^{\\infty} |\\psi(x)|^2 dx = 1\n\\]\n\nGiven that no particles are found outside the interval \\(1 \\leq x \\leq 3\\), we only need to integrate over this range:\n\n\\[\n\\int_{1}^{3} \\left| \\frac{a}{\\sqrt{1 + x}} - 0.5i \\"
+    },
+    {
+      "id": "recIDiDKKrN61Auyr",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's break down the context and the statement given:\n\n1. **Context**: The conversation is about a synthetic organic chemistry lab, where chemists are working on synthesizing new compounds.\n\n2. **Statement Analysis**:\n   - The first chemist asks, \"So, how did it go?\"\n   - The second chemist replies, \"Not well - my compounds are on top of each other.\"\n\n3. **Interpretation**:\n   - When a chemist says their compounds are \"on top of each other,\" it suggests that the compounds are not separating prop"
+    },
+    {
+      "id": "recIIUynGGpsGEYuo",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To solve this problem, we need to consider the principles of special relativity and how they apply to the propagation of light in a moving medium.\n\n1. **Speed of Light in Glass**: In a stationary frame, the speed of light in a medium with index of refraction \\( n \\) is given by \\( \\frac{c}{n} \\). Since \\( c = 1 \\) in our units, the speed of light in glass is \\( \\frac{1}{n} \\).\n\n2. **Relativistic Velocity Addition**: When the glass is moving at a constant velocity \\( v \\) in the same direction as"
+    },
+    {
+      "id": "recIMcQfaQNa6vzsT",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to use Kepler's Third Law and the relationship between temperature, mass, and orbital period. Let's break down the steps:\n\n### Step 1: Understanding the Equilibrium Temperature Ratio\nThe equilibrium temperature \\(T\\) of a planet can be related to its distance from the star using the Stefan-Boltzmann law and the inverse square law of radiation. For two planets with similar albedo, the ratio of their equilibrium temperatures is inversely proportional to the square ro"
+    },
+    {
+      "id": "recINSFEYLCyyd08m",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the correct IUPAC name for the given molecule, we need to follow these steps:\n\n1. **Identify the parent structure**: The parent structure is a benzene ring with a carboxylic acid group (-COOH).\n\n2. **Determine the positions of substituents**:\n   - The carboxylic acid group is at the 3 position (meta to the cyano group).\n   - The cyano group is at the 5 position (meta to the carboxylic acid group).\n   - The hydroxyl group is at the 2 position (ortho to the carboxylic acid group).\n   "
+    },
+    {
+      "id": "recIOlKBsOeEcgkA1",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To determine which experiment will not help in discovering the mitochondrial role of the new anti-diabetes drug, let's analyze each option step by step:\n\n(A) **Confocal fluorescence microscopy after Mito-RTP staining of the cells**: This technique allows visualization of mitochondria within the cells using a specific dye (Mito-RTP) that fluoresces when bound to mitochondrial membranes. This can help assess the localization and integrity of mitochondria, which is crucial for understanding any pot"
+    },
+    {
+      "id": "recIj8lR4tuDgrHou",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to consider the quantum mechanical properties of the particles and the nature of the one-dimensional infinite potential well.\n\n### Step 1: Energy Levels of a Single Particle in a One-Dimensional Infinite Potential Well\nThe energy levels for a single particle in a one-dimensional infinite potential well of length \\(L\\) are given by:\n\\[ E_n = \\frac{n^2 \\pi^2 \\hbar^2}{2mL^2} \\]\nwhere \\(n\\) is a positive integer (1, 2, 3, ...).\n\nGiven that \\(E = \\frac{\\pi^2 \\hbar^2}{2m"
+    },
+    {
+      "id": "recIlghoOw5VbY4Zh",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the number of possible products when racemic 3-methylpent-1-ene is treated with a Grubbs catalyst, we need to consider the reaction mechanism and the stereochemistry involved.\n\n1. **Grubbs Catalyst Mechanism**: The Grubbs catalyst typically involves a metathesis reaction where double bonds are broken and new ones are formed. In this process, the catalyst can generate both E and Z isomers depending on the initial geometry of the starting material.\n\n2. **Starting Material**: Racemic 3"
+    },
+    {
+      "id": "recJJcOHhFeSaRpl4",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To identify the compound C9H11NO2 based on the given spectroscopic data, let's analyze each piece of information step by step.\n\n### Infrared Spectroscopy (IR)\n- **3420 cm-1 and 3325 cm-1**: These are characteristic of hydroxyl (-OH) groups. However, since there is no -OH in the molecular formula, these peaks suggest the presence of amine (-NH2) groups, which can also show similar peaks.\n- **1720 cm-1**: This is a strong band for carbonyl (C=O) groups, indicating the presence of an ester, amide, "
+    },
+    {
+      "id": "recJZ3QEfRKjYw9a7",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "Let's analyze the transformations step by step to determine the number of chemically distinct hydrogen atoms in the final product (product 4).\n\n### Step 1: Cyclohexanone to Product 1\nCyclohexanone undergoes a bromination reaction with bromine. The bromination typically occurs at the \u03b1-position relative to the carbonyl group. This results in a substituted cyclohexanol derivative (Product 1). \n\n### Step 2: Product 1 to Product 2\nProduct 1 is heated with sodium hydroxide, which likely involves an i"
+    },
+    {
+      "id": "recK9F5aqdaybl8bb",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, we need to analyze each reaction step by step.\n\n### Reaction 1: 1,1-Dimethoxyethan-1-amine + But-3-en-2-ol + (H+ + Heat) ---> A\n\n1. **Identify the reactants**: 1,1-dimethoxyethan-1-amine and but-3-en-2-ol.\n2. **Understand the mechanism**: This reaction involves a sigmatropic rearrangement where the terminal pi bond migrates into a sigma bond. The amine and alcohol groups will likely undergo a rearrangement to form a new cyclic structure.\n3. **Propose the product**: The pro"
+    },
+    {
+      "id": "recKcjTwONILZqHAX",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To determine the number of loops in the Feynman diagram based on the given expression, we need to analyze the structure of the expression and relate it to the typical form of loop integrals in quantum field theory.\n\nThe expression provided is:\n\n\\[ \\alpha^3 \\cdot g^2 \\sqrt{2} \\cdot 8 \\cdot \\frac{1}{(4\\pi)^6} \\cdot \\left(\\frac{Q}{M}\\right)^2 \\]\n\nThis expression contains several constants and variables, but the key part for identifying the number of loops is the denominator \\((4\\pi)^6\\). In dimensi"
+    },
+    {
+      "id": "recKm6LNWykGapmCr",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To calculate the net potential energy of the system consisting of a charge \\( q \\) placed at a distance \\( d \\) from the center of a grounded conducting sphere of radius \\( R \\), we need to follow these steps:\n\n1. **Determine the Potential at the Surface of the Sphere:**\n   When a charge \\( q \\) is placed near a grounded conducting sphere, the sphere will induce charges on its surface such that the electric field inside the conductor is zero. The potential at the surface of the grounded conducti"
+    },
+    {
+      "id": "recKv4hFyNpViUXnL",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to understand how the presence of dark spots affects the stellar photosphere and subsequently the ratio of the number of neutral atoms of titanium in two energetic levels.\n\n### Step 1: Understanding the Effect of Dark Spots on Temperature\n- When the star's surface is not covered by dark spots, the effective temperature \\(T_{\\text{eff}}\\) is 6000 K.\n- When 40% of the surface is covered by spots, the effective temperature decreases to 5500 K.\n\nThis indicates that the"
+    },
+    {
+      "id": "recL9MFV5zmdlle5T",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's break down the information provided:\n\n1. **FTIR Spectrum**: An absorption peak indicating the presence of an ester group.\n   - Esters typically have the structure RCOOR', where R and R' can be alkyl or aryl groups. The presence of an ester group means there are two oxygen atoms in the molecule, confirming the formula will include \\(O_2\\).\n\n2. **1H NMR Spectrum**:\n   - Six signals total.\n   - Two signals for aromatic-H.\n   - Two signals for vinyl-H (one doublet and one doublet of quartets)."
+    },
+    {
+      "id": "recLAgwx9vbgB5EHk",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine the correct starting material for synthesizing 5-isopropyl-3,4-dimethylcyclohex-1-ene via ring-closing metathesis (RCM), we need to understand the structure and the process involved in RCM.\n\n1. **Structure of the Target Compound**: The target compound is 5-isopropyl-3,4-dimethylcyclohex-1-ene. This means it has a cyclohexane ring with substituents at positions 1, 3, 4, and 5. Specifically, there is an isopropyl group at position 5 and methyl groups at positions 3 and 4.\n\n2. **Ring-C"
+    },
+    {
+      "id": "recLSzwBUS3olCjhl",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To identify the unknown compound from the given 1H NMR data, let's analyze the data step by step:\n\n1. **Chemical Shifts and Multiplicities**:\n   - At 7.0 ppm (1H, d, J = 16.0 Hz): This suggests a double bond with a coupling constant of 16.0 Hz, which is typical for a vinyl proton in conjugation with a carbonyl group.\n   - At 5.5 ppm (1H, dq): This indicates a double bond proton with two sets of coupling, suggesting a vicinal diol or a complex structure involving a double bond and a methyl group."
+    },
+    {
+      "id": "recLrRirj7iXoB0rU",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the correct transition route and the corresponding probability, we need to consider the allowed transitions in quantum mechanics, specifically for the hydrogen atom.\n\n### Step 1: Allowed Transitions\nIn the non-relativistic theory of the hydrogen atom, the selection rules for electric dipole transitions are:\n- \u0394l = \u00b11\n- \u0394m = 0, \u00b11\n- \u0394n \u2265 0 (the principal quantum number can only decrease or stay the same)\n\nGiven the initial state \\(|3,0,0\\rangle\\), we need to find the intermediate sta"
+    },
+    {
+      "id": "recN4DY9Q5V03glmQ",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To calculate the imaginary part of the scattering amplitude along the incident beam direction, we need to use the relationship between the phase shifts and the imaginary part of the scattering amplitude. The phase shift \\(\\delta_n\\) for a given partial wave \\(n\\) is related to the imaginary part of the scattering amplitude \\(f_n\\) by the formula:\n\n\\[ \\tan(\\delta_n) = \\frac{2k_n}{E - E_n} \\cdot \\text{Im}(f_n) \\]\n\nFor simplicity, we can approximate that the energy difference \\(E - E_n\\) is negligi"
+    },
+    {
+      "id": "recNAiPUKOulQbKVP",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine which of the given physical theories never requires regularization at high energies, let's analyze each option:\n\n1. **Quantum Electrodynamics (QED)**: This theory describes the interactions between charged particles and photons. At high energies, QED encounters divergences that need to be regularized to make sense of the infinities that arise in calculations. Therefore, QED does require regularization.\n\n2. **Superstring Theory**: This is a theoretical framework where point-like part"
+    },
+    {
+      "id": "recNFJjE5PPTqVJGv",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the pH of the solution, we need to consider the contributions of each component to the final solution. Let's break it down step by step:\n\n### Step 1: Calculate the moles of each substance.\n- **CH3COOH (Acetic Acid):**\n  \\[\n  \\text{Moles} = \\text{Volume (L)} \\times \\text{Concentration (M)} = 0.5 \\, \\text{L} \\times 0.1 \\, \\text{M} = 0.05 \\, \\text{moles}\n  \\]\n\n- **HCl (Hydrochloric Acid):**\n  \\[\n  \\text{Moles} = \\text{Volume (L)} \\times \\text{Concentration (M)} = 0.4 \\, \\text{L} \\times"
+    },
+    {
+      "id": "recNu3MXkvWUzHZr9",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, we need to use the principles of special relativity, specifically time dilation and length contraction. However, since the question asks about the time experienced by the astronaut, we focus on time dilation.\n\nThe formula for time dilation in special relativity is given by:\n\n\\[ \\Delta t' = \\frac{\\Delta t}{\\gamma} \\]\n\nwhere:\n- \\(\\Delta t'\\) is the time experienced by the astronaut (proper time).\n- \\(\\Delta t\\) is the time experienced by an observer at rest relative to the s"
+    },
+    {
+      "id": "recNuT2oSnO86bxOx",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's analyze each step in the process to determine the structure of the final product 5.\n\n1. **Benzene (C6H6) is treated with HNO3 and H2SO4, forming product 1.**\n   - This reaction is a nitration, which introduces a nitro group (-NO2) at the meta position relative to any existing substituents. Since benzene has no substituents initially, the nitro group will be introduced at the meta position. So, product 1 is 2-nitrobenzene.\n\n2. **Product 1 (2-nitrobenzene) is treated with Br2 and iron powder"
+    },
+    {
+      "id": "recO3hvCWRGiG0odN",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To synthesize 1-(cyclohexyl(hydroxy)methyl)cyclohexanecarbaldehyde from ethynylcyclohexane, we need to follow these steps:\n\n1. **Convert the ethynyl group to an alkene**: We can use sodium amide (NaNH2) in anhydrous conditions and methyl chloride to form a vinylmethyl ether. This step is not directly relevant to the final product but is a common transformation in organic synthesis.\n   \n2. **Hydrogenation to form an alkane**: Hydrogenation over palladium (H2/Pd) will convert the alkene to an alka"
+    },
+    {
+      "id": "recOYsaYs6RmtlTDy",
+      "expected": "A",
+      "extracted": null,
+      "correct": false,
+      "response": "To determine the momentum \\( p \\) of the photon required to transition the diatomic molecule from its fundamental state to the next state with the lowest possible energy, we need to consider the energy levels of the molecule in the quantum rotation-vibration model.\n\n### Step 1: Energy Levels of Rotation and Vibration\n\nFor a diatomic molecule, the total energy \\( E \\) can be approximated as the sum of the rotational and vibrational energies:\n\n\\[ E = E_{\\text{rot}} + E_{\\text{vib}} \\]\n\n#### Rotati"
+    },
+    {
+      "id": "recOkA2zsy4GSMD9R",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to determine the chemical formulas of salts A and B based on the given experimental data. Let's break down the problem step by step:\n\n1. **Determine the composition of the gases produced:**\n   - Tube \u21161 (anhydrous Mg(ClO4)2): Weight increase of 3.60 g indicates the formation of Cl2 gas.\n   - Tube \u21162 (Ca(OH)2 solution): No change in weight indicates no reaction with CO2 or HCl.\n   - Tube \u21163 (red-hot copper): Weight increase of 0.80 g indicates the formation of CuO, "
+    },
+    {
+      "id": "recOvqPKUtyy9ISA1",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's analyze each reaction step by step.\n\n### Reaction 1: 1-vinylspiro[3.5]non-5-en-1-ol + (THF, KH, H+)\n\n1. **Starting Material**: 1-vinylspiro[3.5]non-5-en-1-ol\n2. **Conditions**: THF (tetrahydrofuran), potassium hydride (KH), and proton (H+)\n3. **Mechanism**:\n   - **Step 1**: The spiro compound undergoes a rearrangement to form a more stable structure. The vinyl group migrates to the spiro carbon, forming a new double bond.\n   - **Step 2**: The resulting compound is then protonated by H+ in "
+    },
+    {
+      "id": "recPL4ZPpVYxgMu57",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine which symmetries must be respected by all operators in the Standard Model Effective Field Theory (SMEFT), let's analyze each option:\n\n1. **Lorentz Symmetry**: This is a fundamental symmetry of spacetime in special relativity. It must be respected by all operators in the SMEFT because the theory is formulated in a relativistic framework.\n\n2. **Poincar\u00e9 Symmetry**: This includes both Lorentz symmetry and translational symmetry. Since Lorentz symmetry is already included, and the theor"
+    },
+    {
+      "id": "recPSTGXK3P39yNYT",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To solve this problem, we need to understand the state of the two-electron system and how measurements of individual angular momenta relate to the overall state.\n\nGiven the state \\( |l_1, l_2, l, m> = |1,1, 2, -1> \\), we know that:\n- The individual orbital angular momenta \\( l_1 \\) and \\( l_2 \\) are both 1.\n- The total angular momentum \\( l \\) is 2.\n- The z-component of the total angular momentum \\( m \\) is -1.\n\nThe possible values for \\( L_{1z} \\) and \\( L_{2z} \\) are \\( \\pm \\hbar \\) because ea"
+    },
+    {
+      "id": "recPzW1WqRnPs57D6",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to follow these steps:\n\n1. **Initial State**: The particle has a magnetic moment \\(\\mu = \\gamma S_z\\), where \\(S_z\\) is the z-component of the spin operator and \\(\\gamma\\) is the gyromagnetic ratio. Initially, the magnetic field is along the +Z direction, so the energy levels of the particle are split by an amount \\(\\pm \\gamma B\\).\n\n2. **Time Evolution**: When the magnetic field is suddenly turned off and replaced by a magnetic field along the +Y direction, the Ham"
+    },
+    {
+      "id": "recQ8oxSY2aCwFRS8",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine the minimum resolution needed to observe at least 30% of the decays, we need to calculate the distance traveled by the particle during its proper lifetime. The key steps are as follows:\n\n1. **Calculate the velocity of \\(X^0\\):**\n\n   The relativistic velocity \\(v\\) can be found using the energy-mass relation and the momentum-energy relation. Given the energy \\(E = 27 \\text{ GeV}\\) and the mass \\(m = 3.41 \\text{ GeV}\\), we use the formula for the Lorentz factor \\(\\gamma\\):\n\n   \\[\n   \\"
+    },
+    {
+      "id": "recQiWOxhkXRz9NVE",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the molecular symmetry group of product E, let's analyze the given information step by step:\n\n1. **Reaction of Solid A with Gas B:**\n   - Solid A + 8 equivalents of Gas B \u2192 Bright Red Product C\n   - This suggests that A and B react in a stoichiometric manner to form C, possibly involving an oxidation-reduction process where A is oxidized and B is reduced.\n\n2. **Reaction of C with Gas D:**\n   - Product C + 2 equivalents of Gas D \u2192 Extremely Hazardous Product E\n   - This indicates tha"
+    },
+    {
+      "id": "recRTiyaRymerDJ4y",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To determine the ratio of the equilibrium temperatures between Planet_4 and Planet_2, we need to use the Stefan-Boltzmann law for blackbody radiation, which relates the temperature of a planet to its distance from the star. The equilibrium temperature \\(T\\) of a planet can be related to its distance \\(a\\) from the star by the following relation:\n\n\\[ T \\propto \\left(\\frac{1}{a}\\right)^{1/2} \\]\n\nGiven that the orbital periods of the planets are in the ratio 1:2:2.5:3.5:5, we can use Kepler's third"
+    },
+    {
+      "id": "recRgabRzMaEoBRcM",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's break down the synthesis step by step to determine the number of chemically distinct hydrogen atoms in the final product 4.\n\n### Step 1: Reaction of 7-(tert-butoxy)bicyclo[2.2.1]hepta-2,5-diene with 2 equivalents of 5,6-bis(dibromomethyl)cyclohexa-1,3-diene and sodium iodide\n\nThe starting material, 7-(tert-butoxy)bicyclo[2.2.1]hepta-2,5-diene, has the following structure:\n\n```\n      CH2-CH-CH2-CH2-CH2-CH2-CH2-CH2-CH2-CH3\n       |         |         |         |\n    CH3-CH2-CH2-CH2-CH2-CH2-CH"
+    },
+    {
+      "id": "recS48OsU6kVadBPW",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To solve this problem, we need to use the relativistic velocity addition formula and the formula for the total energy of a relativistic particle.\n\n### Step 1: Relativistic Velocity Addition\nThe relativistic velocity addition formula is given by:\n\n\\[ v_{rel} = \\frac{v_1 + v_2}{1 + \\frac{v_1 v_2}{c^2}} \\]\n\nHere, \\( v_1 = 0.6c \\) and \\( v_2 = 0.5c \\).\n\nSubstituting these values into the formula:\n\n\\[ v_{rel} = \\frac{0.6c + 0.5c}{1 + \\frac{(0.6c)(0.5c)}{c^2}} = \\frac{1.1c}{1 + 0.3} = \\frac{1.1c}{1.3}"
+    },
+    {
+      "id": "recSBcGLPatKb3Ygu",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To solve this problem, we need to understand the nature of radioactive decay, which follows an exponential distribution. The key point here is that the decay of an atomic nucleus is a memoryless process, meaning the probability of decay does not depend on how long the nucleus has already existed without decaying.\n\nGiven:\n- The decay probability within 100 minutes is 32%, so the decay rate \\( \\lambda \\) can be calculated using the formula for exponential decay: \\( P(t) = 1 - e^{-\\lambda t} \\).\n\nF"
+    },
+    {
+      "id": "recTs7qzfJs6kfLUK",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "Let's analyze the given sequence step by step:\n\n1. **Sequence Analysis**: The provided sequence starts with \"5' ATGTACCCATACGATGTTCCAGATTACGCCAAATGACTCTGGAAGAAGTCCGCGGCCAGGACACAGTTCCGGAAAGCACAGCCAGGATGCAGGGTGCCGGGAAAGCGCTGCATGAGTTGCTGCTGTCGGCGCAGCGTCAGGGCTGCCTCACTGCCGGCGTCTACGAGTCAGCCAAAGTCTTGAACGTGGACCCCGACAATGTGACCTTCTGTGTGCTGGCTGCGGGTGAGGAGGACGAGGGCGACATCGCGCTGCAGATCCATTTTACGCTGATCCAGGCTTTCTGCTGCGAGAACGACATCGACATAGTGCGCGTGGGCGATGTGCAGCGGCTGGCGGCTATCGTGGGCGCCGGCGAGGAGGCGGGTGCGCCGGGCGACCTGCACTG"
+    },
+    {
+      "id": "recUBgVlkKzcRPDdK",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To address this question, let's break down the experimental setup and what we would expect to see at each step:\n\n1. **Cell Labeling**: iPSCs are labeled with a mRaspberry fluorescent protein fused under a lineage-specific promoter. This means that the red fluorescence should be specific to the cell type from which the iPSCs were derived.\n\n2. **Embryo Injection**: These labeled iPSCs are injected into a 32-cell stage blastocyst. At this early stage, the embryo has not yet begun to differentiate s"
+    },
+    {
+      "id": "recUOePh79cp4T2Bg",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's analyze each step of the given reactions to determine the correct products.\n\n### Reaction A: \nThe starting material is \\(((3-\\text{methylbut-2-en-1-yl})\\text{oxy})\\text{methyl}\\text{benzene}\\). This compound has a structure that can be represented as:\n\n\\[ \\text{CH}_3\\text{C}=\\text{CH}(\\text{OCH}_3)\\text{CH}_2\\text{C}(\\text{CH}_3)=\\text{C}(\\text{Ph})\\text{CH}_3 \\]\n\nThis diene can undergo a Cope rearrangement when treated with a strong base (1. BuLi) followed by acid (2. H+). The Cope rearra"
+    },
+    {
+      "id": "recV1nqYQvpII94oC",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the correct expressions for the scalar potential \\( V(\\vec{r},t) \\) and vector potential \\( \\vec{A}(\\vec{r},t) \\), we need to consider the retarded potentials in electrodynamics. These potentials account for the fact that the electromagnetic fields propagate at the speed of light \\( c \\).\n\n### Step 1: Scalar Potential \\( V(\\vec{r},t) \\)\n\nThe scalar potential \\( V(\\vec{r},t) \\) due to a moving point charge \\( q \\) can be derived using the retarded time \\( t_r \\). The retarded time \\("
+    },
+    {
+      "id": "recVEXvhYxAhELVqB",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To identify Compound X based on the given 1H-NMR and 13C-NMR data, let's analyze the spectral information step by step:\n\n### 1. **13C-NMR Analysis:**\n- **\u03b4 21.3 (1C, s)**: This suggests a methyl group (CH3).\n- **\u03b4 28.4 (1C, s)**: Another methyl group (CH3).\n- **\u03b4 126.9 (2C, s)**: These are likely part of the aromatic ring, possibly from a benzene ring.\n- **\u03b4 127.1 (1C, s)**: Another carbon in the aromatic ring.\n- **\u03b4 129.1 (2C, s)**: More carbons in the aromatic ring.\n- **\u03b4 130.3 (1C, s)**: Anot"
+    },
+    {
+      "id": "recVvpD8miVjmmyfe",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to determine the pattern or rule that the algorithm uses to convert DNA sequences into numerical values.\n\nFirst, let's break down the given examples:\n\n1. AGG -> 115\n2. TGCTGA -> 176\n\nWe can start by examining the lengths of the sequences and their corresponding outputs:\n\n- AGG has a length of 3 and its output is 115.\n- TGCTGA has a length of 6 and its output is 176.\n\nNext, let's consider if there might be a relationship between the length of the sequence and the ou"
+    },
+    {
+      "id": "recWPMm91mGDLXONm",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To synthesize [1,1'-bi(cyclopentylidene)]-2-one from 1,5-dichloropentane, we need to follow these steps:\n\n1. **Convert 1,5-dichloropentane to 1,5-dipropargyloxy pentane**:\n   - We start with 1,5-dichloropentane and use sodium (Na) in anhydrous ether to generate the propargyl radicals.\n   - This step is represented by: Na, ether.\n\n2. **Form the cyclopentadienyl ring**:\n   - The next step involves chlorination under light (Cl2/hv) to introduce chlorine atoms at the positions that will form the cyc"
+    },
+    {
+      "id": "recWxGU8Q4YReJ1tb",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the structure of the major isomer of product 3, let's analyze the reactions step by step.\n\n### Step 1: Heating Cyclooctatetraene with Maleic Anhydride\nCyclooctatetraene (COT) is a conjugated diene. When it reacts with maleic anhydride (MA), it undergoes a Diels-Alder reaction to form a cycloaddition product. The product will be a substituted cyclohexene derivative with two carboxylic acid groups attached to the ring.\n\n### Step 2: Reaction of Product 1 with Methanol and Sulfuric Acid"
+    },
+    {
+      "id": "recWzUUYBN0NuXO2k",
+      "expected": "A",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to follow several steps:\n\n### Step 1: Calculate the initial moles of acetic acid (CH\u2083COOH)\nThe initial concentration of acetic acid is 0.05 M, and the volume is 20.00 cm\u00b3 (or 0.020 L).\n\n\\[ \\text{Moles of CH\u2083COOH} = 0.05 \\, \\text{M} \\times 0.020 \\, \\text{L} = 0.001 \\, \\text{moles} \\]\n\n### Step 2: Determine the volume after dilution\nWhen 20.00 cm\u00b3 of water is added to 20.00 cm\u00b3 of acetic acid, the total volume becomes 40.00 cm\u00b3 (or 0.040 L).\n\n### Step 3: Calculate th"
+    },
+    {
+      "id": "recXsuOHRBLcyenF2",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To convert a sequential algorithm into a parallel algorithm for solving higher-dimensional heat equations using higher-order finite difference approximations and parallel splitting, the key factor involves how the computational tasks can be distributed across multiple processors. In this context, the focus is on the matrix exponential function, which is approximated by a fractional approximation.\n\nLet's analyze each option:\n\n(A) **Complex roots of fractional approximation**: This refers to the e"
+    },
+    {
+      "id": "recXvQ6gWAmyakrpD",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the ratio of the equilibrium temperatures between Planet1 and Planet2, we need to consider the relationship between the equilibrium temperature \\( T_{eq} \\), the distance from the star \\( a \\), and the stellar properties.\n\nThe equilibrium temperature \\( T_{eq} \\) of a planet can be approximated using the Stefan-Boltzmann law and the energy balance equation:\n\n\\[ T_{eq} = \\left( \\frac{L_* \\cos i}{16 \\pi \\sigma a^2 (1 - A)} \\right)^{1/4} \\]\n\nWhere:\n- \\( L_* \\) is the luminosity of the "
+    },
+    {
+      "id": "recYA3LPsCvF1fTMI",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to understand the transformations that occur in each reaction and how they relate to the starting materials.\n\n1. **Reaction A**: \n   - The product is (R)-4-ethyltetrahydro-2H-pyran-2-one.\n   - The reducing agent used is LiBH4 followed by H+.\n   - LiBH4 is a strong reducing agent that can reduce carboxylic acids to alcohols under certain conditions, but it also has the ability to reduce ketones to secondary alcohols if the conditions are right. However, in this case"
+    },
+    {
+      "id": "recYOzCsevNz61Lyn",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To identify the correct 1H NMR data for the given compound, let's break down the information provided and analyze each choice step by step:\n\n1. **Compound Structure**: The compound is a di-substituted 6-membered aromatic ring with 8 carbon atoms in total. This means it has two substituents on the benzene ring.\n\n2. **FTIR Spectrum Information**:\n   - **Carbonyl Group**: Indicates the presence of a carbonyl (C=O) group.\n   - **Aromatic-Halogen Bond**: Indicates the presence of a halogen atom (F, C"
+    },
+    {
+      "id": "recYt8xx80OTyDsL0",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "Let's break down the scenario step by step:\n\n1. **Tagging and Delivery**: The inner capsid proteins of rotavirus are tagged with GFP and delivered to mice via oral gavage. This means the virus is entering the digestive system.\n\n2. **Stomach Acid and Intestinal Mucus**: Some of the fluorescence is destroyed by stomach acid, indicating that the virus is being degraded in the stomach. Some are entangled in the intestinal mucus, suggesting that the virus might be interacting with the gut mucosa.\n\n3."
+    },
+    {
+      "id": "recZ13cwgDQf9jRd9",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's analyze the transformations step by step to determine the structure of the final product 3 and identify the coupling pattern of the most deshielded hydrogen atom.\n\n### Step 1: Transformation from 1,3-Dibromoadamantane to Product 1\n1,3-Dibromoadamantane undergoes a reaction with excess KOH at 240\u00b0C, which likely involves a nucleophilic substitution or elimination process. The product is a light yellow solid with a 1H NMR spectrum showing signals at 4.79 (2H), 2.41-2.23 (10H), and 1.94 (2H)."
+    },
+    {
+      "id": "recZSGUkn56v9kEp1",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's analyze the reaction step by step:\n\n### Step 1: Reaction with KOH, H2O, THF, Heat\n3,4-Dimethylhexanedial (a diol) will undergo an intramolecular dehydration to form a cyclic ketone. The structure of the starting material is:\n\\[ \\text{HO-CH(CH3)-CH(CH3)-CH(OH)-CH=CH2} \\]\n\nUpon dehydration, it forms a cyclic ketone:\n\\[ \\text{Cyclohexanone-3,4-dimethyl-2-oxo-2,3-dihydro-1H-pyrrole} \\]\nThis can be simplified to:\n\\[ \\text{3,4-dimethylcyclohexanone-2-oxo-2,3-dihydro-1H-pyrrole} \\]\n\n### Step 2: R"
+    },
+    {
+      "id": "recZWeueB7lSPR6wN",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's break down the problem step by step:\n\n### Step 1: Reaction of Cyclohexanone with LDA and Benzaldehyde\nCyclohexanone is treated with LDA (lithium diisopropylamide) at low temperature, which deprotonates it to form the enolate ion. This enolate ion then reacts with benzaldehyde to form a hemiacetal. The reaction can be represented as follows:\n\n\\[ \\text{Cyclohexanone} + \\text{LDA} \\rightarrow \\text{Enolate ion} \\]\n\\[ \\text{Enolate ion} + \\text{Benzaldehyde} \\rightarrow \\text{Hemiacetal} \\]\n\nT"
+    },
+    {
+      "id": "recZbxrocrxh9YENH",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To calculate the enthalpy of formation of the given molecule \\((CH_3)_2C=CH-CH_2-CH(CH_3)-CH_2-CH=C(CH_3)_2\\), we need to consider the bond energies and the enthalpy of atomization of carbon.\n\n### Step 1: Determine the number of each type of bond in the molecule\n- **C-C bonds**: There are 5 C-C single bonds.\n- **C=C bonds**: There are 2 C=C double bonds.\n- **C-H bonds**: Each methyl group has 3 C-H bonds, and there are 8 methyl groups (2 from each end and 6 in the middle). So, \\(8 \\times 3 = 24\\"
+    },
+    {
+      "id": "recZdZxsN0AxDx0pB",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To address the question, let's analyze the given information step by step:\n\n1. **Efficiency and Slope**: The scientist obtained an efficiency of 100%, which means that each cycle doubles the amount of DNA. The slope of the calibration curve is -3.3, indicating that for every cycle, the Ct value decreases by 3.3 units.\n\n2. **Expected Behavior**: In a perfectly efficient qPCR reaction, the Ct values should decrease linearly with increasing template concentration. Given the slope of -3.3, we can ca"
+    },
+    {
+      "id": "recZt4x514UQNnsgy",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To identify the correct starting materials for synthesizing methyl 2-propyl-1,2,4a,5,6,7,8,8a-octahydronaphthalene-1-carboxylate, let's break down the structure and think about the possible synthetic routes:\n\n1. **Structure Analysis**: The target molecule is a naphthalene derivative with an additional propyl group at position 2 and a carboxylic acid group at position 1. It also has eight hydrogen atoms attached, indicating it is an octahydronaphthalene.\n\n2. **Functional Groups**: The key functio"
+    },
+    {
+      "id": "reca44yABeO2fx7UB",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "Let's break down the problem step by step.\n\n### Step 1: Reaction of 3,3,6-trimethylhepta-1,5-dien-4-one with Meta-Chloroperbenzoic Acid (mCPBA)\n\nThe compound 3,3,6-trimethylhepta-1,5-dien-4-one has the structure:\n\\[ \\text{CH}_3\\text{C}=\\text{C(CH}_3\\text{)}\\text{C}=\\text{C(CH}_3\\text{)}\\text{C(OH)}\\text{C}=\\text{CH}\\text{C(CH}_3\\text{)}\\text{CH}_3 \\]\n\nWhen treated with mCPBA, it undergoes epoxidation at the double bonds. The two possible products are formed due to the different positions of the "
+    },
+    {
+      "id": "recaXdGn3FAIkxLGM",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the order of magnitude of the entropy of the black hole, we need to follow these steps:\n\n1. **Determine the radius of the event horizon (R) using the angular size and distance:**\n\n   The angular size \\(\\theta\\) of an object is given by:\n   \\[\n   \\theta = \\frac{R}{d}\n   \\]\n   where \\(R\\) is the radius of the event horizon and \\(d\\) is the distance to the object. Given \\(\\theta = 10^{-17}\\) degrees and \\(d = 10^{10}\\) parsecs, we first convert \\(\\theta\\) to radians because the formula for "
+    },
+    {
+      "id": "recafnH3RRnMBXEb1",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To address this question, let's break down the key points and analyze each option:\n\n1. **Klinefelter's Syndrome**: This condition occurs when a boy has an extra X chromosome (XXY instead of XY). It results from errors during meiosis, specifically meiosis I, where homologous chromosomes do not separate properly.\n\n2. **Down's Syndrome**: This condition is caused by an extra copy of chromosome 21 (trisomy 21), resulting from errors during cell division that occur after fertilization.\n\n3. **Molecula"
+    },
+    {
+      "id": "recakFKZioXUuldcd",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To identify the starting material A in the given reaction, let's break down the process step by step:\n\n1. **Reaction Type and Products**: The reaction involves a methyleneruthenium compound and 1-propene to form 1-(prop-1-en-1-yl)-2-vinylcyclopentane. This suggests a cycloaddition or a related reaction involving a metal complex.\n\n2. **Structure of the Product**: The product, 1-(prop-1-en-1-yl)-2-vinylcyclopentane, has a cyclopentane ring with a prop-1-en-1-yl group attached at position 1 and a v"
+    },
+    {
+      "id": "recb2M22zaD3tL6Qc",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's analyze the given information step by step:\n\n1. **FTIR Spectrum Analysis:**\n   - A very broad absorption peak at 3000 wavenumbers suggests the presence of hydroxyl (-OH) groups.\n   - A strong absorption peak at 1700 wavenumbers indicates the presence of carbonyl (C=O) groups.\n\n2. **1H NMR Spectrum Analysis:**\n   - No signals corresponding to vinyl-hydrogens (indicating no alkenes).\n   - One signal is a doublet of triplets of quartets.\n   - Another signal is a doublet of triplets of triplet"
+    },
+    {
+      "id": "recb4cGsC6BJUCU3V",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's analyze each step in the reaction sequence:\n\n1. **Compound A (C3H6)**: This is propene (CH3-CH=CH2).\n\n2. **Bromination of Propene**: In the presence of carbon tetrachloride, propene undergoes electrophilic addition with bromine to form 1,2-dibromoethane (Br2-CH2-CH2-Br). This is compound B.\n\n3. **Reaction of Compound B with Alcoholic KOH**: 1,2-Dibromoethane reacts with alcoholic KOH to form ethylene glycol (HO-CH2-CH2-OH). This is compound C.\n\n4. **Passing Compound C through a Red-Hot Iro"
+    },
+    {
+      "id": "reccOKzFNmyqeJ6ry",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "To determine the correct reagent (A) and catalyst (B) for the reaction, let's analyze the transformation from 3-methylpyrrolidine to 1-(cyclohexylidenemethyl)-3-methylpyrrolidine.\n\n1. **Identify the Reaction Type**: The final product suggests that a Michael addition or conjugate addition has occurred, where a carbonyl group (from compound A) adds to the nitrogen atom of 3-methylpyrrolidine, forming a new carbon-nitrogen bond and creating a cyclic imine structure.\n\n2. **Analyze Compound A**:\n   -"
+    },
+    {
+      "id": "reccVFW11Elovnf8T",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "Let's analyze the situation step by step:\n\n1. **Construct Design**: The bicistronic lox-Cre vector has the ligand ORF (under the CBA promoter) followed by a stop-loxP cassette, then the receptor ORF (with IRES and eGFP) followed by a stop-lox2272 cassette. This design allows for the expression of both proteins if the loxP and lox2272 sites are properly recombined.\n\n2. **Expression Verification**: Western blot analysis shows that the proteins are expressed, as indicated by the presence of mCherry"
+    },
+    {
+      "id": "recclFbsjbaiVVnnV",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To synthesize 1-(3-bromo-5-nitrophenyl)ethan-1-one starting from benzene, we need to follow these steps:\n\n1. **Nitration**: Convert benzene to 1,3-dinitrobenzene.\n   - Use nitric acid (HNO3) and sulfuric acid (H2SO4) as the nitrating agent.\n\n2. **Bromination**: Introduce bromine at the 5-position.\n   - Use bromine (Br2) and iron bromide (FeBr3) for selective bromination at the 5-position.\n\n3. **Acetylation**: Acetylate the phenolic hydroxyl group at the 3-position.\n   - Use acetyl chloride (CH3C"
+    },
+    {
+      "id": "recdya6FuYraBU5Rh",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to use the relationship between the radial velocity (RV) of the star and the mass of the planet. The radial velocity is related to the mass of the planet and the semi-major axis of its orbit through Kepler's laws and the dynamics of the system.\n\nThe formula for the radial velocity \\(v\\) due to the gravitational pull of a planet is given by:\n\n\\[ v = \\frac{2\\pi a P}{P_{\\text{orb}} \\sqrt{G(M + m)}} \\]\n\nWhere:\n- \\(a\\) is the semi-major axis of the orbit,\n- \\(P\\) is the"
+    },
+    {
+      "id": "receYQxnUBvxPcvbQ",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To solve this problem, we need to understand how the brightness variations caused by the spots compare to those that would be caused by an exoplanet.\n\n### Step 1: Calculate the Brightness Reduction Due to Spots\nThe filling factor of the spots is 20%, meaning 20% of the star's surface is covered by cooler regions. The temperature difference between the spots and the rest of the star is 1000K, while the effective temperature of the star is 6000K. \n\nThe brightness reduction due to the spots can be "
+    },
+    {
+      "id": "receo3UUzRvWCqyfA",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the correct answer, let's break down the reaction step by step:\n\n1. **Identify the reactants**: Cyclohexanone and piperidine are given as the starting materials.\n\n2. **Understand the reaction mechanism**: The reaction involves the condensation of a ketone (cyclohexanone) with a primary amine (piperidine) in the presence of an acid catalyst to form a cyclic imine (Schiff base).\n\n3. **Determine the acid catalyst**: The problem specifies that an acid catalyst is needed. Among the choic"
+    },
+    {
+      "id": "recf6ayQmL1SxKbvW",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To address this question effectively, let's break down the key considerations:\n\n1. **Complexity of Chirality and Tautomerism**: Xantheraquin has multiple chiral centers and can exist in various tautomeric forms. This complexity significantly increases the number of possible structures to consider, making it challenging to predict which form(s) might be biologically active.\n\n2. **In Silico Docking Studies**: These studies require a clear understanding of the molecule's structure to accurately mod"
+    },
+    {
+      "id": "recgI6tUQ7RLJRWGx",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To solve this problem, we need to compare the order of magnitude of the paramagnetic coupling term (Zeeman effect) with the transition energy of the Hydrogen atom.\n\n### Step 1: Paramagnetic Coupling Term (Zeeman Effect)\nThe Zeeman effect in a hydrogen atom due to a magnetic field \\(\\vec{B}\\) can be described by the Hamiltonian:\n\\[ H_Z = -\\mu_B \\vec{L} \\cdot \\vec{B} \\]\nwhere \\(\\mu_B\\) is the Bohr magneton, and \\(\\vec{L}\\) is the orbital angular momentum operator. Since the magnetic field \\(\\vec{B"
+    },
+    {
+      "id": "recgM7o1tcc7tP778",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to consider the conservation of angular momentum and parity, as well as the given condition for the isospin, angular momentum, and spin quantum numbers of the final NN state.\n\n### Step 1: Initial State Analysis\nThe initial state is \\(1S_0\\). This means:\n- The total angular momentum \\(L = 0\\) (since it's an S state).\n- The total spin \\(S = 0\\) (since it's an S state).\n\n### Step 2: Final State Analysis\nThe final state has \\(T(NN) = 0\\). According to the given conditi"
+    },
+    {
+      "id": "recgXxEgllSGEpELP",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine which stars can be detected with both the ESPRESSO spectrograph at the Paranal Observatory and the HIRES spectrograph at the Keck Observatory, we need to compare the apparent V magnitudes of the stars to the detection limits of each instrument.\n\n### ESPRESSO Detection Limit:\nStars with apparent V magnitudes brighter than 17 mag can be observed with ESPRESSO.\n\n### HIRES Detection Limit:\nStars with apparent V magnitudes brighter than 16 mag can be observed with HIRES.\n\nNow, let's eval"
+    },
+    {
+      "id": "rechKl68Uc6H7vU0N",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's analyze each reaction step by step.\n\n### Reaction 1: 2-Ethyl-2,6-dimethylcyclohexan-1-one + Ethyl Acrylate (t-BuOK)\n\n1. **Identify the reactants**: \n   - 2-Ethyl-2,6-dimethylcyclohexan-1-one (a ketone)\n   - Ethyl acrylate (an enolizable ester)\n\n2. **Reaction mechanism**:\n   - The t-BuOK acts as a base to deprotonate the carbonyl oxygen of ethyl acrylate, forming an enolate ion.\n   - The enolate ion then attacks the carbonyl carbon of the ketone in an addition reaction.\n   - The resulting p"
+    },
+    {
+      "id": "rechgQucGlrnt8KRV",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to follow these steps:\n\n1. **Determine the state vector**:\n   The state \\(|\\alpha\\rangle\\) is given as:\n   \\[\n   |\\alpha\\rangle = (1+i)|\\text{up}\\rangle + (2-i)|\\text{down}\\rangle\n   \\]\n   We need to normalize this state vector. First, calculate the norm squared:\n   \\[\n   \\langle\\alpha|\\alpha\\rangle = |1+i|^2 + |2-i|^2\n   \\]\n   \\[\n   |1+i|^2 = (1+i)(1-i) = 1^2 - i^2 = 1 + 1 = 2\n   \\]\n   \\[\n   |2-i|^2 = (2-i)(2+i) = 2^2 - i^2 = 4 + 1 = 5\n   \\]\n   So,\n   \\[\n   \\langl"
+    },
+    {
+      "id": "rechtUKxC6G67H7Pr",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "Let's analyze the information provided from each characterization technique step by step:\n\n1. **FTIR Spectrum Analysis:**\n   - A broad absorption peak at 3000 wavenumbers suggests the presence of hydroxyl (-OH) groups or alkenes.\n   - Strong absorption peaks at 1700 and 1650 wavenumbers indicate the presence of carbonyl (C=O) groups, which are characteristic of esters, ketones, or carboxylic acids.\n\n2. **1H NMR Spectrum Analysis:**\n   - The presence of vinyl-hydrogens indicates the presence of a"
+    },
+    {
+      "id": "recihePFulRgNKsIn",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's analyze each reaction step by step.\n\n### First Reaction:\n\\[ \\text{butan-2-one} + \\text{NaCN} + A \\rightarrow 2\\text{-hydroxy-2-methylbutanenitrile} \\]\n\n1. **Butan-2-one** is an aldehyde with a ketone functionality at the second carbon.\n2. **NaCN** (sodium cyanide) will react with butan-2-one to form a nitrile. The reaction involves nucleophilic attack by the cyanide ion (CN\u207b) on the carbonyl carbon.\n3. The product should be a nitrile with a hydroxyl group attached to the second carbon and "
+    },
+    {
+      "id": "reciuppdQde4FGX1z",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To solve this problem, we need to consider the conservation of energy and momentum in the center-of-mass frame of the electron-positron system. Let's break it down step by step:\n\n1. **Lorentz Factors and Energies:**\n   - The electron has a Lorentz factor \\(\\gamma_e = 4\\).\n   - The positron has a Lorentz factor \\(\\gamma_p = 2\\).\n\n2. **Rest Mass Energy:**\n   - The rest mass energy of an electron (or positron) is \\(E_0 = mc^2\\), where \\(m\\) is the mass of the electron and \\(c\\) is the speed of ligh"
+    },
+    {
+      "id": "recjJ54TXc04enRkZ",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's break down the problem step by step:\n\n1. **Identify Compound A:**\n   - Proton NMR shows a triplet at 0.9 ppm for 6H and a quartet at 1.3 ppm for 4H.\n   - The triplet at 0.9 ppm suggests a methyl group attached to a secondary carbon (CH3-CH2-), and the quartet at 1.3 ppm suggests another methyl group attached to a primary carbon (CH3-CH2-CH2-CH3).\n   - This indicates that Compound A is 2,2,6-trimethylheptane.\n\n2. **Monobromination to Form Compound B:**\n   - Monobromination of 2,2,6-trimethy"
+    },
+    {
+      "id": "recjgMJaMxz4ESDF2",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine which of the given organic moieties show optical isomerism, we need to understand what causes optical isomerism. Optical isomers, also known as enantiomers, arise from the presence of chiral centers (atoms bonded to four different groups) in a molecule. These chiral centers can exist in two non-superimposable mirror images.\n\nLet's analyze each option:\n\n1. **Dimethyl 6,6'-dinitro-[1,1'-biphenyl]-2,2'-dicarboxylate**: This compound has a biphenyl structure with nitro and carboxylate g"
+    },
+    {
+      "id": "reck1zKeCssmN82Ga",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the major outcome of the reaction between 4,4-dimethylcyclopent-1-enol and bromine, we need to consider the reactivity of the enol form of the compound and the mechanism of bromination.\n\n1. **Identify the Reactant**: The reactant is 4,4-dimethylcyclopent-1-enol. This is an enol, which is a conjugated system that can undergo electrophilic addition reactions more readily than its corresponding ketone.\n\n2. **Bromination Mechanism**: Bromine (Br\u2082) acts as an electrophile in this reactio"
+    },
+    {
+      "id": "reck4G4xxv3YnpbtQ",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's analyze each step of the reaction series to identify the product D.\n\n### Step 1: Reaction of 5-bromo-3a,4a-dimethyldecahydrocyclopenta[1,4]cyclobuta[1,2]benzene with H2O\nThe first reaction involves the addition of water (H2O) to 5-bromo-3a,4a-dimethyldecahydrocyclopenta[1,4]cyclobuta[1,2]benzene. This typically results in an opening of the cyclobutane ring and the formation of a hydroxyl group (-OH) at the position where the water adds. Given the structure, the most likely product is:\n\n\\[ "
+    },
+    {
+      "id": "reckYqR92oJkqJXkE",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine how the number of stars per unit range of parallax (plx) changes with plx under the assumption that stars are uniformly distributed in the sky, we need to consider the relationship between parallax and distance.\n\n1. **Parallax and Distance Relationship**: The parallax angle (plx) is inversely proportional to the distance (d) to a star. This relationship can be expressed as:\n   \\[\n   \\text{plx} = \\frac{1}{d}\n   \\]\n   where \\( d \\) is the distance to the star in parsecs and plx is the"
+    },
+    {
+      "id": "reckl6PkaEMWM50yZ",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, let's break it down step by step.\n\n### Step 1: Understanding the Reactants and Mechanism\n- **Reactant**: (1R,3R,4R,6S)-1,3,4-trimethyl-7-oxabicyclo[4.1.0]heptane\n- **Reagent**: Me2CuLi (methyl lithium in the presence of copper)\n\nThe reaction involves an organocuprate reagent attacking a saturated epoxide. The key points are:\n1. The alkyl group from the organocuprate is introduced at the less hindered carbon of the epoxide ring.\n2. In disubstituted epoxides, inversion of co"
+    },
+    {
+      "id": "recl1UtgTVKishAq4",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's break down the synthesis step by step to determine the structure of the final product 4 and identify the number of distinct hydrogen signals in its 1H NMR spectrum.\n\n### Step 1: Acetic Acid (CH\u2083COOH) treated with Bromine (Br\u2082), Pyridine (C\u2085H\u2085N), and Acetic Anhydride (CH\u2083COOCH\u2082COOH) with Heating\n\nThis reaction forms ethyl 3-bromobutanoate (product 1). The mechanism involves the formation of an acylium ion from acetic anhydride, which then reacts with acetic acid to form the ester.\n\n### Step"
+    },
+    {
+      "id": "recmI7EiLv72PxmYK",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to consider the relativistic effects due to the high velocity of the ejecta relative to the center of the Galaxy. The key concept here is time dilation and length contraction, but since the question asks for the distance traveled from the perspective of the ejecta's frame, we will focus on the time dilation effect.\n\n1. **Identify the given information:**\n   - Velocity of the center of the Galaxy relative to the ejecta, \\( v = 60,000 \\) km/s.\n   - Time passed in the"
+    },
+    {
+      "id": "recmkvk6EFAmqyMxR",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to understand how the Lorentz factor affects the path length of particles traveling at ultra-relativistic speeds and how it impacts their probability of reaching the detector's inner walls.\n\n1. **Understanding the Lorentz Factor**:\n   - The Lorentz factor \\(\\gamma\\) is given by \\(\\gamma = \\frac{1}{\\sqrt{1 - \\frac{v^2}{c^2}}}\\), where \\(v\\) is the velocity of the particle and \\(c\\) is the speed of light.\n   - For a Lorentz factor of 20, the velocity \\(v\\) can be cal"
+    },
+    {
+      "id": "recmwwQJnx7ll7bqL",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To solve this problem, we need to analyze the given quantum mechanical system, which is a harmonic oscillator in three dimensions.\n\n### Step 1: Understanding the Potential\nThe potential \\( V(r) = \\frac{1}{2} m \\omega^2 r^2 \\) describes a three-dimensional harmonic oscillator. The energy levels for a three-dimensional harmonic oscillator are given by:\n\n\\[ E_n = \\left(n + \\frac{3}{2}\\right) \\hbar \\omega \\]\n\nwhere \\( n \\) is the quantum number, and it can take values \\( n = n_x + n_y + n_z \\). Here"
+    },
+    {
+      "id": "recn3NhOhqAPLda16",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's analyze each reaction step by step:\n\n### Reaction I:\n- **Starting Material:** (S)-5-methoxyhexan-3-one\n- **Reagents:** LAH (Lithium aluminum hydride) followed by an acidic workup\n- **Product:** Reduction of the ketone to an alcohol. Since the starting material is (S)-5-methoxyhexan-3-one, the reduction will yield (S)-5-methoxyhexan-3-ol.\n\nIn this case, the product is a single enantiomer because the starting material was already a single enantiomer.\n\n### Reaction II:\n- **Starting Material:*"
+    },
+    {
+      "id": "recnGEpF1srQpaqWq",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine which molecule is formed when 5-butylnona-2,6-diene is heated, we need to consider the possible reactions and transformations that can occur under heating conditions in organic chemistry. Heating often leads to the formation of more stable or higher boiling point compounds through processes such as isomerization or rearrangement.\n\n1. **Identify the starting molecule**: The starting molecule is 5-butylnona-2,6-diene. This means it has a butyl group attached at the 5th carbon and a do"
+    },
+    {
+      "id": "recnTTKdBzfuoZ7w7",
+      "expected": "A",
+      "extracted": null,
+      "correct": false,
+      "response": "To determine which plasmid to use for expressing the Human P53 protein in E. coli BL21, we need to compare the provided amino acid sequence with the sequences encoded by the plasmids. The amino acid sequence of the Human P53 protein is given, and we need to find the plasmid that encodes this exact sequence.\n\nFirst, let's convert the amino acid sequence into its corresponding DNA sequence using the standard genetic code. However, since the amino acid sequence is already provided, we can directly "
+    },
+    {
+      "id": "recnawZPumSCLMVgp",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "Let's analyze the reaction scheme step by step:\n\n1. **Compound A to Compound B:**\n   - Compound A reacts with HCN to form compound B.\n   - This suggests that compound A is likely an aldehyde or ketone, as these can react with HCN to form nitriles (which would be B).\n\n2. **Compound B to Compound C:**\n   - Compound B is reduced with H2 in the presence of Pd to form compound C.\n   - Reduction of a nitrile (B) with hydrogen and a palladium catalyst typically results in the formation of an alcohol (C"
+    },
+    {
+      "id": "recnjViFrqlZNL3fY",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To estimate the lower limit on the redshift of these objects such that they can be detected with optical ground-based telescopes, we need to consider the properties of the Lyman-alpha emission and the limitations of ground-based telescopes.\n\n1. **Lyman-alpha Wavelength**: The Lyman-alpha line occurs at a wavelength of approximately 1216 \u00c5 in the rest frame of the source.\n\n2. **Redshift and Wavelength**: When an object is redshifted, the observed wavelength \\( \\lambda_{\\text{obs}} \\) is related t"
+    },
+    {
+      "id": "reco8WSc71p8zAv4q",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, let's break it down step by step:\n\n1. **Identify the Anhydride Structure**:\n   - The anhydride has a single peak at 7 ppm in the 1H NMR spectrum, indicating a symmetrical structure.\n   - It has two peaks at 137 ppm and 165 ppm in the 13C NMR spectrum, suggesting a conjugated system involving both carboxylic acid groups and the alkene.\n\n2. **Structure of the Anhydride**:\n   - Given the presence of a cis-alkene and the molecular formula of the anhydride (C8H6O2), the anhydri"
+    },
+    {
+      "id": "recooG6bivTUJpDBz",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, let's analyze the given information about the 1H NMR spectrum and match it to the structures of the provided compounds.\n\n### Step 1: Analyze the Signal at 6.7 ppm (Two Singlets in a 1:1 Ratio)\n- This signal corresponds to the protons on the aromatic ring.\n- The presence of two singlets suggests that there are two different sets of protons on the aromatic ring, each set appearing once in the spectrum.\n- The 1:1 ratio indicates that both sets of protons are present in equal "
+    },
+    {
+      "id": "recoy9ZLBsc7HIRBy",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To determine the concentration of orthophosphate ions (\\(\\text{PO}_4^{3-}\\)) in the solution, we need to consider the dissociation of \\(\\text{KH}_2\\text{PO}_4\\) and \\(\\text{Na}_2\\text{HPO}_4 \\cdot 2\\text{H}_2\\text{O}\\).\n\n### Step 1: Calculate the moles of each salt\n- Moles of \\(\\text{KH}_2\\text{PO}_4\\):\n\\[ \\text{Moles} = \\frac{1.00 \\, \\text{g}}{136.09 \\, \\text{g/mol}} = 0.00735 \\, \\text{mol} \\]\n\n- Moles of \\(\\text{Na}_2\\text{HPO}_4 \\cdot 2\\text{H}_2\\text{O}\\):\n\\[ \\text{Moles} = \\frac{1.00 \\, \\te"
+    },
+    {
+      "id": "recpJmTOXx6T48nDJ",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To calculate the enthalpy of neutralization for the given reaction, we need to follow these steps:\n\n1. **Determine the moles of reactants:**\n   - For HCl: \\( \\text{Moles} = \\text{Volume (L)} \\times \\text{Concentration (M)} = 0.500 \\, \\text{L} \\times 0.2 \\, \\text{M} = 0.1 \\, \\text{moles} \\)\n   - For H2SO4: \\( \\text{Moles} = 0.300 \\, \\text{L} \\times 0.3 \\, \\text{M} = 0.09 \\, \\text{moles} \\)\n   - For Ba(OH)2: \\( \\text{Moles} = 0.200 \\, \\text{L} \\times 0.5 \\, \\text{M} = 0.1 \\, \\text{moles} \\)\n\n2. **"
+    },
+    {
+      "id": "recpki12iG9RUGrz9",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the kinematically allowed decays of the boson \\(X\\) with a mass of 6 GeV, we need to consider the masses of the fermions involved in the decay processes. The decay \\(X \\rightarrow f \\bar{f}\\) is allowed if the invariant mass of the fermion-antifermion pair is less than or equal to the mass of the boson \\(X\\).\n\nLet's list the masses of the fermions involved:\n\n- \\(c\\): charm quark, \\(m_c \\approx 1.275\\) GeV\n- \\(s\\): strange quark, \\(m_s \\approx 0.1$ GeV\n- \\(u\\): up quark, \\(m_u \\appro"
+    },
+    {
+      "id": "recqFDvYKKRmbnoUb",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, we need to evaluate the volume integral of the divergence of the vector field \\( \\mathbf{f}(r) \\) over a sphere of radius \\( R \\) centered at the origin. The vector field \\( \\mathbf{f}(r) \\) is given by \\( \\mathbf{f}(r) = \\frac{\\hat{r}}{r^2} \\), where \\( \\hat{r} \\) is the unit vector in the radial direction.\n\n### Step 1: Compute the Divergence of the Field\nThe divergence of a vector field \\( \\mathbf{f} \\) in spherical coordinates is given by:\n\\[\n\\nabla \\cdot \\mathbf{f} = \\"
+    },
+    {
+      "id": "recqGD3fxPCI59vPQ",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine how many revolutions the proton makes in the synchrocyclotron, we need to understand the relationship between the frequency of the accelerating voltage and the cyclotron frequency (or revolution frequency) of the proton.\n\n### Step 1: Determine the Cyclotron Frequency\nThe cyclotron frequency \\( \\omega_c \\) for a proton in a magnetic field \\( B \\) is given by:\n\\[ \\omega_c = \\frac{qB}{m} \\]\nwhere \\( q \\) is the charge of the proton (\\( q = 1.6 \\times 10^{-19} \\, \\text{C} \\)) and \\( m \\"
+    },
+    {
+      "id": "recqLRu4BcJvlSANc",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's analyze the situation step by step:\n\n1. **Initial Conditions**: The reaction was initially proceeding at room temperature and pH 1, indicating that it was in an acidic environment with a high concentration of H+ ions.\n\n2. **Accidental Addition**: An unknown substance was added, which caused the rate of the reaction to slow down and the container to get hot. This suggests that the added substance is either a reactant or a catalyst that affects the reaction dynamics.\n\n3. **pH Change**: After"
+    },
+    {
+      "id": "recr3VHM4zYf6dMFY",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To solve this problem, we need to understand the reaction mechanism involving sodium nitrite (NaNO2), hydrochloric acid (HCl), and water (H2O). This combination typically leads to the formation of a nitrosyl chloride intermediate, which can then react with an aldehyde or ketone to form a diketone.\n\n### Step-by-Step Analysis:\n\n1. **Identify the Reaction Mechanism**:\n   - The reaction between NaNO2, HCl, and H2O forms nitrosyl chloride (NOCl).\n   - NOCl can then react with an aldehyde or ketone to"
+    },
+    {
+      "id": "recrHBEJJoDTV05JR",
+      "expected": "B",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, let's break down the information given and analyze it step by step:\n\n1. **Substance X and Its Reaction:**\n   - Substance X incorporates a heavier isotope of one of its constituent elements.\n   - It reacts violently with liquid Y to produce gas W and precipitate G.\n   - Gas W has a molecule with the same number of neutrons and protons, indicating it is likely hydrogen (H), as H-1 (protium) has 1 proton and 0 neutrons, and H-2 (deuterium) has 1 proton and 1 neutron.\n   - Pre"
+    },
+    {
+      "id": "recrNbtgTNoabJJi6",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To determine the number of possible organic products when 1-bromobenzene-2-d (1-bromo-2-dibromobenzene) is treated with NaNH\u2082 in condensed ammonia solvent, let's break down the reaction step by step.\n\n1. **Identify the Reactants and Conditions**: \n   - The reactant is 1-bromo-2-dibromobenzene.\n   - The reagent is NaNH\u2082 in condensed ammonia solvent.\n\n2. **Reaction Mechanism**:\n   - NaNH\u2082 in ammonia acts as a strong nucleophile and reducing agent.\n   - The dibrominated benzene ring can be reduced "
+    },
+    {
+      "id": "recrs0kUo7Ua1xhKO",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To determine the geometrical position of the given density matrix in the qubit space, we need to understand how to represent a density matrix in terms of its Bloch vector. For a single qubit, the density matrix can be written as:\n\n\\[\n\\rho = \\frac{1}{2} (I + \\vec{s} \\cdot \\vec{\\sigma})\n\\]\n\nwhere \\(I\\) is the identity matrix, \\(\\vec{s}\\) is the Bloch vector, and \\(\\vec{\\sigma}\\) represents the Pauli matrices. The Bloch vector \\(\\vec{s}\\) has three components corresponding to the x, y, and z direct"
+    },
+    {
+      "id": "recs3PLPUEMiqg4P8",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, let's break it down step by step:\n\n1. **Identify the Starting Material in Reaction A:**\n   - The given reaction is \\( A + H_2SO_4 \\rightarrow 2,2\\text{-di-p-tolylcyclohexan-1-one} \\).\n   - The product is \\( 2,2\\text{-di-p-tolylcyclohexan-1-one} \\), which is a pinacolone with a cyclohexane ring instead of a butane chain.\n   - The starting material \\( A \\) must be a pinacol with a similar structure but with a cyclohexane ring instead of a butane chain.\n   - The correct struc"
+    },
+    {
+      "id": "rect4iLrSfUwkNTno",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To find the mean decay distance (also known as the mean proper decay length) of a meson resonance, we can use the formula:\n\n\\[ \\text{Mean decay distance} = \\frac{\\hbar c}{\\Gamma \\sqrt{E^2 - m^2}} \\]\n\nWhere:\n- \\( \\hbar \\) is the reduced Planck's constant (\\( \\hbar \\approx 1.0545718 \\times 10^{-34} \\, \\text{J s} \\))\n- \\( c \\) is the speed of light in vacuum (\\( c \\approx 3 \\times 10^8 \\, \\text{m/s} \\))\n- \\( \\Gamma \\) is the decay width (\\( \\Gamma_X = 320 \\, \\text{MeV} \\))\n- \\( E \\) is the producti"
+    },
+    {
+      "id": "rectXfsCM1dj4Kv2c",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the number of stereoisomers for the compound 6-chloro-9-ethyl-2-methylundeca-3,7-dien-5-ol, we need to identify all the chiral centers in the molecule and consider the possible configurations at each center.\n\n1. **Identify Chiral Centers**: \n   - A chiral center is a carbon atom that is bonded to four different groups.\n   - In this molecule, the only chiral center is the carbon atom at position 5 (the carbon atom bonded to the hydroxyl group (-OH)).\n\n2. **Count Possible Configuratio"
+    },
+    {
+      "id": "rectlyG9pCAAuWhoB",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine the major product when 5-fluorocyclopenta-1,3-diene reacts with maleic anhydride, we need to consider the reaction mechanism and the stereochemistry involved.\n\n1. **Reaction Mechanism**: The reaction between a diene and maleic anhydride typically proceeds via a Diels-Alder reaction followed by a ring-closure step. Maleic anhydride can act as both a dienophile and a leaving group in this context.\n\n2. **Diels-Alder Reaction**: In the Diels-Alder reaction, the diene (5-fluorocyclopenta"
+    },
+    {
+      "id": "recuYEkVjdVUwA3c0",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to consider the conservation of energy and momentum in the annihilation process \\( p + \\bar{p} \\rightarrow 2A^+ + 2A^- \\).\n\n### Step 1: Conservation of Energy\nThe total energy before the annihilation (rest mass energy of proton and antiproton) must equal the total energy after the annihilation (kinetic and rest mass energies of the two \\( A^+ \\) and \\( A^- \\) particles).\n\nThe rest mass energy of a proton (or antiproton) is given by \\( m_p c^2 = 938 \\, \\text{MeV} \\)"
+    },
+    {
+      "id": "recuyeuT5rQ6qDt8F",
+      "expected": "A",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the range in which the molecular weight of substance A4 falls, let's analyze the given information step by step:\n\n1. **Identify the Compounds and Their Properties:**\n   - A1 decomposes at 293 K into A2 and fluorine.\n   - A1 oxidizes xenon under normal conditions.\n   - A3 can also interact with xenon.\n   - A3 is obtained by fluorinating element Y with fluorine.\n   - By adding Y in a 1:1 molar ratio to a hot colorless concentrated solution of A4, A5 can be obtained.\n   - A5 decomposes"
+    },
+    {
+      "id": "recv7GsQg3f0fvB1f",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "Let's analyze the given information step by step:\n\n1. **1H NMR Spectrum Analysis**:\n   - Two peaks corresponding to the same alpha-proton.\n   - Similar chemical shifts.\n   - Roughly equal integrals (together integrating to 1H).\n   - No evidence of spin-spin coupling.\n\n2. **LC-MS Analysis at Elevated Temperature**:\n   - Two clearly defined peaks of equal intensities.\n   - Both peaks have the same mass spectrum, consistent with the expected molecule.\n\nGiven these observations, let's consider each "
+    },
+    {
+      "id": "recvZlMbpPz0yLDle",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "Let's analyze the given information step by step to identify the final product.\n\n### Step 1: Analyze the Molecular Formula and NMR Data\nThe molecular formula is \\( \\text{C}_8\\text{H}_9\\text{NO} \\).\n\nFrom the 1H-NMR data:\n- 9.72 (t, 1H) suggests a terminal aldehyde group.\n- 6.98 (d, 2H) and 6.51 (d, 2H) suggest two sets of aromatic protons, each in a doublet, indicating two different phenyl rings.\n- 6.27 (bs, 2H) suggests broad peaks from hydroxyl groups.\n- 3.66 (d, 2H) suggests methylene protons"
+    },
+    {
+      "id": "recvlnu8BuLmXZhSX",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To calculate the probability that the measurement of the observable \\(P\\) will yield 0 at time \\(t\\), we need to follow these steps:\n\n1. **Identify the eigenvalues of the operator \\(P\\)**: The eigenvalues of \\(P\\) correspond to the possible outcomes of the measurement. However, since \\(P\\) is not necessarily a diagonal matrix, we need to find its eigenvalues directly from the matrix.\n\n2. **Calculate the expectation value of the observable \\(P\\)**: The probability of measuring an eigenvalue \\(\\la"
+    },
+    {
+      "id": "recw4rROcnHKNZhtK",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "To determine which complex we would least likely observe in the active chromatin proteome of the shmoo formed in Saccharomyces cerevisiae after treatment with the quorum-sensing peptide from Lactobacillus acidophilus, let's analyze each option:\n\n1. **Pre-replication complex (A)**: This complex is involved in DNA replication and is not directly related to transcriptional regulation or active chromatin states. It is more associated with the initiation of DNA replication rather than the maintenance"
+    },
+    {
+      "id": "recxTy0x7M6T9ikc0",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's analyze each Michael addition reaction step by step:\n\n### Reaction (A):\n**Reactants:** dimethyl malonate + methyl (E)-3-(p-tolyl)acrylate + (NaOEt, EtOH)\n\n1. **Dimethyl Malonate**: This compound has two carboxylic acid ester groups that can be protonated and deprotonated to form a resonance-stabilized anion.\n2. **Methyl (E)-3-(p-tolyl)acrylate**: This is an \u03b1-\u03b2 unsaturated ketone, which will act as the electrophile in the Michael addition.\n\nThe Michael addition will occur at the \u03b2-position"
+    },
+    {
+      "id": "recxsX66ktJ1Lwt4f",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "Let's analyze the given data step by step:\n\n1. **Mass Spectrometry (MS):**\n   - Molecular ion peak at m/z = 156 (100%) suggests the molecular formula \\(C_9H_6ClO\\).\n   - An additional peak at m/z = 158 (32%) indicates the presence of a chlorine atom, as \\(158 - 156 = 2\\).\n\n2. **Infrared Spectroscopy (IR):**\n   - Broad peak from 3500-2700 cm^-1 suggests the presence of hydroxyl (-OH) or amine (-NH2) groups.\n   - Strong sharp peak at 1720 cm^-1 indicates the presence of a carbonyl group (C=O).\n\n3."
+    },
+    {
+      "id": "recyPffUDqC2k7ZZO",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the uncertainty \\(\\Delta P_z\\) of the operator \\(P_z\\), we need to follow these steps:\n\n1. **Identify the Eigenstate of \\(P_x\\):**\n   The given state is \\(\\left| \\psi \\right> = \\begin{pmatrix} -\\frac{1}{2} \\\\ \\frac{1}{\\sqrt{2}} \\\\ -\\frac{1}{2} \\end{pmatrix}\\).\n\n2. **Verify the Eigenstate of \\(P_x\\):**\n   We need to check if this state is indeed an eigenstate of \\(P_x\\) with the eigenvalue \\(-\\hbar\\). This involves multiplying the matrix representation of \\(P_x\\) by the state vector and c"
+    },
+    {
+      "id": "recyl3usDqb7ruXJx",
+      "expected": "A",
+      "extracted": "B",
+      "correct": false,
+      "response": "Let's break down the problem step by step:\n\n### Step 1: Understanding the Reactions\n- **Reaction 1**: (E)-oct-4-ene is treated with one equivalent of mCPBA (meta-chloroperoxybenzoic acid), which will oxidize the alkene to an epoxy compound. Then, it is treated with aqueous acid, which will hydrolyze the epoxy compound to form a diol.\n- **Reaction 2**: (Z)-oct-4-ene undergoes the same sequence of reactions, leading to the formation of another diol.\n\n### Step 2: Products of Each Reaction\n- **(E)-o"
+    },
+    {
+      "id": "recypVp2NmPlBKVTp",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To design a molecular diagnostic kit for the quick and accurate detection of a retrovirus during an outbreak, we need to follow a systematic approach. Here's how I would proceed:\n\n1. **Identify the Virus**: The first step is to identify the specific retrovirus causing the outbreak. This can be done through various methods, but given that we are dealing with a retrovirus, which is RNA-based, the most appropriate method would be to perform RNA sequencing (cDNA sequencing from RNA samples). This wi"
+    },
+    {
+      "id": "reczQ4I0VpENdMtIj",
+      "expected": "C",
+      "extracted": "D",
+      "correct": false,
+      "response": "Let's break down the scenario step by step:\n\n1. **Inactive State**: The transcription factor subunit is in an inactive state, waiting for an activation signal.\n\n2. **Activation Signal**: Upon receiving the activation signal (phosphorylation on Ser residues in the transactivation domain), the subunit dimerizes, shuttles into the nucleus, and becomes active in gene transcription.\n\n3. **Missense Mutation X**: This is a recessive loss-of-function mutation in the transactivation domain. This means th"
+    },
+    {
+      "id": "reczUoM8JsxU6pYxr",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine the comoving distance to the quasar, we need to use the relationship between the observed wavelength and the redshift, and then use the cosmological parameters to find the distance.\n\n### Step 1: Determine the Redshift\nThe observed wavelength \\( \\lambda_{\\text{obs}} = 790 \\, \\text{nm} \\). The rest wavelength for the peak emission in the near-infrared region is typically around 1.4 \u03bcm (1400 nm) for a quasar. This suggests a significant redshift.\n\nThe redshift \\( z \\) can be approximat"
+    },
+    {
+      "id": "reczjcMtrB1YGS2fO",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to understand the diffraction pattern produced by a polygonal aperture. The key concept here is the diffraction pattern of a circular aperture, which can be approximated for a polygon with a large number of sides (N).\n\n### Step-by-Step Solution:\n\n1. **Diffraction Pattern of a Circular Aperture**:\n   - For a circular aperture, the first minimum occurs at an angle \\(\\theta\\) given by:\n     \\[\n     \\sin \\theta = 1.22 \\frac{\\lambda}{D}\n     \\]\n     where \\(D\\) is the d"
+    },
+    {
+      "id": "reczzzihL7btBH7RO",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "To understand the relationship between \u03bb1 and \u03bb2, let's break down the scenario step by step:\n\n1. **Initial Conditions**: The sample compartment is under ultra-high vacuum conditions with a pressure of \\( < 10^{-9} \\) Torr. Under these conditions, the mean free path of gas molecules (\u03bb1) is determined by the volume of the compartment, the pressure, and the temperature.\n\n2. **Introduction of Electron Beam**: When the electron beam is initiated, electrons interact with the gas molecules. Electrons"
+    },
+    {
+      "id": "rec0VuKUjt1SZ7NYv",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To find the area of the pseudosphere with the given metric, we need to understand the geometry described by the metric and how it relates to the area element in this space.\n\nThe given metric is:\n\\[ ds^2 = \\frac{32}{4 - x^2 - y^2} (dx^2 + dy^2) \\]\n\nThis can be rewritten as:\n\\[ ds^2 = \\frac{32}{4 - r^2} dr^2 \\]\nwhere \\( r^2 = x^2 + y^2 \\).\n\nThis form suggests that the metric describes a surface where the area element \\( dA \\) is given by:\n\\[ dA = \\sqrt{\\det(g_{ij})} \\, dx \\, dy \\]\nFor the given me"
+    },
+    {
+      "id": "rec1oj2DveQWl9Rpw",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To solve this problem, we need to follow these steps:\n\n1. **Determine the moles of Fe(OH)\u2083**:\n   - The molar mass of Fe(OH)\u2083 is approximately \\(55.845 + 3(16.00 + 1.008) = 106.867 \\, \\text{g/mol}\\).\n   - Moles of Fe(OH)\u2083 = \\(\\frac{0.1 \\, \\text{g}}{106.867 \\, \\text{g/mol}} \\approx 0.000937 \\, \\text{mol}\\).\n\n2. **Determine the moles of OH\u207b from Fe(OH)\u2083**:\n   - Each mole of Fe(OH)\u2083 dissociates into 3 moles of OH\u207b.\n   - Moles of OH\u207b = \\(0.000937 \\, \\text{mol} \\times 3 \\approx 0.002811 \\, \\text{mol}\\"
+    },
+    {
+      "id": "rec32C1ZEapBnCC0E",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the ratio of the total mass of the two binary star systems, we can use the information about their radial velocity (RV) variations and the orbital periods. The key relationship here is given by Kepler's Third Law and the properties of the radial velocity curve.\n\n### Step 1: Understanding the Radial Velocity Curve\nThe amplitude of the radial velocity (RV) curve is related to the mass of the stars and the orbital parameters. For a binary system, the RV amplitude \\( K \\) is given by:\n\n"
+    },
+    {
+      "id": "rec47oNPXudlTIk4y",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine which statement is correct regarding the formation of a polymer with regular branches using only ethylene as the monomer and a dual catalyst system, let's analyze each statement:\n\n1. **Statement A**: \"Such combined systems are already implemented on an industrial scale in the US.\"\n   - This statement suggests that there are existing industrial processes using a dual catalyst system for ethylene polymerization with regular branching. While this could be true, it does not provide spec"
+    },
+    {
+      "id": "rec6sE2CRtD4drtHg",
+      "expected": "A",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the correct expression for the mass of the pseudo-Goldstone boson \\(H_2\\) through radiative corrections, we need to consider the structure of the Lagrangian and the known results from radiative corrections in similar extensions of the Standard Model.\n\nThe Lagrangian provided includes terms involving singlet fermions \\(N_{iR}\\), a scalar-doublet \\(S\\), and a singlet scalar \\(\\phi\\). The vev (vacuum expectation value) of \\(\\phi\\) is given as \\(\\left\\langle \\phi\\right\\rangle = x + iv\\)"
+    },
+    {
+      "id": "rec9W28HgpEUeUN8k",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To calculate the non-Gaussianity (nG) in the Schr\u00f6dinger cat state using the relative entropy measure, we need to follow these steps:\n\n1. **Determine the Density Matrix of the Non-Gaussian State**:\n   The state \\(|\\psi\\rangle\\) is given by:\n   \\[\n   |\\psi\\rangle = \\frac{\\cos(\\phi)|\\alpha\\rangle + \\sin(\\phi)|-\\alpha\\rangle}{N}\n   \\]\n   where \\(N = \\sqrt{1 + \\sin(2\\phi)e^{-2\\alpha^2}}\\).\n\n   The density matrix \\(\\rho\\) can be derived from the state vector \\(|\\psi\\rangle\\):\n   \\[\n   \\rho = |\\psi\\ra"
+    },
+    {
+      "id": "recAYkd96NNuNl1Ei",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine which issues are the most common sources of difficult-to-spot erroneous results in genomics data analysis, let's examine each option:\n\n1. **Mutually incompatible data formats**: This can indeed cause issues as different tools and databases may use different file formats, leading to errors when trying to integrate or analyze data across multiple sources.\n\n2. **The \"chr\" / \"no chr\" confusion**: This refers to the difference between chromosome names with and without the \"chr\" prefix (e"
+    },
+    {
+      "id": "recBhnXrUyTJ6WHIR",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To analyze this problem, let's break it down step by step:\n\n1. **Original Decay Process**: The original process involves converting two heavy nucleons of flavor A into two nucleons of flavor B, along with the emission of two much lighter particles E and V. The total energy spectrum of the outgoing E particles is continuous, with an endpoint value Q.\n\n2. **Energy Conservation in Decays**: In both decays, the total energy must be conserved. The endpoint value Q represents the maximum energy that t"
+    },
+    {
+      "id": "recE2ihVfqEK4R9d0",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the expectation value of the electron's spin along the y-direction, \\(S_y\\), we need to use the formula for the expectation value of an operator in quantum mechanics:\n\n\\[ \\langle S_y \\rangle = \\langle \\psi | S_y | \\psi \\rangle \\]\n\nGiven that the spin state of the electron is \\((3i, 4)\\), we can represent this as a column vector:\n\n\\[ |\\psi\\rangle = \\begin{pmatrix} 3i \\\\ 4 \\end{pmatrix} \\]\n\nThe operator for the spin along the y-direction, \\(S_y\\), is given by:\n\n\\[ S_y = \\hbar \\sigma_y = \\h"
+    },
+    {
+      "id": "recGee5m84dg5FZkc",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the order of increasing yield of the para-isomer in electrophilic substitution reactions with bromine, we need to consider the factors that influence the orientation of the reaction. The key factors are:\n\n1. **Electron-donating and electron-withdrawing groups**:\n   - Electron-donating groups (EDGs) increase the electron density around the benzene ring, making the ortho/para positions more reactive.\n   - Electron-withdrawing groups (EWGs) decrease the electron density, making the met"
+    },
+    {
+      "id": "recINGR1z01Fh1Z3A",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to use the Boltzmann distribution, which describes the distribution of particles over various energy states at thermal equilibrium. The probability \\( P \\) of a particle being in an energy state \\( E \\) is given by:\n\n\\[ P(E) = \\frac{g(E) e^{-\\frac{E}{kT}}}{Z} \\]\n\nwhere \\( g(E) \\) is the degeneracy of the energy state, \\( k \\) is the Boltzmann constant, \\( T \\) is the temperature, and \\( Z \\) is the partition function.\n\nFor two stars with different effective tempera"
+    },
+    {
+      "id": "recJpyGtGIsxulevT",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To estimate the minimum uncertainty in the energy \\(\\Delta E\\) of an electron given the uncertainty in its position \\(\\Delta x\\), we can use the Heisenberg Uncertainty Principle and the relationship between energy and momentum in quantum mechanics.\n\n### Step 1: Heisenberg Uncertainty Principle\nThe Heisenberg Uncertainty Principle states that:\n\\[ \\Delta x \\cdot \\Delta p \\geq \\frac{\\hbar}{2} \\]\nwhere \\(\\Delta x\\) is the uncertainty in position, \\(\\Delta p\\) is the uncertainty in momentum, and \\(\\h"
+    },
+    {
+      "id": "recLB0EkQ54bYVhnd",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to consider both relativistic and non-relativistic approaches to find the kinetic energy \\(T_1\\) of the more massive fragment after the fission. Let's break down the steps:\n\n### Step 1: Determine the Rest-Masses of the Fragments\nGiven:\n- Initial mass \\(M\\) of the nucleus.\n- Total rest-mass energy of the nucleus = 300 GeV.\n- One fragment is 2 times more massive than the other.\n- Sum of rest-masses of the two fragments is 99% of the initial mass \\(M\\).\n\nLet the rest-"
+    },
+    {
+      "id": "recMicVBcqy1xM1jq",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to consider the properties of the radiation pattern from an oscillating charge distribution and how the power radiated depends on the angle \\(\\theta\\) and the wavelength \\(\\lambda\\).\n\n### Step 1: Understanding the Radiation Pattern\nFor an oscillating charge distribution, the radiation pattern typically follows a dipole radiation pattern. The intensity of the radiation in the far-field region (radiation zone) is given by the inverse square law in terms of the solid "
+    },
+    {
+      "id": "recPIzpnuYpB4yvmp",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to follow these steps:\n\n1. **Determine the state vector after measuring P**: The state vector before any measurement is \\(\\left| \\psi \\right> = \\begin{pmatrix} -1 \\\\ 2 \\\\ 1 \\end{pmatrix}\\).\n\n2. **Calculate the projection of the state vector onto the eigenspace of P corresponding to eigenvalue 0**:\n   - The matrix for operator \\(P\\) is:\n     \\[\n     P = \\begin{pmatrix}\n     0 & \\frac{1}{\\sqrt{2}} & 0 \\\\\n     \\frac{1}{\\sqrt{2}} & 0 & \\frac{1}{\\sqrt{2}} \\\\\n     0 & \\f"
+    },
+    {
+      "id": "recRZjaElf8ft7xTq",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, we need to use the Stefan-Boltzmann law and the relationship between luminosity, radius, and temperature for blackbody radiation. The Stefan-Boltzmann law states that the total energy radiated per unit surface area of a black body across all wavelengths per unit time (also known as the stellar luminosity \\(L\\)) is given by:\n\n\\[ L = 4\\pi R^2 \\sigma T^4 \\]\n\nwhere \\(R\\) is the radius of the star, \\(T\\) is the temperature, and \\(\\sigma\\) is the Stefan-Boltzmann constant.\n\nGive"
+    },
+    {
+      "id": "recReg13iV2HwJTaA",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine the mass dimension of \\(\\kappa\\) and whether the theory is renormalizable, we need to analyze the given interaction term in the Lagrangian:\n\n\\[\n\\mathcal{L}_{int} = \\kappa \\bar{\\psi} \\sigma_{\\mu\\nu} \\psi F^{\\mu\\nu}\n\\]\n\n### Step 1: Determine the Mass Dimension of Each Term\n\n1. **Mass Dimension of \\(\\bar{\\psi} \\sigma_{\\mu\\nu} \\psi\\):**\n   - \\(\\bar{\\psi}\\) and \\(\\psi\\) are Dirac spinors, each having a mass dimension of \\([M]\\).\n   - \\(\\sigma_{\\mu\\nu}\\) is a tensor constructed from gamma"
+    },
+    {
+      "id": "recRhwQwHijW0gCLo",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine the correct statement, let's analyze each option step by step:\n\n### Option (A): \\((e^X) \\cdot Y \\cdot (e^{-X})\\) represents a quantum state.\n- In quantum mechanics, the operation \\(U \\cdot Y \\cdot U^\\dagger\\) where \\(U = e^X\\) and \\(Y\\) is a Hermitian matrix, typically represents a transformation of the state \\(Y\\). However, without knowing the specific properties of \\(X\\) and \\(Y\\), we cannot definitively say this represents a quantum state. We need more information about the natur"
+    },
+    {
+      "id": "recUc29lMDBEvurYo",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To find the minimum energy of the system, we need to calculate the potential energy due to the interactions between the charges. The potential energy \\(U\\) between two point charges \\(q_1\\) and \\(q_2\\) separated by a distance \\(r\\) is given by Coulomb's law:\n\n\\[ U = k \\frac{q_1 q_2}{r} \\]\n\nwhere \\(k\\) is Coulomb's constant, approximately \\(8.99 \\times 10^9 \\, \\text{N} \\cdot \\text{m}^2/\\text{C}^2\\).\n\nIn this problem, we have 12 charges of \\(2e\\) each (where \\(e = 1.602 \\times 10^{-19} \\, \\text{C}"
+    },
+    {
+      "id": "recVE8cUNHpHZIAvL",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, let's break it down step by step.\n\n### Step 1: Understanding the Neutrino Production Mechanisms\nThe Sun produces neutrinos through various fusion processes. The pp-III branch is a specific reaction that contributes to the production of neutrinos with energies around 750 keV. This reaction is given by:\n\\[ \\text{p} + \\text{p} \\rightarrow \\text{D} + \\gamma + \\nu_e \\]\nwhere p is a proton, D is deuterium, and \\(\\nu_e\\) is an electron neutrino.\n\n### Step 2: Impact of Stopping th"
+    },
+    {
+      "id": "recWXwn9v4IG9ZrM6",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "To determine which statement is true about the validity of the Mott-Gurney equation, let's analyze each component of the equation and the conditions under which it is applicable:\n\n1. **Dark Current (J) vs Voltage (V) Behavior**: The Mott-Gurney equation describes the behavior of the current when the device operates in the SCLC regime, where the current is limited by the space charge region.\n\n2. **Dielectric Constant (\\(\\epsilon\\))**: This parameter is related to the material properties and does "
+    },
+    {
+      "id": "recXsYa3i2UhGF5fe",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the index of hydrogen deficiency (IHD) for the product obtained from the reaction of 2-formyl-5-vinylcyclohex-3-enecarboxylic acid with red phosphorus and excess of HI, we need to follow these steps:\n\n1. **Identify the starting compound**: The starting compound is 2-formyl-5-vinylcyclohex-3-enecarboxylic acid. This compound has a carboxylic acid group (-COOH), an aldehyde group (-CHO), and a vinyl double bond (-C=C-).\n\n2. **Reaction with red phosphorus and HI**: The reaction with re"
+    },
+    {
+      "id": "recYCMJWH7IpcdqwE",
+      "expected": "A",
+      "extracted": "A",
+      "correct": true,
+      "response": "To synthesize 2-(tert-butyl)-1-ethoxy-3-nitrobenzene from benzene, we need to follow these steps:\n\n1. **Substitution Reaction**: First, we need to introduce a tert-butyl group at the 2-position and an ethoxy group at the 1-position. This can be achieved using a Grignard reagent or a similar method, but since we have tert-butyl chloride available, we will use it in the presence of AlCl3 to form the tert-butylbenzene.\n\n2. **Nitration**: Next, we need to nitrate the benzene ring. The nitration of b"
+    },
+    {
+      "id": "recatj4YXzbOaq3Ar",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To find the eigenvalues of the Hamiltonian operator \\( H = \\varepsilon \\vec{\\sigma} \\cdot \\vec{n} \\), we need to consider the properties of the Pauli spin matrices and their interaction with the unit vector \\(\\vec{n}\\).\n\n1. **Pauli Spin Matrices**: The Pauli spin matrices \\(\\vec{\\sigma} = (\\sigma_x, \\sigma_y, \\sigma_z)\\) are given by:\n   \\[\n   \\sigma_x = \\begin{pmatrix} 0 & 1 \\\\ 1 & 0 \\end{pmatrix}, \\quad \\sigma_y = \\begin{pmatrix} 0 & -i \\\\ i & 0 \\end{pmatrix}, \\quad \\sigma_z = \\begin{pmatrix} "
+    },
+    {
+      "id": "recb80OwMgNnceA9t",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To identify the possible product when (1S,4R)-2-vinyl-2-azabicyclo[2.2.1]hept-5-ene undergoes Cope rearrangement, let's break down the process step by step:\n\n1. **Identify the Starting Compound**: The starting compound is (1S,4R)-2-vinyl-2-azabicyclo[2.2.1]hept-5-ene. This compound has a nitrogen atom in the 2-position and a vinyl group attached to the 2-position as well.\n\n2. **Cope Rearrangement Mechanism**: In a Cope rearrangement, a conjugated system involving a double bond and a nitrogen ato"
+    },
+    {
+      "id": "reccVBrYdwsB84fGy",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To determine which stars can be detected using the ESPRESSO spectrograph, we need to calculate the signal-to-noise ratio (S/N) for each star based on the given conditions. The key parameters include the absolute magnitude, distance, and the sensitivity of the ESPRESSO spectrograph.\n\n### Step 1: Calculate the Apparent Magnitude\nThe apparent magnitude \\( m \\) of a star can be calculated using the absolute magnitude \\( M \\) and the distance \\( d \\) in parsecs (pc) with the formula:\n\\[ m = M + 5 \\lo"
+    },
+    {
+      "id": "recfTlTMjZBuOducT",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "To find the interplanar distance of the (111) plane in a rhombohedral crystal, we need to use the formula for the interplanar spacing \\(d_{hkl}\\) in a crystal lattice:\n\n\\[ d_{hkl} = \\frac{a}{\\sqrt{h^2 + k^2 + l^2 - hkl \\cos(\\alpha) - hk \\cos(\\beta) - kl \\cos(\\gamma) + hl \\cos(\\gamma)}} \\]\n\nFor a rhombohedral crystal, the lattice parameters \\(a\\), \\(b\\), and \\(c\\) are all equal, and the angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) are also equal. Given that \\(a = b = c = 10\\) \u00c5 and \\(\\alpha = \\be"
+    },
+    {
+      "id": "recgC4GJ8wUemlUQD",
+      "expected": "A",
+      "extracted": "C",
+      "correct": false,
+      "response": "To determine which of the given particles is not associated with a spontaneously-broken symmetry, let's first understand what each particle is and its relation to spontaneous symmetry breaking.\n\n1. **Skyrmion**: This is a topological soliton, often used in models of nuclear physics to represent nucleons. It is associated with the chiral symmetry breaking in quantum chromodynamics (QCD). The pion field, which is responsible for the chiral symmetry breaking, can be related to the Skyrmion.\n\n2. **P"
+    },
+    {
+      "id": "recixxJmdux0d8LZQ",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine the reactivity of the given nucleophiles in an aqueous solution, we need to consider their basicity and nucleophilicity. Generally, stronger bases are better nucleophiles because they can more effectively donate electrons to the electrophile.\n\n1. **4-methylcyclohexan-1-olate**: This is a good nucleophile due to its negative charge, making it a strong base.\n2. **Hydroxide (OH\u207b)**: This is also a strong base and a good nucleophile.\n3. **Propionate (CH\u2083CH\u2082COO\u207b)**: This is less basic th"
+    },
+    {
+      "id": "reckEnrOPFT9Ru7tW",
+      "expected": "A",
+      "extracted": "D",
+      "correct": false,
+      "response": "Let's break down the transformations step by step:\n\n1. **Starting Material**: 3-(hydroxymethyl)-5-(prop-1-en-2-yl)cyclohexan-1-one\n\n2. **Reaction with Sodium Hydride and Benzyl Bromide**:\n   - Sodium hydride reduces the ketone to an alcohol.\n   - The alkenyl group is replaced by a benzyl group.\n   - Product 1: 3-(benzyloxymethyl)-5-(prop-1-en-2-yl)cyclohexan-1-ol\n\n3. **Reaction with p-Toluenesulfonyl Hydrazide and HCl**:\n   - The alcohol is converted to a hydrazone.\n   - Product 2: N'-(3-(benzyl"
+    },
+    {
+      "id": "recoiTJPGUmzAkief",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To solve this problem, we need to understand the behavior of the electric field in the presence of a charged cavity within a conductor.\n\n1. **Charge Distribution**: In a conductor, charges will rearrange themselves such that the electric field inside the conductor is zero. This means that the charge \\(+q\\) inside the cavity will induce an equal and opposite charge \\(-q\\) on the inner surface of the cavity. The outer surface of the conductor will have a net charge of \\(+q\\) to balance the total c"
+    },
+    {
+      "id": "recwW1A85nfyQpReG",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to understand how the number of stars \\(N\\) varies with distance \\(d\\), given that the number of stars varies with parallax \\(\\text{plx}\\) as \\(N \\propto \\frac{1}{\\text{plx}^5}\\).\n\n1. **Parallax and Distance Relationship**: The parallax angle \\(\\text{plx}\\) is inversely proportional to the distance \\(d\\). Mathematically, this can be expressed as:\n   \\[\n   \\text{plx} = \\frac{1}{d}\n   \\]\n   where \\(d\\) is the distance in parsecs.\n\n2. **Substitute Parallax into the St"
+    },
+    {
+      "id": "recwlwlcPvXVNPmvl",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To find the partition function \\(Z\\) for the system of three spins \\(S_1, S_2,\\) and \\(S_3\\), we need to consider all possible states of the system and their corresponding Boltzmann factors.\n\nThe energy of the system is given by:\n\\[E = -J(S_1S_2 + S_1S_3 + S_2S_3)\\]\n\nEach spin \\(S_i\\) can be either +1 or -1. Therefore, there are \\(2^3 = 8\\) possible configurations for the system. We will calculate the energy for each configuration and then use the partition function formula:\n\\[Z = \\sum_{\\text{al"
+    },
+    {
+      "id": "recyrk6XBVwugG5u8",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To solve this problem, we need to understand the conditions for both transit and occultation events to occur. For a planet to exhibit a transit event, its orbit must be aligned such that it passes directly between the observer and the star. For an occultation event, the larger planet must pass in front of the smaller planet's orbit.\n\nGiven:\n- The first planet (Planet A) has a radius of 1 Earth radius and an orbital period of 3 days.\n- The second planet (Planet B) has a radius of 2.5 Earth radii."
+    },
+    {
+      "id": "recywRj5a8EEjj2Ib",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To find the maximum speed \\( v_{max} \\) of a 1-dimensional relativistic harmonic oscillator, we need to consider both classical mechanics and special relativity principles. Here\u2019s a step-by-step approach:\n\n1. **Classical Harmonic Oscillator Energy**:\n   - The total energy \\( E \\) of a classical harmonic oscillator is given by:\n     \\[\n     E = \\frac{1}{2} k A^2\n     \\]\n   where \\( k \\) is the spring constant and \\( A \\) is the amplitude.\n\n2. **Relativistic Energy**:\n   - In special relativity, t"
+    },
+    {
+      "id": "recz3MfYHPRhsEQkW",
+      "expected": "D",
+      "extracted": "C",
+      "correct": false,
+      "response": "Let's analyze the given IR and NMR data step by step to identify the structure of Compound X.\n\n### Infrared (IR) Spectroscopy Analysis:\n1. **3400\u20132500 cm-1**: This region corresponds to the O-H stretch in alcohols or phenols. The presence of this band suggests that Compound X contains an alcohol or phenol group.\n2. **1720 cm-1**: This is characteristic of a carboxylic acid carbonyl group (C=O).\n3. **1610 cm-1**: This is typical for aromatic C=C stretching.\n4. **1450 cm-1**: This can be associate"
+    },
+    {
+      "id": "reczkBiPPNrNN49Hp",
+      "expected": "B",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to determine the distribution of cobalt(II) ions among its various complexes with thiocyanate ions. The relevant complexes are:\n\n1. \\(\\text{Co}^{2+} + \\text{SCN}^- \\rightarrow \\text{Co(SCN)}^+\\)\n2. \\(\\text{Co(SCN)}^+ + \\text{SCN}^- \\rightarrow \\text{Co(SCN)_2}^{2+}\\)\n3. \\(\\text{Co(SCN)_2}^{2+} + \\text{SCN}^- \\rightarrow \\text{Co(SCN)_3}^{3+}\\)\n4. \\(\\text{Co(SCN)_3}^{3+} + \\text{SCN}^- \\rightarrow \\text{Co(SCN)_4}^{4+}\\)\n\nThe stability constants for these complexes "
+    }
+  ],
+  "base_model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "experiments/substrate/models/qwen-rl-v0.4d/checkpoint-400"
+}

@@ -1,0 +1,149 @@
+{
+  "n": 20,
+  "n_correct": 6,
+  "accuracy": 0.3,
+  "per_question": [
+    {
+      "id": "rec06pnAkLOr2t2mp",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine which energy difference between the two quantum states will allow them to be clearly distinguished, we need to use the Heisenberg Uncertainty Principle. The principle states that the product of the uncertainties in position (\\(\\Delta x\\)) and momentum (\\(\\Delta p\\)) must be greater than or equal to \\(\\hbar/2\\), where \\(\\hbar\\) is the reduced Planck's constant.\n\nFor energy differences, this translates into:\n\n\\[ \\Delta E \\cdot \\Delta t > \\frac{\\hbar}{2} \\]\n\nGiven:\n- Lifetime of state "
+    },
+    {
+      "id": "rec0Arme2jcXQZnAW",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine how many carbon atoms are in product 3, let's analyze each transformation step-by-step:\n\n1. **Trans-Cinnamaldehyde Treatment with Methyl Magnesium Bromide**:\n   - Trans-cinnamaldehyde undergoes an addition reaction with methyl magnesium bromide to form product 1.\n   - This suggests that product 1 contains cinnamic acid and possibly other functional groups derived from the initial aldehyde.\n\n2. **Product 1 Treatment with Pyridinium Chlorochromate**:\n   - Product 1 is further modified"
+    },
+    {
+      "id": "rec0wZvZgiz320KRs",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to calculate the expectation values of two operators acting on our given state:\n\n1. \\(10\\sigma_z + 5\\sigma_x\\)\n\nFirst, let's recall the properties of the Pauli matrices:\n- \\(\\sigma_z\\) (the z-component of angular momentum)\n- \\(\\sigma_x\\) (the x-component of angular momentum)\n\nThe eigenvalues of \\(\\sigma_z\\) for the states \\(|+\\rangle\\) and \\(|-\\rangle\\) are \\(+1\\) and \\(-1\\), respectively.\nThe eigenvalues of \\(\\sigma_x\\) for the same states are \\(+1/\\sqrt{2}\\) and "
+    },
+    {
+      "id": "rec0yTRmO1o1xCA6H",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine which equation in Maxwell's equations would be different if a magnet had an isolated North or South pole, let's analyze each choice:\n\n1. **Choice (A):** \"The one related to the circulation of the magnetic field and the flux of the electric field.\"\n   - This refers to Amp\u00e8re's circuital law with Maxwell's addition, which includes both the circulation of the magnetic field around a closed loop and the flux through that loop due to the electric current within it. If a magnet has an iso"
+    },
+    {
+      "id": "rec1zl5LvaatzGhFt",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the eigenvector of the quantum mechanical operator \\( \\vec{P} \\) for a muon along an arbitrary direction \\( \\vec{n} \\) lying in the x-z plane with the eigenvalue \\( +\\frac{\\hbar}{2} \\), we need to solve the eigenvalue equation:\n\n\\[ \\vec{P} |\\psi\\rangle = \\frac{\\hbar}{2} |\\psi\\rangle \\]\n\nGiven the components of the operator \\( P \\):\n\n- \\( P_x = \\frac{\\hbar}{2} \\begin{pmatrix} 0 & 1 \\\\ 1 & 0 \\end{pmatrix} \\)\n- \\( P_y = \\frac{\\hbar}{2} \\begin{pmatrix} 0 & i \\\\ -i & 0 \\end{pmatrix} \\)\n- \\( P"
+    },
+    {
+      "id": "rec260hNUCEj109Dj",
+      "expected": "C",
+      "extracted": "B",
+      "correct": false,
+      "response": "To find the energy spectrum for this quantum mechanical system, we need to solve the time-independent Schr\u00f6dinger equation:\n\n\\[ \\left(-\\frac{\\hbar^2}{2m} \\nabla^2 - V(r, \\theta)\\right) \\psi(\\mathbf{r}) = E \\psi(\\mathbf{r}) \\]\n\nGiven the potential \\( V(r, \\theta) = \\frac{1}{2} k r^2 + \\frac{3}{2} k r^2 \\cos^2(\\theta) \\), let's simplify it first:\n\n\\[ V(r, \\theta) = \\frac{1}{2} k r^2 + \\frac{3}{2} k r^2 \\cos^2(\\theta) \\]\n\\[ V(r, \\theta) = \\frac{k}{2} r^2 (1 + 3 \\cos^2(\\theta)) \\]\n\nNow, substitute t"
+    },
+    {
+      "id": "rec2UlKqC6RFHdcro",
+      "expected": "D",
+      "extracted": "D",
+      "correct": true,
+      "response": "To determine the energy range for which gamma-ray photons' lifetimes are limited by the annihilation process $\\gamma\\gamma\\rightarrow e^+e^-$, we need to consider the following:\n\n1. **Energy of the Photon**: The average energy of the cosmic microwave background (CMB) radiation is given as \\(10^{-3}\\) eV.\n2. **Annihilation Process**: When two high-energy gamma rays annihilate each other, they produce an equal number of positrons and electrons. This process can only occur if both gamma rays have e"
+    },
+    {
+      "id": "rec2ZTsqazBZ3LTWZ",
+      "expected": "C",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine which conclusion regarding the genes' interactions can be drawn from the given experimental data, let's analyze each option based on the provided information:\n\n### Given Data:\n- **Wild-Type Resistance:** 100%\n- **Knock-Out Mutants and Double-Mutants Results:**\n  - **g1:** 75% resistance\n  - **g2:** 0% resistance\n  - **g3:** 50% resistance\n  - **g1g3:** 10% resistance\n  - **g2g3:** 0% resistance\n  - **g1g2:** 0% resistance\n\n### Analysis:\n\n#### Option (A):\n- **G2 is a transcription fa"
+    },
+    {
+      "id": "rec2fsnzUuvNtUYK8",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine which molecule has \\(C_3\\) symmetry, we need to understand what \\(C_3\\) symmetry means in molecular geometry. \\(C_3\\) symmetry implies that there is an axis of rotation of 120 degrees around which the molecule can be rotated three times and still look the same.\n\nLet's analyze each option:\n\n1. **Triisopropyl Borate (A)**:\n   - This compound contains benzene rings with ortho-polyaromatic substituents.\n   - The presence of multiple aromatic systems does not inherently imply \\(C_3\\) sym"
+    },
+    {
+      "id": "rec4JrWy7Il8ho5vk",
+      "expected": "A",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine which exoplanet has the highest density among the given options, we need to consider the relationship between an object's mass, radius, and density. The formula for density (\u03c1) is:\n\n\\[ \\rho = \\frac{m}{V} \\]\n\nWhere \\( m \\) is the mass and \\( V \\) is the volume. For a sphere, the volume \\( V \\) can be expressed in terms of its mass and density using the equation:\n\n\\[ V = \\frac{4}{3} \\pi r^3 \\]\n\\[ m = \\rho V \\]\n\nSubstituting this into the density formula gives us:\n\n\\[ \\rho = \\frac{\\rho"
+    },
+    {
+      "id": "rec4L69T0Y1AS4AFS",
+      "expected": "C",
+      "extracted": "C",
+      "correct": true,
+      "response": "To determine which statement is incorrect regarding the molecular biology of SARS-CoV-2, let's analyze each option:\n\nA) **SARS-CoV-2 ORF3a has the ability to trigger caspase-8 activation/cleavage, without affecting the expression levels of Bcl-2. Caspase-8 activation is recognized as a characteristic feature of the extrinsic apoptotic pathway via death receptors, while Bcl-2 plays a crucial role in initiating the mitochondrial pathway. This suggests that the mechanism through which SARS-CoV-2 OR"
+    },
+    {
+      "id": "rec4UqStf9WUVif1f",
+      "expected": "C",
+      "extracted": null,
+      "correct": false,
+      "response": "To find the kinetic energy (KE) of the products in the reaction \\(\\pi^+(++)\\mu^+\\), we need to use conservation laws and some basic principles from high-energy physics.\n\nGiven:\n- Rest mass of \\(\\pi^+\\): \\(m_{\\pi^+} = 139.6\\) MeV/c\u00b2\n- Rest mass of \\(\\mu^+\\): \\(m_{\\mu^+} = 105.7\\) MeV/c\u00b2\n- The system is initially at rest, so the total initial momentum is zero.\n\nThe total initial energy can be calculated as follows:\n\n\\[ E_{initial} = m_{\\pi^+}c^2 + m_{\\mu^+}c^2 \\]\n\nSubstituting the given values:\n\n\\"
+    },
+    {
+      "id": "rec4r4KWNLrT7g2kR",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To determine the correct structure of product 4, we need to follow the synthetic pathway described in the question:\n\n1. **Stirring with Pd/C under H\u2082**: This reaction likely forms an alkene.\n2. **Treatment with 3-chloroperbenzoic acid**: This treatment introduces a double bond at position 2.\n3. **Treated with sodium methoxide**: This dehydrates the double bond, leading to formation of a ketone.\n4. **Treated with propanoic acid, dicyclohexylcarbodiimide, and a catalytic amount of 4-dimethylaminop"
+    },
+    {
+      "id": "rec527dNeEtWJrYNl",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To answer this question, let's break down the information provided:\n\n1. **ChIP-seq**: This technique involves capturing DNA fragments bound by specific proteins (in this case, IKAROS) using antibodies.\n2. **PFA-Fixed Sample**: Polyformaldehyde (PFA) is often used as a fixative for preserving cellular structures during molecular biology experiments.\n3. **Next-Generation Sequencing (NGS)**: This technology generates massive amounts of sequence data from short reads.\n4. **Quality Control, Alignment"
+    },
+    {
+      "id": "rec5eA17Qr1ucNLUf",
+      "expected": "B",
+      "extracted": "B",
+      "correct": true,
+      "response": "To determine which planet has the highest probability of transiting based on the given information, let's break down the key factors:\n\n1. **Orbital Periods**: \n   - Planet 1: Orbital period = T1\n   - Planet 2: Orbital period = T2\n   Given: \\( T1 = \\frac{T2}{3} \\)\n\n2. **Masses**:\n   - Mass of Planet 1 = m1\n   - Mass of Planet 2 = m2\n   Given: \\( m1 = m2 \\)\n\n3. **Host Star Masses**:\n   - Mass of Host Star for Planet 1 = M1\n   - Mass of Host Star for Planet 2 = M2\n   Given: \\( M1 = 2M2 \\)\n\n4. **Rad"
+    },
+    {
+      "id": "rec5rjeLsEq5Fg7Oj",
+      "expected": "D",
+      "extracted": "B",
+      "correct": false,
+      "response": "To determine how many of these compounds will exhibit optical activity, we need to identify which ones have chiral centers (C). Optical activity in organic chemistry typically occurs around chiral carbon atoms.\n\nLet's analyze each compound:\n\n1. **(Z)-1-chloro-2-methylbut-1-ene**\n   - This has no chiral centers.\n   - Answer: No\n\n2. **(3aR,7aS,E)-8-(chloromethylene)hexahydro-4,7-methanoisobenzofuran-1,3-dione**\n   - This also has no chiral centers.\n   - Answer: No\n\n3. **(2R,3S)-2,3-dimethylsuccini"
+    },
+    {
+      "id": "rec7C06XOB2h298ue",
+      "expected": "D",
+      "extracted": null,
+      "correct": false,
+      "response": "To solve this problem, we need to understand the relationship between the concentrations of calcium ions and EDTA (ethylenediaminetetraacetic acid), which forms a complex with calcium. The given information includes the molar concentration of the stochiometric Ca-EDTA complex and the K\u2090 value for this complex.\n\nThe formula to calculate the concentration of free calcium ions (\\([Ca^{2+}\\]) from the complex concentration (\\([Ca_{\\text{complex}}]\\)) is:\n\n\\[ [Ca^{2+}] = \\frac{[Ca_{\\text{complex}}]}{"
+    },
+    {
+      "id": "rec7qmSnbud4FHSqL",
+      "expected": "D",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to use the given elemental abundances and the known photospheric compositions of the Sun to determine the ratio of silicon atoms in the photospheres of Star_1 and Star_2.\n\n### Step-by-Step Solution:\n\n1. **Understand the Given Data:**\n   - Masses of Star_1 and Star_2 relative to the Sun's mass.\n     - Star_1: \\( M_{\\text{Sun}} \\times 1.5 \\)\n     - Star_2: \\( M_{\\text{Sun}} \\times 1.2 \\)\n   - Elemental abundances:\n     - [Si/Fe]_1 = 0.3 dex\n     - [Mg/Si]_2 = 0.3 dex"
+    },
+    {
+      "id": "rec8nshandHARTkrg",
+      "expected": "B",
+      "extracted": "A",
+      "correct": false,
+      "response": "To solve this problem, we need to identify the correct products based on the given reagents and conditions.\n\n### Step-by-Step Analysis:\n\n#### Reaction A:\n- **Reactants:** Methyl 2-oxocyclohexane-1-carboxylate + (NaOEt, THF, 2,4-dimethyl-1-(vinylsulfinyl)benzene)\n- **Product Formation:** Addition of a nucleophile (likely an alkoxide from NaOEt) to the C=C bond in the cyclohexane ring, forming a new carbon-carbon bond.\n\nGiven that the reactant contains a carbonyl group (C=O), the most likely nucle"
+    },
+    {
+      "id": "rec8y3ZrBOcLgNEkE",
+      "expected": "B",
+      "extracted": "C",
+      "correct": false,
+      "response": "To solve this problem, let's analyze each assumption and see how they relate to the impulse approximation:\n\n1. **The interaction current only interacts with individual nucleons:** This means that the electromagnetic interactions between nucleons are considered separately for each nucleon. This is crucial because it allows us to treat each nucleon independently when calculating its behavior under the influence of the interaction.\n\n2. **The nucleus is transparent apart from the selected nucleon:**"
+    }
+  ],
+  "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "adapter": "experiments/substrate/models/qwen-rl-v0.2"
+}

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+results/run.log
+results/training/
+models/*.pt
+models/*.safetensors
